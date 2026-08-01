@@ -321,7 +321,7 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
         appTitle: (bookTitle ? bookTitle + " — " : "") + sectionTitle,
         appSubtitle: `Importado sob demanda${bookTitle ? " de " + bookTitle : ""}`,
         logoEmoji: "📘",
-        homeIntro: `Módulo gerado automaticamente a partir de "${sectionTitle}".`,
+        homeIntro: genData.resumo || `Módulo gerado automaticamente a partir de "${sectionTitle}".`,
         sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
         storageKey: `estudo_${moduleId}_v1`
       },

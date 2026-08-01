@@ -67,6 +67,8 @@
       </div>
       <span class="field-label">Fonte / crédito (opcional)</span>
       <input type="text" id="mod-source" class="auth-input" placeholder="Ex: Baseado nas minhas anotações de aula">
+      <span class="field-label">Resumo (opcional — aparece na tela inicial do módulo)</span>
+      <textarea id="mod-summary" class="explain-textarea" rows="3" placeholder="Uma breve introdução ao que esse módulo cobre. Preenchido automaticamente ao usar 'Importar com IA' abaixo, mas você pode escrever ou editar."></textarea>
     </div>
 
     <div class="panel">
@@ -278,7 +280,12 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
     });
     generated.forEach(c => addConceptCard(c));
 
-    fb.innerHTML = `<div class="feedback ok">${generated.length} conceito(s) gerado(s) — revise, ajuste e complete abaixo antes de salvar.</div>`;
+    const summaryField = document.getElementById("mod-summary");
+    if(data.resumo && !summaryField.value.trim()){
+      summaryField.value = data.resumo;
+    }
+
+    fb.innerHTML = `<div class="feedback ok">${generated.length} conceito(s) gerado(s)${data.resumo ? " + resumo" : ""} — revise, ajuste e complete abaixo antes de salvar.</div>`;
     document.getElementById("concepts-editor").scrollIntoView({ behavior: "smooth", block: "start" });
   }catch(e){
     console.error(e);
@@ -298,6 +305,7 @@ async function loadForEdit(id){
   document.getElementById("mod-subtitle").value = mod.config.appSubtitle || "";
   document.getElementById("mod-icon").value = mod.config.logoEmoji || "📘";
   document.getElementById("mod-source").value = mod.config.sourceCredit || "";
+  document.getElementById("mod-summary").value = mod.config.homeIntro || "";
   document.getElementById("concepts-editor").innerHTML = "";
   (mod.concepts || []).forEach(c => addConceptCard(c));
 }
@@ -310,6 +318,7 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
   const subtitle = document.getElementById("mod-subtitle").value.trim();
   const icon = document.getElementById("mod-icon").value.trim() || "📘";
   const source = document.getElementById("mod-source").value.trim();
+  const summary = document.getElementById("mod-summary").value.trim();
 
   if(!title){
     fb.innerHTML = `<div class="feedback bad">Dê um título ao módulo antes de salvar.</div>`;
@@ -331,7 +340,7 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
       appTitle: title,
       appSubtitle: subtitle,
       logoEmoji: icon,
-      homeIntro: `Módulo criado por você: ${title}.`,
+      homeIntro: summary || `Módulo criado por você: ${title}.`,
       sourceCredit: source || "Módulo criado no app.",
       storageKey: `estudo_${id}_v1`
     },

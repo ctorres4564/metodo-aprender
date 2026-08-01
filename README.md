@@ -114,6 +114,8 @@ Como funciona:
 3. O módulo aparece na seção "🗂️ Meus Módulos" do catálogo (`index.html`), com opções de editar ou excluir.
 4. Ao abrir, `app.html?m=<id>&src=user` carrega o conteúdo do Firestore em vez de um arquivo JSON estático — o mesmo motor (`engine.js`) roda por igual para módulos oficiais e módulos criados por usuários.
 
+Além dos conceitos, a IA também gera um **resumo** (`resumo`, retornado por `api/gerar-modulo.js` junto com `concepts`) apresentando do que trata o material — usado como texto da aba "Início" do módulo (`config.homeIntro`). Na tela "Criar novo módulo" isso aparece num campo "Resumo" editável, pré-preenchido ao usar "Importar com IA"; no fluxo "Importar de um livro" (sob demanda) o resumo é usado automaticamente, sem etapa de revisão manual.
+
 Módulos criados por usuários são privados: só quem criou consegue ver, editar ou estudar aquele módulo (garantido pelas regras do Firestore em `firestore.rules.txt`, seção `modules`). Se você já publicou as regras antes desta funcionalidade, é necessário colar o `firestore.rules.txt` atualizado no Firebase Console → Firestore Database → Regras novamente e publicar — do contrário, criar/editar módulos vai falhar com erro de permissão.
 
 ### Importar conceitos de um PDF/artigo com IA (opcional)

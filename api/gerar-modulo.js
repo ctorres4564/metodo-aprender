@@ -4,7 +4,7 @@
    usando um modelo de linguagem via OpenRouter.
    =====================================================================
    Recebe: { title, sourceText }
-   Retorna: { concepts: [{ tag, title, text, q, options[4], correct }] }
+   Retorna: { resumo, concepts: [{ tag, title, text, q, options[4], correct }] }
 
    Importante: o texto retornado por "text" deve ser uma explicação em
    linguagem própria/paraseada do conceito — não uma cópia literal do
@@ -58,9 +58,13 @@ export default async function handler(req, res) {
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   const trimmedSource = sourceText.slice(0, MAX_SOURCE_CHARS);
 
-  const systemPrompt = `Você ajuda a criar fichas de estudo (flashcards) de repetição espaçada a partir de um texto-fonte (capítulo de livro, artigo, apostila etc.) fornecido por um(a) usuário(a).
+  const systemPrompt = `Você ajuda a criar módulos de estudo com repetição espaçada a partir de um texto-fonte (capítulo de livro, artigo, apostila etc.) fornecido por um(a) usuário(a).
 
-Sua tarefa: ler o texto-fonte e extrair os conceitos mais importantes e independentes entre si (ideias que fazem sentido sozinhas, sem depender de outra ficha para serem entendidas). Gere no máximo ${MAX_CONCEPTS} conceitos, priorizando qualidade e cobertura das ideias centrais em vez de quantidade.
+Sua tarefa tem duas partes:
+
+PARTE 1 — "resumo": escreva um resumo de 4 a 8 frases (1 ou 2 parágrafos curtos), em português, com SUAS PRÓPRIAS PALAVRAS, apresentando do que trata esse trecho e as ideias centrais que serão estudadas — como a introdução de um bom professor antes de começar a aula. Não copie frases do texto-fonte.
+
+PARTE 2 — "concepts": leia o texto-fonte e extraia os conceitos mais importantes e independentes entre si (ideias que fazem sentido sozinhas, sem depender de outra ficha para serem entendidas). Gere no máximo ${MAX_CONCEPTS} conceitos, priorizando qualidade e cobertura das ideias centrais em vez de quantidade.
 
 Regras OBRIGATÓRIAS para cada conceito:
 1. "title": um título curto (até ~8 palavras) que identifica o conceito.
@@ -70,10 +74,11 @@ Regras OBRIGATÓRIAS para cada conceito:
 5. "options": exatamente 4 alternativas de resposta (strings curtas), sendo só uma correta. As alternativas erradas devem ser plausíveis, não absurdas.
 6. "correct": o índice (0 a 3) da alternativa correta em "options".
 
-Se o texto-fonte for muito curto, genérico demais, ou não tiver conteúdo suficiente para extrair conceitos de qualidade, gere quantos conceitos de qualidade forem possíveis (pode ser menos que ${MAX_CONCEPTS}, inclusive 0 se o texto não permitir nenhum).
+Se o texto-fonte for muito curto, genérico demais, ou não tiver conteúdo suficiente para extrair conceitos de qualidade, gere quantos conceitos de qualidade forem possíveis (pode ser menos que ${MAX_CONCEPTS}, inclusive 0 se o texto não permitir nenhum). O "resumo" deve ser gerado sempre que houver conteúdo suficiente para isso.
 
 Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto antes ou depois:
 {
+  "resumo": "...",
   "concepts": [
     { "tag": "...", "title": "...", "text": "...", "q": "...", "options": ["...", "...", "...", "..."], "correct": 0 }
   ]
@@ -141,7 +146,9 @@ ${trimmedSource}
         correct: Math.min(3, Math.max(0, Math.round(c.correct)))
       }));
 
-    res.status(200).json({ concepts: cleanConcepts });
+    const resumo = typeof parsed.resumo === "string" ? parsed.resumo.trim().slice(0, 1500) : "";
+
+    res.status(200).json({ resumo, concepts: cleanConcepts });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro interno ao gerar conceitos." });
