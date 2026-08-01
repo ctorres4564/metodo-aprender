@@ -1,6 +1,6 @@
 # Método Aprender
 
-Plataforma de estudo genérica, com repetição espaçada (SM-2), gamificação e recursos de IA (avaliação Feynman, geração de conceitos a partir de PDF/artigo, analogias). Qualquer pessoa logada pode criar seus próprios módulos sobre qualquer assunto — **a criação de módulos é a funcionalidade central do produto**, não um recurso secundário.
+Plataforma de estudo genérica, com repetição espaçada (FSRS), gamificação e recursos de IA (avaliação Feynman, geração de conceitos a partir de PDF/artigo, analogias). Qualquer pessoa logada pode criar seus próprios módulos sobre qualquer assunto — **a criação de módulos é a funcionalidade central do produto**, não um recurso secundário.
 
 O projeto nasceu focado num único livro (Manual de Psicologia Evolucionista) e evoluiu para uma plataforma multi-assunto: hoje esse conteúdo original é só um **módulo de exemplo** no catálogo (`content/catalog.json`), lado a lado com os módulos que cada usuário cria pela própria interface (`criar-modulo.html`). Nenhum código precisa ser tocado para adicionar conteúdo novo — nem por mim, nem por quem usa o app.
 
@@ -13,7 +13,7 @@ index.html                    → catálogo: lista os módulos/trilhas disponív
 app.html                      → player genérico: carrega qualquer módulo via ?m=<id>
 assets/
   styles.css                  → design system compartilhado (visual de TODOS os módulos)
-  engine.js                   → motor do app: SM-2, gamificação, telas (Aprender/Revisar/Explicar/Quiz/Progresso)
+  engine.js                   → motor do app: FSRS, gamificação, telas (Aprender/Revisar/Explicar/Quiz/Progresso)
   storage.js                  → adapter de persistência (hoje: localStorage)
 content/
   catalog.json                → índice dos módulos (título, ícone, plano, arquivo de conteúdo)
@@ -145,6 +145,16 @@ Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceit
 
 **Sobre custo:** cada importação gasta 1 chamada de IA para detectar a estrutura do documento, mais 1 chamada por divisão selecionada para gerar os conceitos. Um livro com 10 capítulos selecionados = ~11 chamadas no total. Por isso a etapa de seleção existe — para a pessoa escolher só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
 
+### OCR para PDFs escaneados (imagem, sem texto real)
+
+A extração normal de texto (`pdf.js`) só funciona quando o PDF tem texto real embutido. PDFs escaneados (fotografados ou digitalizados como imagem) retornam texto vazio nessas páginas. Para esses casos, `assets/ocr.js` aplica OCR automaticamente como fallback, usando **Tesseract.js** (roda 100% no navegador da pessoa usuária, gratuito, sem chave de API) — mais lento que a extração normal (alguns segundos por página), por isso só entra em ação quando uma página tem pouco ou nenhum texto real.
+
+Funciona tanto na importação de módulo único (`criar-modulo.html`) quanto na importação de livro inteiro (`importar-livro.html`). Na importação de livro, há um limite de 80 páginas com OCR por importação (`OCR_PAGE_CAP` em `importar-livro.html`) — livros muito grandes e totalmente escaneados podem travar o navegador por muito tempo se todas as páginas passarem por OCR; se o limite for atingido, o app avisa e as páginas restantes ficam sem texto (dá pra tentar de novo, ou revisar manualmente o módulo gerado).
+
+### Regenerar um conceito específico com IA
+
+Em cada ficha de conceito da tela "Criar novo módulo" há um botão "🔄 Melhorar com IA" (junto de um campo opcional para um pedido específico, ex: "deixe mais simples", "as alternativas estão óbvias demais"). Ele chama `api/regenerar-conceito.js`, que reescreve só aquela ficha (explicação, pergunta e as 4 alternativas), sem precisar reprocessar o texto-fonte nem regenerar o módulo inteiro — útil para corrigir uma ficha específica que saiu ruim, sem perder o resto do trabalho já revisado.
+
 ## Explicações alternativas por analogia (aba Aprender)
 
 Em cada conceito da aba Aprender, há um botão "💡 Ver explicação com analogia": ele pede a uma IA (via `api/gerar-analogia.js`, mesma infraestrutura OpenRouter das outras funções) uma explicação alternativa do mesmo conceito usando uma analogia ou metáfora do dia a dia — uma forma diferente de "pensar" sobre a ideia, para ajudar quem não fixou bem com a explicação original.
@@ -166,6 +176,14 @@ Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", �
 5. Publique de novo (`vercel --prod`) — esse deploy também vai instalar a nova dependência `firebase-admin` (adicionada em `package.json`) automaticamente.
 
 Sem essa variável configurada, as 4 funções de IA passam a responder com erro claro (em vez de falhar silenciosamente ou funcionar sem controle de custo).
+
+## Repetição espaçada com FSRS
+
+O agendamento das revisões usa o **FSRS** (Free Spaced Repetition Scheduler), o mesmo algoritmo adotado por padrão no Anki, no lugar do SM-2 original. A diferença prática: em vez de multiplicar o intervalo por um fator fixo a cada acerto, o FSRS modela duas variáveis por ficha — `stability` (em quantos dias a chance de lembrar cai a 90%) e `difficulty` (de 1 a 10) — e recalcula o intervalo com base em quão previsível é o esquecimento daquela ficha especificamente. Na prática, isso costuma gerar intervalos mais longos para conceitos fáceis e mais curtos para os difíceis, de forma mais precisa que um fator fixo.
+
+Implementado em `assets/engine.js` (função `fsrsUpdate` e as funções auxiliares `fsrs*`), usando os pesos padrão publicados pela comunidade open-spaced-repetition (FSRS-4.5) — não há ajuste por usuário individual (isso exigiria treinar um modelo com o histórico de revisões de cada pessoa, fora do escopo atual).
+
+**Migração de quem já tinha progresso salvo:** fichas que já estavam sendo revisadas antes desta mudança não perdem o histórico — na primeira revisão após a atualização, o intervalo que já existia (calculado pelo SM-2) é reaproveitado como estimativa inicial de estabilidade, em vez de reiniciar do zero.
 
 ## Instalável como app (PWA)
 

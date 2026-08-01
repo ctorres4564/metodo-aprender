@@ -10,7 +10,7 @@
    do app depois de um novo deploy.
    ===================================================================== */
 
-const CACHE_NAME = "metodo-aprender-shell-v1";
+const CACHE_NAME = "metodo-aprender-shell-v2";
 const SHELL_FILES = [
   "index.html",
   "app.html",
@@ -22,6 +22,7 @@ const SHELL_FILES = [
   "assets/storage.js",
   "assets/auth-ui.js",
   "assets/api-client.js",
+  "assets/ocr.js",
   "assets/icons/icon-192.png",
   "assets/icons/icon-512.png"
 ];

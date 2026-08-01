@@ -92,6 +92,8 @@
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
 <script src="assets/pwa.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js"></script>
+<script src="assets/ocr.js"></script>
 <script type="module">
   import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
@@ -121,16 +123,42 @@ async function extractPdfTextFull(file, onProgress){
   let fullText = "";
   const pages = [];
   const maxPages = Math.min(pdf.numPages, 600);
+
+  // Livros muito longos + OCR de todas as páginas escaneadas travaria o navegador por
+  // muito tempo (OCR é lento, alguns segundos por página) — limita quantas páginas
+  // recebem OCR numa mesma importação. Páginas além do limite mantêm o texto vazio
+  // extraído normalmente (o que é melhor do que travar a importação inteira).
+  const OCR_PAGE_CAP = 80;
+  let ocrCount = 0;
+  let ocrCapHit = false;
+
   for(let i = 1; i <= maxPages; i++){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map(it => it.str).join(" ");
+    let pageText = content.items.map(it => it.str).join(" ");
+
+    if(window.OcrHelper && window.OcrHelper.pageNeedsOcr(pageText)){
+      if(ocrCount < OCR_PAGE_CAP){
+        if(onProgress) onProgress(i, maxPages, `OCR na página ${i} (imagem sem texto real)...`);
+        try{
+          const ocrText = await window.OcrHelper.ocrPdfPage(page);
+          if(ocrText) pageText = ocrText;
+        }catch(e){
+          console.warn("OCR falhou na página", i, e);
+        }
+        ocrCount++;
+      } else {
+        ocrCapHit = true;
+      }
+    }
+
     const offset = fullText.length;
     fullText += pageText + "\n\n";
     pages.push({ num: i, offset, text: pageText });
     if(onProgress && i % 10 === 0) onProgress(i, maxPages);
   }
-  return { fullText, pages };
+  if(ocrCount > 0 && window.OcrHelper) await window.OcrHelper.terminateOcrWorker();
+  return { fullText, pages, ocrCount, ocrCapHit };
 }
 
 // Usado quando a pessoa cola texto em vez de enviar PDF: cria "páginas" sintéticas
@@ -219,14 +247,19 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
   try{
     let fullText = textInput.value.trim();
     let pages = null;
+    let ocrCount = 0;
+    let ocrCapHit = false;
 
     if(!fullText && fileInput.files && fileInput.files[0]){
       btn.textContent = "Lendo PDF...";
-      const extracted = await extractPdfTextFull(fileInput.files[0], (done, total)=>{
-        btn.textContent = `Lendo PDF... (${done}/${total} páginas)`;
+      const extracted = await extractPdfTextFull(fileInput.files[0], (done, total, msg)=>{
+        btn.textContent = msg ? "Lendo PDF... (OCR em andamento)" : `Lendo PDF... (${done}/${total} páginas)`;
+        if(msg) fb.innerHTML = `<div class="feedback">${msg} — página ${done} de ${total}</div>`;
       });
       fullText = extracted.fullText;
       pages = extracted.pages;
+      ocrCount = extracted.ocrCount || 0;
+      ocrCapHit = !!extracted.ocrCapHit;
     }
 
     if(!fullText || fullText.length < 500){
@@ -242,7 +275,14 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
       `Livro carregado (~${approxPages} página(s) de texto). Agora peça quantos módulos quiser, um de cada vez.`;
     document.getElementById("request-panel").style.display = "block";
     document.getElementById("request-panel").scrollIntoView({ behavior:"smooth", block:"start" });
-    fb.innerHTML = `<div class="feedback ok">Livro carregado com sucesso.</div>`;
+
+    if(ocrCapHit){
+      fb.innerHTML = `<div class="feedback bad">Livro carregado, mas parece ter muitas páginas digitalizadas (imagem) — OCR foi aplicado só nas primeiras ${ocrCount}. Páginas além desse limite podem ficar sem texto.</div>`;
+    } else if(ocrCount > 0){
+      fb.innerHTML = `<div class="feedback ok">Livro carregado com sucesso (OCR aplicado em ${ocrCount} página(s) digitalizada(s)).</div>`;
+    } else {
+      fb.innerHTML = `<div class="feedback ok">Livro carregado com sucesso.</div>`;
+    }
   }catch(e){
     console.error(e);
     fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;

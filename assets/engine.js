@@ -2,7 +2,7 @@
    MOTOR COMPARTILHADO DO APP DE ESTUDO
    =====================================================================
    Este arquivo NÃO contém conteúdo de nenhum tema — apenas a lógica de:
-   repetição espaçada (SM-2), gamificação (XP/níveis/streak/badges) e
+   repetição espaçada (FSRS), gamificação (XP/níveis/streak/badges) e
    renderização das telas (Aprender, Revisar, Quiz, Progresso).
 
    Conteúdo (CONFIG + CONCEPTS) vem de arquivos JSON em /content e é
@@ -57,7 +57,14 @@ function daysBetween(a,b){
 function defaultState(){
   const cards = {};
   CONCEPTS.forEach(c => {
-    cards[c.id] = { ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null, explainCount:0, lastExplainScore:null, analogy:null };
+    // Campos do FSRS (repetição espaçada) — stability/difficulty ficam null
+    // até a primeira revisão. interval/ef são mantidos só por compatibilidade
+    // com progresso salvo antes da migração do SM-2 para o FSRS.
+    cards[c.id] = {
+      stability:null, difficulty:null, lastReviewDate:null,
+      ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null,
+      explainCount:0, lastExplainScore:null, analogy:null
+    };
   });
   return {
     xp:0, streak:0, lastStudyDate:null, cards, badges:[], reviewSessions:0, quiz:{played:0, best:0, bestAdaptive:0},
@@ -131,20 +138,105 @@ function checkBadges(){
   return newly;
 }
 
-/* ---- SM-2 (repetição espaçada) ---- */
-function sm2Update(cardState, quality){
-  // quality: 1=Esqueci, 3=Difícil, 4=Bom, 5=Fácil
-  if(quality < 3){
-    cardState.reps = 0;
-    cardState.interval = 1;
+/* ---- FSRS (repetição espaçada) ----
+   Substitui o SM-2 usado até a Fase 4. FSRS modela a memória de cada
+   ficha com dois números que evoluem a cada revisão:
+   - stability (S): quantos dias levam para a chance de lembrar cair a 90%.
+   - difficulty (D): de 1 (fácil) a 10 (difícil), quão rápido a estabilidade
+     cresce a cada acerto.
+   A partir desses dois valores, calcula-se retrievability (R, a chance
+   estimada de lembrar HOJE) e o próximo intervalo de revisão, mirando
+   sempre 90% de chance de lembrança na hora da próxima revisão.
+
+   Pesos padrão da comunidade open-spaced-repetition (FSRS-4.5) — não são
+   ajustados por usuário aqui (isso exigiria um histórico de revisões para
+   treinar um modelo por pessoa, fora do escopo deste app).
+   Referência: https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm */
+const FSRS_W = [
+  0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192,
+  1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621
+];
+const FSRS_FACTOR = 19 / 81;
+const FSRS_DECAY = -0.5;
+const FSRS_DESIRED_RETENTION = 0.9;
+
+function fsrsClampD(d){ return Math.min(10, Math.max(1, d)); }
+
+// t = dias desde a última revisão, s = stability atual → probabilidade estimada de lembrar hoje.
+function fsrsRetrievability(t, s){
+  if(!s || s <= 0) return 0;
+  return Math.pow(1 + FSRS_FACTOR * (t / s), FSRS_DECAY);
+}
+// Dado o stability, calcula em quantos dias a retrievability cai até a meta (90%).
+function fsrsIntervalDays(s){
+  return (s / FSRS_FACTOR) * (Math.pow(FSRS_DESIRED_RETENTION, 1 / FSRS_DECAY) - 1);
+}
+function fsrsInitialStability(g){ return FSRS_W[g - 1]; } // g=1..4 → W[0..3]
+function fsrsInitialDifficulty(g){
+  return fsrsClampD(FSRS_W[4] - Math.exp(FSRS_W[5] * (g - 1)) + 1);
+}
+function fsrsNextDifficulty(d, g){
+  const deltaD = -FSRS_W[6] * (g - 3);
+  const dPrime = d + deltaD * ((10 - d) / 9);
+  return fsrsClampD(FSRS_W[7] * fsrsInitialDifficulty(4) + (1 - FSRS_W[7]) * dPrime);
+}
+function fsrsStabilityAfterSuccess(d, s, r, g){
+  const tD = 11 - d;
+  const tS = Math.pow(s, -FSRS_W[9]);
+  const tR = Math.exp(FSRS_W[10] * (1 - r)) - 1;
+  const hardPenalty = g === 2 ? FSRS_W[15] : 1;
+  const easyBonus = g === 4 ? FSRS_W[16] : 1;
+  const alpha = 1 + tD * tS * tR * hardPenalty * easyBonus * Math.exp(FSRS_W[8]);
+  return s * alpha;
+}
+function fsrsStabilityAfterFail(d, s, r){
+  const dF = Math.pow(d, -FSRS_W[12]);
+  const sF = Math.pow(s + 1, FSRS_W[13]) - 1;
+  const rF = Math.exp(FSRS_W[14] * (1 - r));
+  return Math.min(dF * sF * rF * FSRS_W[11], s);
+}
+
+// Converte a escala de qualidade usada no app (1=Esqueci, 2=Errou na
+// checagem, 3=Difícil, 4=Bom, 5=Fácil) para a nota FSRS de 4 pontos
+// (1=Forgot, 2=Hard, 3=Good, 4=Easy).
+function qualityToFsrsGrade(quality){
+  if(quality <= 2) return 1;
+  if(quality === 3) return 2;
+  if(quality === 4) return 3;
+  return 4;
+}
+
+function fsrsUpdate(cardState, quality){
+  const g = qualityToFsrsGrade(quality);
+  const today = todayStr();
+
+  if(cardState.stability == null || cardState.difficulty == null){
+    // Primeira vez desta ficha no FSRS. Se ela já tinha progresso do
+    // algoritmo antigo (SM-2, antes da Fase 4), reaproveita o intervalo
+    // já calculado como estimativa inicial de estabilidade, em vez de
+    // reiniciar do zero — assim quem já vinha estudando não perde todo
+    // o histórico de repetição ao ganhar esta atualização.
+    cardState.stability = (cardState.seen && cardState.interval > 0)
+      ? Math.max(1, cardState.interval)
+      : fsrsInitialStability(g);
+    cardState.difficulty = fsrsInitialDifficulty(g);
   } else {
-    if(cardState.reps === 0) cardState.interval = 1;
-    else if(cardState.reps === 1) cardState.interval = 6;
-    else cardState.interval = Math.round(cardState.interval * cardState.ef);
-    cardState.reps += 1;
+    const elapsedDays = cardState.lastReviewDate ? Math.max(0, daysBetween(cardState.lastReviewDate, today)) : 0;
+    const r = fsrsRetrievability(elapsedDays, cardState.stability);
+    cardState.stability = (g === 1)
+      ? fsrsStabilityAfterFail(cardState.difficulty, cardState.stability, r)
+      : fsrsStabilityAfterSuccess(cardState.difficulty, cardState.stability, r, g);
+    cardState.difficulty = fsrsNextDifficulty(cardState.difficulty, g);
   }
-  cardState.ef = Math.max(1.3, cardState.ef + (0.1 - (5-quality)*(0.08+(5-quality)*0.02)));
-  cardState.nextReview = addDays(todayStr(), cardState.interval);
+
+  // "reps" não participa mais do cálculo do intervalo — fica só para
+  // exibição na tela de Progresso e para as conquistas (badges).
+  cardState.reps = (g === 1) ? 0 : (cardState.reps || 0) + 1;
+
+  const intervalDays = Math.max(1, Math.round(fsrsIntervalDays(cardState.stability)));
+  cardState.interval = intervalDays;
+  cardState.nextReview = addDays(today, intervalDays);
+  cardState.lastReviewDate = today;
   cardState.lastQuality = quality;
   cardState.seen = true;
 }
@@ -342,7 +434,7 @@ async function handleLearnAnswer(isCorrect, btnEl, optsWrap){
   const c = CONCEPTS[learnIndex];
   const cardState = STATE.cards[c.id];
   const wasNew = !cardState.seen;
-  sm2Update(cardState, isCorrect ? 4 : 2);
+  fsrsUpdate(cardState, isCorrect ? 4 : 2);
   touchStreak();
   if(wasNew) STATE.dailyProgress.newCount += 1;
   addXP(isCorrect ? 10 : 4);
@@ -501,7 +593,7 @@ function renderReviewCard(){
       const q = parseInt(btn.dataset.q,10);
       const cardState = STATE.cards[c.id];
       cardState.lastConfidence = confidence;
-      sm2Update(cardState, q);
+      fsrsUpdate(cardState, q);
       touchStreak();
       STATE.dailyProgress.reviewCount += 1;
       const xpGain = q===1?2:(q===3?5:(q===4?8:10));
@@ -683,7 +775,7 @@ async function applyExplainResultToState(c, nota, quality){
   const cardState = STATE.cards[c.id];
   cardState.explainCount = (cardState.explainCount || 0) + 1;
   cardState.lastExplainScore = nota;
-  sm2Update(cardState, quality);
+  fsrsUpdate(cardState, quality);
   touchStreak();
   const xpGain = Math.max(4, Math.round((nota/100) * 25));
   addXP(xpGain);
@@ -799,7 +891,7 @@ async function handleQuizAnswer(c, isCorrect, btnEl, optsWrap){
   if(isCorrect) quizState.correct++;
 
   const cardState = STATE.cards[c.id];
-  if(cardState.seen){ sm2Update(cardState, isCorrect ? 5 : 2); }
+  if(cardState.seen){ fsrsUpdate(cardState, isCorrect ? 5 : 2); }
   await saveState();
 
   const fb = document.getElementById("quiz-feedback");

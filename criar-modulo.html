@@ -30,6 +30,11 @@
     position:absolute; top:10px; right:10px; background:none; border:none;
     color: var(--danger); cursor:pointer; font-size:13px;
   }
+  .regen-row{ display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .regen-row input[type="text"]{ flex:1; min-width:180px; }
+  .regen-feedback{ font-size:12px; margin-top:6px; }
+  .regen-feedback.ok{ color: var(--ok); }
+  .regen-feedback.bad{ color: var(--danger); }
 </style>
 </head>
 <body>
@@ -124,6 +129,8 @@
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
 <script src="assets/pwa.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js"></script>
+<script src="assets/ocr.js"></script>
 <script type="module">
   import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
@@ -158,9 +165,80 @@ function conceptTemplate(idx, data){
         <input type="text" class="auth-input c-opt" placeholder="Alternativa ${i+1}" value="${escapeAttr(opts[i]||"")}">
       </div>
     `).join("")}
+    <div class="regen-row">
+      <input type="text" class="auth-input c-instruction" placeholder="Pedido opcional pra IA, ex: deixe mais simples, foque em datas...">
+      <button class="btn ghost regen-concept-btn" type="button">🔄 Melhorar com IA</button>
+    </div>
+    <div class="regen-feedback"></div>
   `;
   wrap.querySelector(".remove-concept").addEventListener("click", ()=> wrap.remove());
+  wrap.querySelector(".regen-concept-btn").addEventListener("click", ()=> regenerateConcept(wrap));
   return wrap;
+}
+
+async function regenerateConcept(wrap){
+  const btn = wrap.querySelector(".regen-concept-btn");
+  const fb = wrap.querySelector(".regen-feedback");
+  const title = wrap.querySelector(".c-title").value.trim();
+  const text = wrap.querySelector(".c-text").value.trim();
+  const q = wrap.querySelector(".c-question").value.trim();
+  const optInputs = wrap.querySelectorAll(".c-opt");
+  const options = Array.from(optInputs).map(inp => inp.value.trim());
+  const correctRadio = wrap.querySelector(".c-correct:checked");
+  const correct = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+  const tag = wrap.querySelector(".c-tag").value.trim();
+  const instruction = wrap.querySelector(".c-instruction").value.trim();
+  const moduleTitle = document.getElementById("mod-title").value.trim();
+
+  if(!title || !text || !q || options.some(o=>!o)){
+    fb.className = "regen-feedback bad";
+    fb.textContent = "Preencha título, explicação, pergunta e as 4 alternativas antes de pedir uma melhoria.";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Melhorando...";
+  fb.className = "regen-feedback";
+  fb.textContent = "";
+
+  try{
+    const resp = await authedFetch("/api/regenerar-conceito", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        moduleTitle,
+        concept: { tag, title, text, q, options, correct },
+        instruction
+      })
+    });
+    const data = await resp.json();
+
+    if(!resp.ok){
+      fb.className = "regen-feedback bad";
+      fb.textContent = data.error || "Não foi possível melhorar esse conceito agora.";
+      return;
+    }
+
+    const c = data.concept;
+    wrap.querySelector(".c-tag").value = c.tag || "";
+    wrap.querySelector(".c-title").value = c.title || "";
+    wrap.querySelector(".c-text").value = c.text || "";
+    wrap.querySelector(".c-question").value = c.q || "";
+    const newOptInputs = wrap.querySelectorAll(".c-opt");
+    (c.options || []).forEach((o, i) => { if(newOptInputs[i]) newOptInputs[i].value = o; });
+    const newCorrectRadio = wrap.querySelector(`.c-correct[value="${c.correct}"]`);
+    if(newCorrectRadio) newCorrectRadio.checked = true;
+
+    fb.className = "regen-feedback ok";
+    fb.textContent = "✅ Conceito atualizado — revise antes de salvar.";
+  }catch(e){
+    console.error(e);
+    fb.className = "regen-feedback bad";
+    fb.textContent = "Erro ao processar: " + (e.message || "tente novamente.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "🔄 Melhorar com IA";
+  }
 }
 
 function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
@@ -216,19 +294,33 @@ async function waitForPdfjs(timeoutMs){
   return true;
 }
 
-async function extractPdfText(file){
+async function extractPdfText(file, onProgress){
   const ready = await waitForPdfjs(5000);
   if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   let fullText = "";
+  let ocrUsed = false;
   const maxPages = Math.min(pdf.numPages, 40);
   for(let i = 1; i <= maxPages; i++){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map(it => it.str).join(" ");
+    let pageText = content.items.map(it => it.str).join(" ").trim();
+
+    // Página sem texto real (PDF escaneado/imagem) — tenta OCR como alternativa.
+    if(window.OcrHelper && window.OcrHelper.pageNeedsOcr(pageText)){
+      if(onProgress) onProgress(`Página ${i} parece digitalizada (imagem) — aplicando OCR, isso é mais lento...`);
+      try{
+        const ocrText = await window.OcrHelper.ocrPdfPage(page);
+        if(ocrText){ pageText = ocrText; ocrUsed = true; }
+      }catch(e){
+        console.warn("OCR falhou na página", i, e);
+      }
+    }
+
     fullText += pageText + "\n\n";
   }
+  if(ocrUsed && window.OcrHelper) await window.OcrHelper.terminateOcrWorker();
   return fullText.trim();
 }
 
@@ -247,7 +339,9 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
 
     if(!sourceText && fileInput.files && fileInput.files[0]){
       btn.textContent = "Lendo PDF...";
-      sourceText = await extractPdfText(fileInput.files[0]);
+      sourceText = await extractPdfText(fileInput.files[0], (msg)=>{
+        fb.innerHTML = `<div class="feedback">${msg}</div>`;
+      });
     }
 
     if(!sourceText || sourceText.length < 200){
