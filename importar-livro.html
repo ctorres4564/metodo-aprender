@@ -139,13 +139,26 @@ function synthesizePages(fullText, chunkSize){
 }
 
 function buildPagePreviews(pages, maxChars){
-  maxChars = maxChars || 40000;
-  const previewLen = 350;
+  maxChars = maxChars || 42000;
+  const overhead = 15; // aproximação do tamanho da marcação "[[PAGE N]] "
+  const MIN_PREVIEW_LEN = 40;
+  const MAX_PREVIEW_LEN = 350;
+
+  // Prioriza cobrir TODAS as páginas (mesmo que com um trecho curto) em vez de pular
+  // páginas inteiras — um título de capítulo costuma estar bem no início da página,
+  // então mesmo um trecho curto tem boa chance de capturá-lo; já pular a página inteira
+  // garante perder qualquer título que estivesse nela.
+  let previewLen = Math.floor(maxChars / pages.length) - overhead;
+  previewLen = Math.max(MIN_PREVIEW_LEN, Math.min(MAX_PREVIEW_LEN, previewLen));
+
   let step = 1;
-  const estimated = pages.length * (previewLen + 15);
-  if(estimated > maxChars){
-    step = Math.ceil(estimated / maxChars);
+  const estimatedAtMin = pages.length * (MIN_PREVIEW_LEN + overhead);
+  if(estimatedAtMin > maxChars){
+    // Livro grande demais mesmo no menor trecho possível — aí sim precisa pular páginas.
+    step = Math.ceil(estimatedAtMin / maxChars);
+    previewLen = MIN_PREVIEW_LEN;
   }
+
   const lines = [];
   for(let i = 0; i < pages.length; i += step){
     const p = pages[i];
