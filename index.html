@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<title>Trilhas de Estudo</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .hero{ text-align:center; padding: 10px 0 6px; }
+  .hero .ic{ font-size:40px; }
+  .hero h1{ margin: 6px 0 2px; font-size:22px; }
+  .hero p{ margin:0; color:var(--text-dim); font-size:13.5px; }
+  .locked-msg{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+  <div class="hero" style="position:relative;">
+    <div style="position:absolute; right:0; top:0; display:flex; gap:8px; align-items:center;">
+      <span class="pill" id="user-email" title="Conta conectada"></span>
+      <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
+    </div>
+    <div class="ic">🎓</div>
+    <h1 id="collection-title">Trilhas de Estudo</h1>
+    <p id="collection-subtitle">Escolha um módulo para começar</p>
+  </div>
+
+  <div id="setup-banner" class="setup-banner" style="display:none;">
+    ⚠️ Não foi possível carregar o catálogo (<code>content/catalog.json</code>). Se você abriu este arquivo
+    diretamente (duplo clique), o navegador bloqueia o carregamento de dados locais por segurança.
+    Rode um servidor local nesta pasta, por exemplo: <code>python3 -m http.server 8000</code>, e acesse
+    <code>http://localhost:8000</code>.
+  </div>
+
+  <div class="panel">
+    <div class="catalog-grid" id="catalog-grid"></div>
+  </div>
+
+  <footer class="credit">
+    Arquitetura modular: cada trilha carrega seu próprio conteúdo (JSON) sobre o mesmo motor de
+    aprendizagem (repetição espaçada + gamificação). Progresso individual, sincronizado com sua conta.
+  </footer>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script>
+async function init(){
+  try{
+    const res = await fetch("content/catalog.json");
+    if(!res.ok) throw new Error("catalog fetch failed");
+    const data = await res.json();
+
+    document.getElementById("collection-title").textContent = data.collectionTitle || "Trilhas de Estudo";
+    document.getElementById("collection-subtitle").textContent = data.collectionSubtitle || "";
+
+    const grid = document.getElementById("catalog-grid");
+    grid.innerHTML = "";
+
+    data.modules.forEach(m=>{
+      const planClass = m.plan === "premium" ? "plan-premium" : "plan-free";
+      const planLabel = m.plan === "premium" ? "Premium" : "Grátis";
+      const isReady = !!m.contentFile && !m.comingSoon;
+
+      const card = document.createElement(isReady ? "a" : "div");
+      if(isReady) card.href = `app.html?m=${encodeURIComponent(m.id)}`;
+      card.className = "module-card";
+      if(!isReady) card.style.opacity = "0.55";
+
+      card.innerHTML = `
+        <div class="ic">${m.icon || "📘"}</div>
+        <h3>${m.title}</h3>
+        <p>${m.subtitle || ""}</p>
+        <div class="meta">
+          <span>${m.conceptCount ? m.conceptCount + " conceitos" : (m.comingSoon ? "Em breve" : "")}</span>
+          <span class="plan-chip ${planClass}">${planLabel}</span>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }catch(e){
+    document.getElementById("setup-banner").style.display = "block";
+  }
+}
+initAuthGate(()=>{
+  bindLogoutButton();
+  init();
+});
+</script>
+</body>
+</html>

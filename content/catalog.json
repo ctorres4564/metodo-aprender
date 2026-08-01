@@ -1,0 +1,55 @@
+{
+  "collectionTitle": "Manual de Psicologia Evolucionista",
+  "collectionSubtitle": "Trilhas de estudo por capítulo",
+  "modules": [
+    {
+      "id": "cap1-1-fundamentos",
+      "title": "1.1 Fundamentos da Evolução do Comportamento",
+      "subtitle": "Etologia, seleção natural, altruísmo e plasticidade comportamental",
+      "icon": "🧬",
+      "conceptCount": 18,
+      "contentFile": "content/capitulo-1-1-fundamentos-evolucao-comportamento.json",
+      "plan": "free"
+    },
+    {
+      "id": "cap1-2-conceitos-evolucao-humana",
+      "title": "1.2 Conceitos Relacionados à Evolução Humana",
+      "subtitle": "Em breve",
+      "icon": "🦴",
+      "conceptCount": 0,
+      "contentFile": null,
+      "plan": "premium",
+      "comingSoon": true
+    },
+    {
+      "id": "cap1-3-modularidade-mental",
+      "title": "1.3 Modularidade Mental",
+      "subtitle": "Em breve",
+      "icon": "🧠",
+      "conceptCount": 0,
+      "contentFile": null,
+      "plan": "premium",
+      "comingSoon": true
+    },
+    {
+      "id": "cap1-4-bases-neurais",
+      "title": "1.4 Bases Neurais do Comportamento",
+      "subtitle": "Em breve",
+      "icon": "🔬",
+      "conceptCount": 0,
+      "contentFile": null,
+      "plan": "premium",
+      "comingSoon": true
+    },
+    {
+      "id": "cap1-5-mal-entendidos",
+      "title": "1.5 Mal-entendidos sobre a Psicologia Evolucionista",
+      "subtitle": "Em breve",
+      "icon": "❓",
+      "conceptCount": 0,
+      "contentFile": null,
+      "plan": "premium",
+      "comingSoon": true
+    }
+  ]
+}

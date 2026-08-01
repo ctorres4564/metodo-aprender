@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<title>App de Estudo</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+  <div class="setup-banner" id="setup-banner" style="display:none;">
+    ⚠️ Não foi possível carregar o conteúdo deste módulo. Se você abriu este arquivo diretamente
+    (duplo clique, endereço começando com <code>file://</code>), o navegador bloqueia por segurança o
+    carregamento de arquivos JSON locais. Rode um servidor local na pasta do projeto — por exemplo:
+    <code>python3 -m http.server 8000</code> — e acesse <code>http://localhost:8000</code>.
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+      <div class="logo" id="app-logo">📚</div>
+      <div>
+        <h1 id="app-title">Carregando…</h1>
+        <p id="app-subtitle"></p>
+      </div>
+    </div>
+    <div class="stats">
+      <span class="pill" id="user-email" title="Conta conectada"></span>
+      <div class="pill">🏅 Nível <b id="stat-level">1</b></div>
+      <div class="pill">✨ <b id="stat-xp">0</b> XP</div>
+      <div class="pill">🔥 <b id="stat-streak">0</b> dias</div>
+      <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="inicio" class="active"><span class="emoji">🏕️</span>Início</button>
+    <button data-tab="aprender"><span class="emoji">📖</span>Aprender</button>
+    <button data-tab="revisar"><span class="emoji">🔁</span>Revisar<span class="badge-dot" id="due-badge" style="display:none;">0</span></button>
+    <button data-tab="explicar"><span class="emoji">🗣️</span>Explicar</button>
+    <button data-tab="quiz"><span class="emoji">🎯</span>Quiz</button>
+    <button data-tab="progresso"><span class="emoji">📊</span>Progresso</button>
+  </nav>
+
+  <section id="tab-inicio" class="tab-content">
+    <div class="panel">
+      <h2 class="section-title">🌱 Bem-vindo(a)</h2>
+      <p class="lead" id="home-intro-text"></p>
+      <div class="grid2" style="margin-top:14px;">
+        <div class="stat-card">
+          <div class="num" id="home-introduced">0 / 0</div>
+          <div class="label">conceitos apresentados</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" id="home-due">0</div>
+          <div class="label">cartas para revisar hoje</div>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" id="cta-learn">▶️ Continuar Aprendendo</button>
+        <button class="btn secondary" id="cta-review">🔁 Ir para Revisão</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🧭 Como funciona</h2>
+      <p class="lead">
+        <b>1. Aprender</b> — cada conceito é apresentado em linguagem simples, seguido de uma pergunta rápida
+        para checar o entendimento.<br><br>
+        <b>2. Revisar</b> — os conceitos voltam em intervalos crescentes (1 dia, depois alguns dias, depois semanas),
+        usando o algoritmo de repetição espaçada SM-2.<br><br>
+        <b>3. Explicar</b> — técnica de Feynman: você explica o conceito com suas próprias palavras e recebe uma
+        avaliação sobre o que ficou claro e o que ainda falta entender.<br><br>
+        <b>4. Quiz</b> — teste geral com todos os conceitos, embaralhados, para consolidar a memória sob pressão.
+      </p>
+    </div>
+  </section>
+
+  <section id="tab-aprender" class="tab-content" style="display:none;">
+    <div class="panel" id="learn-panel"></div>
+  </section>
+
+  <section id="tab-revisar" class="tab-content" style="display:none;">
+    <div class="panel" id="review-panel"></div>
+  </section>
+
+  <section id="tab-explicar" class="tab-content" style="display:none;">
+    <div class="panel" id="explain-panel"></div>
+  </section>
+
+  <section id="tab-quiz" class="tab-content" style="display:none;">
+    <div class="panel" id="quiz-panel"></div>
+  </section>
+
+  <section id="tab-progresso" class="tab-content" style="display:none;">
+    <div class="panel">
+      <h2 class="section-title">⚙️ Metas diárias</h2>
+      <p class="lead" style="margin-top:-4px;">Aprender aos poucos, todo dia, funciona melhor do que estudar tudo de uma vez. Ajuste seus limites diários abaixo.</p>
+      <div class="grid2">
+        <div class="stat-card">
+          <div class="label">Novos conceitos por dia</div>
+          <input type="number" id="setting-new-limit" class="auth-input" min="1" max="50" style="margin-top:6px;">
+        </div>
+        <div class="stat-card">
+          <div class="label">Limite de revisões por dia (0 = sem limite)</div>
+          <input type="number" id="setting-review-limit" class="auth-input" min="0" max="500" style="margin-top:6px;">
+        </div>
+      </div>
+      <button class="btn" id="save-settings-btn" style="margin-top:12px;">💾 Salvar metas</button>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">📊 Seu progresso</h2>
+      <div class="grid2">
+        <div class="stat-card">
+          <div class="label">Nível atual</div>
+          <div class="num" id="prog-level-name">Iniciante</div>
+          <div class="progressbar"><div id="prog-xp-bar" style="width:0%"></div></div>
+          <div class="label" id="prog-xp-text" style="margin-top:4px;"></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Domínio dos conceitos</div>
+          <div class="num" id="prog-mastery">0%</div>
+          <div class="progressbar"><div id="prog-mastery-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🎯 Calibração de confiança</h2>
+      <p class="lead" style="margin-top:-4px;">Na aba Revisar, antes de ver a resposta você avalia sua confiança. Isso mostra o quanto essa autoavaliação bate com a realidade.</p>
+      <div class="grid2">
+        <div class="stat-card">
+          <div class="label">Bem calibrado(a)</div>
+          <div class="num" id="calib-aligned">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Excesso de confiança</div>
+          <div class="num" id="calib-over">0</div>
+        </div>
+      </div>
+      <p class="lead" id="calib-under-text" style="margin-top:10px;"></p>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🏆 Conquistas</h2>
+      <div class="badges-grid" id="badges-grid"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🗂️ Conceitos deste módulo</h2>
+      <div id="concept-list"></div>
+    </div>
+
+    <div class="panel">
+      <button class="btn ghost" id="reset-btn">🗑️ Reiniciar progresso deste módulo</button>
+    </div>
+  </section>
+
+  <footer class="credit" id="footer-credit"></footer>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="assets/storage.js"></script>
+<script src="assets/engine.js"></script>
+<script>
+async function boot(){
+  const params = new URLSearchParams(window.location.search);
+  const moduleId = params.get("m");
+
+  if(!moduleId){
+    document.getElementById("setup-banner").style.display = "block";
+    document.getElementById("setup-banner").textContent =
+      "Nenhum módulo especificado. Volte ao catálogo e escolha uma trilha de estudo.";
+    return;
+  }
+
+  try{
+    const catalogRes = await fetch("content/catalog.json");
+    if(!catalogRes.ok) throw new Error("catalog fetch failed");
+    const catalog = await catalogRes.json();
+    const entry = catalog.modules.find(m => m.id === moduleId);
+    if(!entry || !entry.contentFile) throw new Error("module not found or not ready");
+
+    const contentRes = await fetch(entry.contentFile);
+    if(!contentRes.ok) throw new Error("content fetch failed");
+    const moduleData = await contentRes.json();
+
+    // Registra o handler global usado pelos botões inline do catálogo/telas
+    window.switchTab = switchTab;
+    document.getElementById("cta-learn").addEventListener("click", ()=> switchTab("aprender"));
+    document.getElementById("cta-review").addEventListener("click", ()=> switchTab("revisar"));
+    document.getElementById("reset-btn").addEventListener("click", async ()=>{
+      if(confirm("Isso vai apagar o progresso salvo deste módulo. Continuar?")){
+        STATE = defaultState();
+        await saveState();
+        renderHeader();
+        renderProgress();
+      }
+    });
+
+    await initApp(moduleData.config, moduleData.concepts);
+  }catch(e){
+    console.error(e);
+    document.getElementById("setup-banner").style.display = "block";
+  }
+}
+
+initAuthGate(()=>{
+  bindLogoutButton();
+  boot();
+});
+</script>
+</body>
+</html>
