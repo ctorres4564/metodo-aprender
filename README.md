@@ -98,6 +98,28 @@ Sem conexão com o Firebase configurada, o app cai automaticamente para localSto
 
 **Sobre os valores em `firebase-config.js`:** eles não são segredos — identificam o projeto, mas não dão acesso a nada sozinhos. Quem protege os dados de verdade são as regras do Firestore (passo 4), que garantem que cada pessoa só lê/escreve o próprio progresso.
 
+## Criação de módulos dentro do app
+
+Qualquer pessoa logada pode criar seus próprios módulos de estudo direto pelo navegador, sem precisar de código nem de editar arquivos — em `criar-modulo.html` (acessível pelo botão "➕ Criar novo módulo" no catálogo).
+
+Como funciona:
+1. A pessoa preenche título, subtítulo, ícone e adiciona quantos "conceitos" quiser — cada conceito tem uma explicação curta e uma pergunta de múltipla escolha com 4 alternativas.
+2. Ao salvar, o módulo é gravado no Firestore (coleção `modules`), associado ao `uid` de quem criou (`ownerId`).
+3. O módulo aparece na seção "🗂️ Meus Módulos" do catálogo (`index.html`), com opções de editar ou excluir.
+4. Ao abrir, `app.html?m=<id>&src=user` carrega o conteúdo do Firestore em vez de um arquivo JSON estático — o mesmo motor (`engine.js`) roda por igual para módulos oficiais e módulos criados por usuários.
+
+Módulos criados por usuários são privados: só quem criou consegue ver, editar ou estudar aquele módulo (garantido pelas regras do Firestore em `firestore.rules.txt`, seção `modules`). Se você já publicou as regras antes desta funcionalidade, é necessário colar o `firestore.rules.txt` atualizado no Firebase Console → Firestore Database → Regras novamente e publicar — do contrário, criar/editar módulos vai falhar com erro de permissão.
+
+### Importar conceitos de um PDF/artigo com IA (opcional)
+
+Na tela "Criar novo módulo" há uma seção "🤖 Importar com IA": a pessoa envia um PDF (lido no próprio navegador com `pdf.js`, via CDN — o arquivo não é enviado para nenhum servidor além do texto extraído) ou cola um trecho de texto, e uma função serverless (`api/gerar-modulo.js`, também via OpenRouter) sugere conceitos (título, explicação, pergunta de múltipla escolha) automaticamente.
+
+Pontos importantes:
+- A IA é instruída a **parafrasear** o texto-fonte em vez de copiá-lo literalmente, para não incentivar reprodução de material com direitos autorais.
+- Os conceitos gerados aparecem nos cards de edição para revisão — nada é salvo automaticamente; a pessoa ainda precisa clicar em "Salvar módulo".
+- Limite de ~14 mil caracteres de texto-fonte por geração (aprox. 10 páginas) e até 20 conceitos por vez, para manter custo e qualidade sob controle. Textos maiores podem ser divididos em várias importações.
+- Usa a mesma variável `OPENROUTER_API_KEY` já configurada para o modo Explicar — nenhuma configuração extra é necessária.
+
 ## Responsividade
 
 O layout é mobile-first: no desktop a navegação aparece como abas no topo; em telas estreitas (≤620px) ela vira uma barra fixa na parte inferior, no padrão de apps mobile. Tipografia usa `clamp()` para se ajustar ao tamanho da tela. Testado visualmente em larguras de celular, tablet e desktop.

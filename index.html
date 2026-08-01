@@ -39,6 +39,17 @@
   </div>
 
   <div class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <h2 class="section-title" style="margin:0;">🗂️ Meus Módulos</h2>
+      <a class="btn secondary" href="criar-modulo.html" style="text-decoration:none;">➕ Criar novo módulo</a>
+    </div>
+    <div class="catalog-grid" id="user-modules-grid" style="margin-top:12px;"></div>
+    <p id="user-modules-empty" style="display:none; color:var(--text-dim); font-size:13px; margin-top:8px;">
+      Você ainda não criou nenhum módulo. Clique em "Criar novo módulo" para montar sua primeira trilha.
+    </p>
+  </div>
+
+  <div class="panel">
     <div class="catalog-grid" id="catalog-grid"></div>
   </div>
 
@@ -90,9 +101,73 @@ async function init(){
     document.getElementById("setup-banner").style.display = "block";
   }
 }
+
+async function loadUserModules(){
+  const grid = document.getElementById("user-modules-grid");
+  const empty = document.getElementById("user-modules-empty");
+  if(!window.AppDB || !window.AppDB.listUserModules){
+    empty.style.display = "block";
+    return;
+  }
+  try{
+    const modules = await window.AppDB.listUserModules();
+    grid.innerHTML = "";
+    if(!modules || modules.length === 0){
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+    modules.forEach(m=>{
+      const cfg = m.config || {};
+      const card = document.createElement("div");
+      card.className = "module-card";
+      card.style.position = "relative";
+      const count = (m.concepts || []).length;
+      card.innerHTML = `
+        <a href="app.html?m=${encodeURIComponent(m.id)}&src=user" style="text-decoration:none; color:inherit; display:block;">
+          <div class="ic">${cfg.logoEmoji || "📘"}</div>
+          <h3>${cfg.appTitle || "Sem título"}</h3>
+          <p>${cfg.appSubtitle || ""}</p>
+          <div class="meta">
+            <span>${count} conceito${count === 1 ? "" : "s"}</span>
+            <span class="plan-chip plan-free">Meu módulo</span>
+          </div>
+        </a>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <a class="btn ghost" style="flex:1; text-decoration:none; text-align:center; font-size:12px;" href="criar-modulo.html?edit=${encodeURIComponent(m.id)}">✏️ Editar</a>
+          <button class="btn ghost delete-user-module" style="flex:1; font-size:12px; color:var(--danger);" data-id="${m.id}" data-title="${(cfg.appTitle||"este módulo").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+    grid.querySelectorAll(".delete-user-module").forEach(btn=>{
+      btn.addEventListener("click", async (ev)=>{
+        ev.preventDefault();
+        const id = btn.dataset.id;
+        const title = btn.dataset.title;
+        if(!confirm(`Excluir "${title}"? Isso também apaga seu progresso nesse módulo. Essa ação não pode ser desfeita.`)) return;
+        btn.disabled = true;
+        btn.textContent = "Excluindo...";
+        try{
+          await window.AppDB.deleteUserModule(id);
+          loadUserModules();
+        }catch(e){
+          alert("Não foi possível excluir agora. Tente novamente.");
+          btn.disabled = false;
+          btn.textContent = "🗑️ Excluir";
+        }
+      });
+    });
+  }catch(e){
+    console.error(e);
+    empty.style.display = "block";
+  }
+}
+
 initAuthGate(()=>{
   bindLogoutButton();
   init();
+  loadUserModules();
 });
 </script>
 </body>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<title>Criar Módulo</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .concept-editor{
+    background: var(--panel-2); border:1px solid var(--border); border-radius:14px;
+    padding:16px; margin-bottom:14px; position:relative;
+  }
+  .concept-editor .num-badge{
+    position:absolute; top:-10px; left:14px; background: var(--accent); color:#0c1a11;
+    font-size:11px; font-weight:800; padding:2px 10px; border-radius:999px;
+  }
+  .field-label{ font-size:11.5px; color:var(--text-dim); margin: 10px 0 4px; display:block; }
+  .field-label:first-child{ margin-top:2px; }
+  .opt-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .opt-row input[type="text"]{ flex:1; }
+  .opt-row input[type="radio"]{ width:18px; height:18px; accent-color: var(--accent); flex-shrink:0; }
+  .remove-concept{
+    position:absolute; top:10px; right:10px; background:none; border:none;
+    color: var(--danger); cursor:pointer; font-size:13px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <div class="logo">✏️</div>
+        <div>
+          <h1 id="page-title">Criar novo módulo</h1>
+          <p>Monte sua própria trilha de estudo</p>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2 class="section-title">🗂️ Informações do módulo</h2>
+      <span class="field-label">Título</span>
+      <input type="text" id="mod-title" class="auth-input" placeholder="Ex: Vocabulário de Inglês — Unidade 1">
+      <span class="field-label">Subtítulo</span>
+      <input type="text" id="mod-subtitle" class="auth-input" placeholder="Ex: 20 palavras essenciais para viagem">
+      <div class="grid2">
+        <div>
+          <span class="field-label">Emoji do módulo</span>
+          <input type="text" id="mod-icon" class="auth-input" placeholder="📘" maxlength="4">
+        </div>
+        <div>
+          <span class="field-label">Deixar público no catálogo geral?</span>
+          <select id="mod-visibility" class="auth-input">
+            <option value="private">Não — só eu vejo (Meus Módulos)</option>
+          </select>
+        </div>
+      </div>
+      <span class="field-label">Fonte / crédito (opcional)</span>
+      <input type="text" id="mod-source" class="auth-input" placeholder="Ex: Baseado nas minhas anotações de aula">
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🤖 Importar com IA (opcional)</h2>
+      <p class="lead" style="margin-top:-4px;">
+        Envie um PDF ou cole o texto de um capítulo/artigo e a IA sugere conceitos automaticamente para você revisar
+        e ajustar antes de salvar. Funciona melhor com textos de até ~10 páginas por vez.
+      </p>
+      <div class="grid2">
+        <div>
+          <span class="field-label">Arquivo PDF</span>
+          <input type="file" id="import-pdf-input" accept="application/pdf" class="auth-input">
+        </div>
+        <div>
+          <span class="field-label">…ou cole o texto aqui</span>
+          <textarea id="import-text-input" class="explain-textarea" rows="1" placeholder="Cole um trecho de texto (opcional, alternativa ao PDF)"></textarea>
+        </div>
+      </div>
+      <div id="import-feedback"></div>
+      <button class="btn secondary" id="import-generate-btn" style="margin-top:10px;">✨ Gerar conceitos com IA</button>
+    </div>
+
+    <div class="panel">
+      <h2 class="section-title">🧠 Conceitos</h2>
+      <p class="lead" style="margin-top:-4px;">
+        Cada conceito vira uma ficha de estudo: uma explicação curta e uma pergunta de múltipla escolha para checar o entendimento.
+        Recomendado: 12 a 25 conceitos por módulo — mas você pode começar com poucos e completar depois.
+      </p>
+      <div id="concepts-editor"></div>
+      <button class="btn secondary" id="add-concept-btn">➕ Adicionar conceito</button>
+    </div>
+
+    <div class="panel">
+      <div id="save-feedback"></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" id="save-module-btn">💾 Salvar módulo</button>
+        <a class="btn secondary" href="index.html" style="text-decoration:none; display:inline-flex; align-items:center;">↩ Cancelar</a>
+      </div>
+    </div>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script>
+if(window["pdfjsLib"]){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+}
+
+let editingId = null;
+let conceptCount = 0;
+
+function conceptTemplate(idx, data){
+  data = data || {};
+  const opts = data.options || ["", "", "", ""];
+  const correct = typeof data.correct === "number" ? data.correct : 0;
+  const wrap = document.createElement("div");
+  wrap.className = "concept-editor";
+  wrap.dataset.idx = idx;
+  wrap.innerHTML = `
+    <span class="num-badge">Conceito ${idx + 1}</span>
+    <button class="remove-concept" type="button">🗑️ Remover</button>
+    <span class="field-label">Categoria (etiqueta curta)</span>
+    <input type="text" class="auth-input c-tag" placeholder="Ex: Vocabulário" value="${escapeAttr(data.tag||"")}">
+    <span class="field-label">Título do conceito</span>
+    <input type="text" class="auth-input c-title" placeholder="Ex: A palavra 'Journey'" value="${escapeAttr(data.title||"")}">
+    <span class="field-label">Explicação (2 a 4 frases, com suas próprias palavras)</span>
+    <textarea class="explain-textarea c-text" rows="3" placeholder="Explique o conceito de forma simples...">${escapeHtml(data.text||"")}</textarea>
+    <span class="field-label">Pergunta de checagem</span>
+    <input type="text" class="auth-input c-question" placeholder="Ex: O que significa 'journey'?" value="${escapeAttr(data.q||"")}">
+    <span class="field-label">Alternativas (marque a correta)</span>
+    ${[0,1,2,3].map(i => `
+      <div class="opt-row">
+        <input type="radio" name="correct-${idx}" class="c-correct" value="${i}" ${i===correct?"checked":""}>
+        <input type="text" class="auth-input c-opt" placeholder="Alternativa ${i+1}" value="${escapeAttr(opts[i]||"")}">
+      </div>
+    `).join("")}
+  `;
+  wrap.querySelector(".remove-concept").addEventListener("click", ()=> wrap.remove());
+  return wrap;
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function escapeAttr(s){ return escapeHtml(s).replace(/"/g, "&quot;"); }
+
+function addConceptCard(data){
+  const container = document.getElementById("concepts-editor");
+  const idx = container.children.length;
+  container.appendChild(conceptTemplate(idx, data));
+}
+
+function slugify(str){
+  return String(str).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/(^-+|-+$)/g,"").slice(0,40) || "modulo";
+}
+function generateModuleId(title){
+  return "u-" + slugify(title) + "-" + Math.random().toString(36).slice(2,7);
+}
+
+function collectConcepts(){
+  const cards = document.querySelectorAll("#concepts-editor .concept-editor");
+  const concepts = [];
+  const errors = [];
+  cards.forEach((card, i)=>{
+    const tag = card.querySelector(".c-tag").value.trim();
+    const title = card.querySelector(".c-title").value.trim();
+    const text = card.querySelector(".c-text").value.trim();
+    const q = card.querySelector(".c-question").value.trim();
+    const optInputs = card.querySelectorAll(".c-opt");
+    const options = Array.from(optInputs).map(inp => inp.value.trim());
+    const correctRadio = card.querySelector(".c-correct:checked");
+    const correct = correctRadio ? parseInt(correctRadio.value, 10) : null;
+
+    if(!title || !text || !q || options.some(o=>!o) || correct === null){
+      errors.push(`Conceito ${i+1}: preencha todos os campos (título, explicação, pergunta e as 4 alternativas) e marque a correta.`);
+      return;
+    }
+    concepts.push({
+      id: slugify(title) + "-" + i,
+      tag: tag || "Geral",
+      title, text, q, options, correct
+    });
+  });
+  return { concepts, errors };
+}
+
+async function extractPdfText(file){
+  if(!window["pdfjsLib"]) throw new Error("Leitor de PDF não carregou. Tente recarregar a página.");
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let fullText = "";
+  const maxPages = Math.min(pdf.numPages, 40);
+  for(let i = 1; i <= maxPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(it => it.str).join(" ");
+    fullText += pageText + "\n\n";
+  }
+  return fullText.trim();
+}
+
+document.getElementById("import-generate-btn").addEventListener("click", async ()=>{
+  const fb = document.getElementById("import-feedback");
+  const btn = document.getElementById("import-generate-btn");
+  const fileInput = document.getElementById("import-pdf-input");
+  const textInput = document.getElementById("import-text-input");
+  const title = document.getElementById("mod-title").value.trim();
+
+  fb.innerHTML = "";
+  btn.disabled = true;
+
+  try{
+    let sourceText = textInput.value.trim();
+
+    if(!sourceText && fileInput.files && fileInput.files[0]){
+      btn.textContent = "Lendo PDF...";
+      sourceText = await extractPdfText(fileInput.files[0]);
+    }
+
+    if(!sourceText || sourceText.length < 200){
+      fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto com pelo menos alguns parágrafos antes de gerar.</div>`;
+      btn.disabled = false;
+      btn.textContent = "✨ Gerar conceitos com IA";
+      return;
+    }
+
+    btn.textContent = "Gerando conceitos...";
+    const resp = await fetch("/api/gerar-modulo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, sourceText })
+    });
+    const data = await resp.json();
+
+    if(!resp.ok){
+      fb.innerHTML = `<div class="feedback bad">${data.error || "Não foi possível gerar conceitos agora."}</div>`;
+      btn.disabled = false;
+      btn.textContent = "✨ Gerar conceitos com IA";
+      return;
+    }
+
+    const generated = data.concepts || [];
+    if(generated.length === 0){
+      fb.innerHTML = `<div class="feedback bad">A IA não conseguiu extrair conceitos claros desse texto. Tente um trecho mais rico em conteúdo.</div>`;
+      btn.disabled = false;
+      btn.textContent = "✨ Gerar conceitos com IA";
+      return;
+    }
+
+    // Remove os cards de conceito vazios (placeholders iniciais) antes de inserir os gerados
+    document.querySelectorAll("#concepts-editor .concept-editor").forEach(card=>{
+      const hasContent = card.querySelector(".c-title").value.trim() || card.querySelector(".c-text").value.trim();
+      if(!hasContent) card.remove();
+    });
+    generated.forEach(c => addConceptCard(c));
+
+    fb.innerHTML = `<div class="feedback ok">${generated.length} conceito(s) gerado(s) — revise, ajuste e complete abaixo antes de salvar.</div>`;
+    document.getElementById("concepts-editor").scrollIntoView({ behavior: "smooth", block: "start" });
+  }catch(e){
+    console.error(e);
+    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "✨ Gerar conceitos com IA";
+  }
+});
+
+async function loadForEdit(id){
+  const mod = await window.AppDB.getUserModule(id);
+  if(!mod) return;
+  editingId = id;
+  document.getElementById("page-title").textContent = "Editar módulo";
+  document.getElementById("mod-title").value = mod.config.appTitle || "";
+  document.getElementById("mod-subtitle").value = mod.config.appSubtitle || "";
+  document.getElementById("mod-icon").value = mod.config.logoEmoji || "📘";
+  document.getElementById("mod-source").value = mod.config.sourceCredit || "";
+  document.getElementById("concepts-editor").innerHTML = "";
+  (mod.concepts || []).forEach(c => addConceptCard(c));
+}
+
+document.getElementById("add-concept-btn").addEventListener("click", ()=> addConceptCard());
+
+document.getElementById("save-module-btn").addEventListener("click", async ()=>{
+  const fb = document.getElementById("save-feedback");
+  const title = document.getElementById("mod-title").value.trim();
+  const subtitle = document.getElementById("mod-subtitle").value.trim();
+  const icon = document.getElementById("mod-icon").value.trim() || "📘";
+  const source = document.getElementById("mod-source").value.trim();
+
+  if(!title){
+    fb.innerHTML = `<div class="feedback bad">Dê um título ao módulo antes de salvar.</div>`;
+    return;
+  }
+  const { concepts, errors } = collectConcepts();
+  if(concepts.length === 0){
+    fb.innerHTML = `<div class="feedback bad">Adicione pelo menos 1 conceito antes de salvar.</div>`;
+    return;
+  }
+  if(errors.length > 0){
+    fb.innerHTML = `<div class="feedback bad">${errors.join("<br>")}</div>`;
+    return;
+  }
+
+  const id = editingId || generateModuleId(title);
+  const moduleData = {
+    config: {
+      appTitle: title,
+      appSubtitle: subtitle,
+      logoEmoji: icon,
+      homeIntro: `Módulo criado por você: ${title}.`,
+      sourceCredit: source || "Módulo criado no app.",
+      storageKey: `estudo_${id}_v1`
+    },
+    concepts
+  };
+
+  const btn = document.getElementById("save-module-btn");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  try{
+    await window.AppDB.saveUserModule(id, moduleData);
+    window.location.href = `app.html?m=${encodeURIComponent(id)}&src=user`;
+  }catch(e){
+    console.error(e);
+    fb.innerHTML = `<div class="feedback bad">Não foi possível salvar agora. Tente novamente.</div>`;
+    btn.disabled = false;
+    btn.textContent = "💾 Salvar módulo";
+  }
+});
+
+function boot(){
+  const params = new URLSearchParams(window.location.search);
+  const editId = params.get("edit");
+  if(editId){
+    loadForEdit(editId);
+  } else {
+    addConceptCard();
+    addConceptCard();
+    addConceptCard();
+  }
+}
+
+initAuthGate(()=>{
+  bindLogoutButton();
+  boot();
+});
+</script>
+</body>
+</html>

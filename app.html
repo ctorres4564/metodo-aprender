@@ -176,6 +176,7 @@
 async function boot(){
   const params = new URLSearchParams(window.location.search);
   const moduleId = params.get("m");
+  const isUserModule = params.get("src") === "user";
 
   if(!moduleId){
     document.getElementById("setup-banner").style.display = "block";
@@ -185,15 +186,32 @@ async function boot(){
   }
 
   try{
-    const catalogRes = await fetch("content/catalog.json");
-    if(!catalogRes.ok) throw new Error("catalog fetch failed");
-    const catalog = await catalogRes.json();
-    const entry = catalog.modules.find(m => m.id === moduleId);
-    if(!entry || !entry.contentFile) throw new Error("module not found or not ready");
+    let moduleData;
 
-    const contentRes = await fetch(entry.contentFile);
-    if(!contentRes.ok) throw new Error("content fetch failed");
-    const moduleData = await contentRes.json();
+    if(isUserModule){
+      if(!window.AppDB || !window.AppDB.getUserModule) throw new Error("AppDB indisponível");
+      const userMod = await window.AppDB.getUserModule(moduleId);
+      if(!userMod || !userMod.concepts || userMod.concepts.length === 0){
+        throw new Error("módulo do usuário não encontrado ou vazio");
+      }
+      moduleData = { config: userMod.config, concepts: userMod.concepts };
+      const editLink = document.createElement("a");
+      editLink.href = `criar-modulo.html?edit=${encodeURIComponent(moduleId)}`;
+      editLink.className = "pill";
+      editLink.style.textDecoration = "none";
+      editLink.textContent = "✏️ Editar módulo";
+      document.querySelector("header.topbar .stats").prepend(editLink);
+    } else {
+      const catalogRes = await fetch("content/catalog.json");
+      if(!catalogRes.ok) throw new Error("catalog fetch failed");
+      const catalog = await catalogRes.json();
+      const entry = catalog.modules.find(m => m.id === moduleId);
+      if(!entry || !entry.contentFile) throw new Error("module not found or not ready");
+
+      const contentRes = await fetch(entry.contentFile);
+      if(!contentRes.ok) throw new Error("content fetch failed");
+      moduleData = await contentRes.json();
+    }
 
     // Registra o handler global usado pelos botões inline do catálogo/telas
     window.switchTab = switchTab;
@@ -212,6 +230,10 @@ async function boot(){
   }catch(e){
     console.error(e);
     document.getElementById("setup-banner").style.display = "block";
+    if(isUserModule){
+      document.getElementById("setup-banner").textContent =
+        "Não foi possível carregar este módulo. Ele pode ter sido excluído, ou você não tem permissão para acessá-lo.";
+    }
   }
 }
 

@@ -29,7 +29,12 @@ import {
   getFirestore,
   doc,
   getDoc,
-  setDoc
+  setDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -67,6 +72,31 @@ window.AppDB = {
     const docId = `${uid}_${sanitizeKeyPart(key)}`;
     const ref = doc(db, "progress", docId);
     await setDoc(ref, { state: data, updatedAt: Date.now(), uid });
+    return true;
+  },
+
+  /* ---- Módulos criados pelo(a) próprio(a) usuário(a) ---- */
+  async listUserModules(){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return [];
+    const q = query(collection(db, "modules"), where("ownerId", "==", uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  },
+  async getUserModule(id){
+    const ref = doc(db, "modules", id);
+    const snap = await getDoc(ref);
+    return snap.exists() ? Object.assign({ id: snap.id }, snap.data()) : null;
+  },
+  async saveUserModule(id, moduleData){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const ref = doc(db, "modules", id);
+    await setDoc(ref, Object.assign({}, moduleData, { ownerId: uid, updatedAt: Date.now() }));
+    return true;
+  },
+  async deleteUserModule(id){
+    await deleteDoc(doc(db, "modules", id));
     return true;
   }
 };

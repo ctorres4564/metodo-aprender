@@ -112,14 +112,15 @@ p.lead{ color: var(--text-dim); font-size:14px; line-height:1.55; }
 .progressbar{ height: 10px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow:hidden; border: 1px solid var(--border); margin-top:6px; }
 .progressbar > div{ height:100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s ease; }
 
-button.btn{
+button.btn, a.btn{
   background: linear-gradient(135deg, var(--accent), #3fae66); color:#0c1a11; border:none;
   padding: 12px 18px; border-radius: 12px; font-weight:700; font-size:14px; cursor:pointer;
   box-shadow: 0 6px 16px rgba(111,207,125,0.25); transition: transform .1s ease;
+  display:inline-block;
 }
-button.btn:active{ transform: scale(0.97); }
-button.btn.secondary{ background: var(--panel-2); color: var(--text); border:1px solid var(--border); box-shadow:none; }
-button.btn.ghost{ background: transparent; color: var(--text-dim); border:1px dashed var(--border); box-shadow:none; }
+button.btn:active, a.btn:active{ transform: scale(0.97); }
+button.btn.secondary, a.btn.secondary{ background: var(--panel-2); color: var(--text); border:1px solid var(--border); box-shadow:none; }
+button.btn.ghost, a.btn.ghost{ background: transparent; color: var(--text-dim); border:1px dashed var(--border); box-shadow:none; }
 button.btn:disabled{ opacity:.4; cursor:not-allowed; }
 
 /* ---- Conceito / quiz ---- */

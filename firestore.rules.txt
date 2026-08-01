@@ -16,5 +16,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null
                           && docId.matches(request.auth.uid + '_.*');
     }
+
+    // Módulos criados pelos próprios usuários dentro do app (aba "Criar novo módulo").
+    // Qualquer pessoa autenticada pode criar um módulo; só quem criou (ownerId == uid)
+    // pode ler, editar ou excluir depois.
+    match /modules/{docId} {
+      allow create: if request.auth != null
+                    && request.resource.data.ownerId == request.auth.uid;
+      allow read, update, delete: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid;
+    }
   }
 }
