@@ -16,6 +16,7 @@
    ===================================================================== */
 
 import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+import { extractJson } from "./_lib/parseJson.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_SOURCE_CHARS = 14000;
@@ -96,7 +97,8 @@ ${trimmedSource}
       },
       body: JSON.stringify({
         model,
-        max_tokens: 6500,
+        max_tokens: 8000,
+        reasoning: { effort: "low", exclude: true },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -117,10 +119,9 @@ ${trimmedSource}
 
     let parsed;
     try {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : rawText);
+      parsed = extractJson(rawText);
     } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo:", rawText);
+      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
       res.status(502).json({ error: "Resposta do gerador em formato inesperado." });
       return;
     }

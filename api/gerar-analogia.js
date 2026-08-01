@@ -10,6 +10,7 @@
    ===================================================================== */
 
 import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+import { extractJson } from "./_lib/parseJson.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
@@ -77,7 +78,8 @@ ${referenceText}
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1200,
+        max_tokens: 1800,
+        reasoning: { effort: "low", exclude: true },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -98,10 +100,9 @@ ${referenceText}
 
     let parsed;
     try {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : rawText);
+      parsed = extractJson(rawText);
     } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo:", rawText);
+      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
       res.status(502).json({ error: "Resposta do gerador em formato inesperado." });
       return;
     }

@@ -22,6 +22,7 @@
    ===================================================================== */
 
 import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+import { extractJson } from "./_lib/parseJson.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_CONTENT_CHARS = 45000;
@@ -106,7 +107,11 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4500,
+        max_tokens: 8000,
+        // Alguns modelos (ex: DeepSeek V4 Pro) usam tokens extras "raciocinando" antes
+        // de responder. Essa tarefa não precisa disso — pedimos esforço baixo e para
+        // não misturar o raciocínio dentro do texto de resposta (o que quebraria o JSON).
+        reasoning: { effort: "low", exclude: true },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -127,10 +132,9 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
 
     let parsed;
     try {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(match ? match[0] : rawText);
+      parsed = extractJson(rawText);
     } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo:", rawText);
+      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
       res.status(502).json({ error: "Resposta do detector em formato inesperado." });
       return;
     }
