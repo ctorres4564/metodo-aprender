@@ -315,7 +315,7 @@ async function loadAnalogy(c){
   const box = document.getElementById("analogy-box");
   box.innerHTML = `<p class="lead" style="margin-top:10px;">🧠 Pensando numa analogia...</p>`;
   try{
-    const resp = await fetch("/api/gerar-analogia", {
+    const resp = await authedFetch("/api/gerar-analogia", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: c.title, referenceText: c.text })
@@ -601,7 +601,7 @@ async function handleExplainSubmit(c, studentText){
   resultBox.innerHTML = `<p class="lead" style="margin-top:12px;">🧠 Analisando sua explicação...</p>`;
 
   try{
-    const res = await fetch("/api/avaliar-explicacao", {
+    const res = await authedFetch("/api/avaliar-explicacao", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ title: c.title, referenceText: c.text, studentText })

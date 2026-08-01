@@ -114,6 +114,7 @@
 
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
+<script src="assets/api-client.js"></script>
 <script type="module">
   import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
@@ -248,7 +249,7 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
     }
 
     btn.textContent = "Gerando conceitos...";
-    const resp = await fetch("/api/gerar-modulo", {
+    const resp = await authedFetch("/api/gerar-modulo", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title, sourceText })

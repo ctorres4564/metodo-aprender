@@ -149,6 +149,22 @@ Em cada conceito da aba Aprender, há um botão "💡 Ver explicação com analo
 
 A analogia gerada fica salva no progresso da pessoa (por conceito), então ela só é gerada uma vez por conceito — nas próximas vezes que a pessoa revisitar aquele conceito, a analogia já salva aparece direto, sem custo extra de API.
 
+## Controle de uso de IA por usuário (base para monetização)
+
+Todas as 4 funções que chamam a OpenRouter (`avaliar-explicacao`, `gerar-modulo`, `detectar-capitulos`, `gerar-analogia`) agora exigem login: o servidor verifica o token do Firebase de quem está chamando (`api/_lib/usage.js`, usando o Firebase Admin SDK) antes de gastar qualquer crédito de IA. Sem isso, qualquer pessoa sem conta poderia consumir créditos livremente.
+
+Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", único plano que existe por enquanto). O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). A estrutura já reconhece um campo `plan` no documento `users/{uid}` — quando existir cobrança de verdade (Stripe), o webhook só precisa gravar `plan: "premium"` nesse documento que o limite maior passa a valer automaticamente, sem mexer neste código de novo.
+
+**Configuração obrigatória (uma vez só), além do que já existia:**
+
+1. No [Firebase Console](https://console.firebase.google.com) → seu projeto → ⚙️ **Configurações do projeto → Contas de serviço**.
+2. Clique em "Gerar nova chave privada" — baixa um arquivo `.json`.
+3. Abra esse arquivo, copie o conteúdo inteiro.
+4. No painel da Vercel → **Settings → Environment Variables**, crie uma variável chamada `FIREBASE_SERVICE_ACCOUNT` com esse JSON completo como valor (em "Production").
+5. Publique de novo (`vercel --prod`) — esse deploy também vai instalar a nova dependência `firebase-admin` (adicionada em `package.json`) automaticamente.
+
+Sem essa variável configurada, as 4 funções de IA passam a responder com erro claro (em vez de falhar silenciosamente ou funcionar sem controle de custo).
+
 ## Responsividade
 
 O layout é mobile-first: no desktop a navegação aparece como abas no topo; em telas estreitas (≤620px) ela vira uma barra fixa na parte inferior, no padrão de apps mobile. Tipografia usa `clamp()` para se ajustar ao tamanho da tela. Testado visualmente em larguras de celular, tablet e desktop.

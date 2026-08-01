@@ -15,11 +15,19 @@
      um modelo padrão razoável para esta tarefa.
    ===================================================================== */
 
+import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
+    return;
+  }
+
+  const user = await verifyUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return;
   }
 
@@ -39,6 +47,15 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "OPENROUTER_API_KEY não configurada no servidor." });
     return;
   }
+
+  const usage = await checkAndConsumeUsage(user.uid);
+  if (!usage.allowed) {
+    res.status(429).json({
+      error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+    });
+    return;
+  }
+
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
   const systemPrompt = `Você é um tutor que aplica a Técnica de Feynman: avalia se um(a) estudante conseguiu explicar um conceito com as próprias palavras, de forma clara e simples, como se estivesse ensinando alguém que não conhece o assunto.

@@ -9,11 +9,19 @@
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
 
+import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
+    return;
+  }
+
+  const user = await verifyUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return;
   }
 
@@ -29,6 +37,15 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "OPENROUTER_API_KEY não configurada no servidor." });
     return;
   }
+
+  const usage = await checkAndConsumeUsage(user.uid);
+  if (!usage.allowed) {
+    res.status(429).json({
+      error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+    });
+    return;
+  }
+
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
   const systemPrompt = `Você ajuda estudantes a fixar conceitos criando explicações alternativas baseadas em ANALOGIAS e METÁFORAS do dia a dia.

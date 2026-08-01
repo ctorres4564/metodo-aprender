@@ -21,6 +21,8 @@
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
 
+import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
+
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_CONTENT_CHARS = 45000;
 const MAX_SECTIONS = 40;
@@ -28,6 +30,12 @@ const MAX_SECTIONS = 40;
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
+    return;
+  }
+
+  const user = await verifyUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return;
   }
 
@@ -47,6 +55,15 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "OPENROUTER_API_KEY não configurada no servidor." });
     return;
   }
+
+  const usage = await checkAndConsumeUsage(user.uid);
+  if (!usage.allowed) {
+    res.status(429).json({
+      error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+    });
+    return;
+  }
+
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   const trimmedContent = content.slice(0, MAX_CONTENT_CHARS);
 
