@@ -106,6 +106,17 @@
 
   <section id="tab-progresso" class="tab-content" style="display:none;">
     <div class="panel">
+      <h2 class="section-title">📧 Lembrete diário por e-mail</h2>
+      <p class="lead" style="margin-top:-4px;">Quando ativado, você recebe um e-mail (uma vez por dia) avisando
+        quantas fichas estão com revisão vencida — só quando houver alguma.</p>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:6px;">
+        <input type="checkbox" id="setting-reminders" style="width:18px; height:18px; accent-color: var(--accent);">
+        <span>Receber lembrete diário por e-mail</span>
+      </label>
+      <div id="reminders-status" style="font-size:12px; color:var(--text-dim); margin-top:8px;"></div>
+    </div>
+
+    <div class="panel">
       <h2 class="section-title">⚙️ Metas diárias</h2>
       <p class="lead" style="margin-top:-4px;">Aprender aos poucos, todo dia, funciona melhor do que estudar tudo de uma vez. Ajuste seus limites diários abaixo.</p>
       <div class="grid2">
@@ -235,6 +246,7 @@ async function boot(){
     });
 
     await initApp(moduleData.config, moduleData.concepts);
+    initReminderToggle();
   }catch(e){
     console.error(e);
     document.getElementById("setup-banner").style.display = "block";
@@ -243,6 +255,36 @@ async function boot(){
         "Não foi possível carregar este módulo. Ele pode ter sido excluído, ou você não tem permissão para acessá-lo.";
     }
   }
+}
+
+function initReminderToggle(){
+  const checkbox = document.getElementById("setting-reminders");
+  const statusEl = document.getElementById("reminders-status");
+  if(!checkbox || !window.AppDB || !window.AppDB.getUserProfile) return;
+
+  window.AppDB.getUserProfile().then(profile=>{
+    checkbox.checked = !!(profile && profile.remindersEnabled);
+  }).catch(e=> console.warn("Falha ao carregar preferência de lembrete:", e));
+
+  checkbox.addEventListener("change", async ()=>{
+    checkbox.disabled = true;
+    statusEl.textContent = "Salvando...";
+    try{
+      const user = window.AppAuth.currentUser();
+      await window.AppDB.saveUserProfile({
+        email: (user && user.email) || "",
+        remindersEnabled: checkbox.checked
+      });
+      statusEl.textContent = checkbox.checked
+        ? "✅ Lembretes ativados. Você recebe um e-mail por dia quando houver revisão vencida."
+        : "Lembretes desativados.";
+    }catch(e){
+      console.error(e);
+      checkbox.checked = !checkbox.checked;
+      statusEl.textContent = "Não foi possível salvar agora. Tente novamente.";
+    }
+    checkbox.disabled = false;
+  });
 }
 
 initAuthGate(()=>{

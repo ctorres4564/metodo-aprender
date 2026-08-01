@@ -167,6 +167,30 @@ Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", �
 
 Sem essa variável configurada, as 4 funções de IA passam a responder com erro claro (em vez de falhar silenciosamente ou funcionar sem controle de custo).
 
+## Instalável como app (PWA)
+
+O site pode ser "instalado" na tela inicial do celular ou como app de desktop (Chrome/Edge), funcionando como um app nativo (ícone próprio, sem barra de endereço). Isso é feito com `manifest.json` + `sw.js` (service worker) + `assets/pwa.js`, presentes em todas as páginas principais (`index.html`, `app.html`, `criar-modulo.html`, `importar-livro.html`).
+
+O service worker guarda em cache só o "shell" do app (HTML/CSS/JS/ícones) — nunca dados dinâmicos (progresso, conteúdo de módulos, respostas de IA), que sempre vêm direto da rede. Estratégia "network-first": sempre busca a versão mais nova primeiro, e só usa o cache se não houver conexão.
+
+Para instalar: no celular, use "Adicionar à tela inicial" (Android/Chrome) ou "Adicionar à Tela de Início" (iPhone/Safari, no menu de compartilhar). No desktop, procure o ícone de instalação na barra de endereço do Chrome/Edge.
+
+## Lembrete diário por e-mail
+
+Na aba **Progresso**, cada pessoa pode ativar "Receber lembrete diário por e-mail". Quando ativado, uma vez por dia (função `api/enviar-lembretes.js`, disparada automaticamente pelo Vercel Cron — ver `vercel.json`) o sistema soma as fichas com revisão vencida em todos os módulos daquela pessoa e, se houver pelo menos uma, envia um e-mail via **Resend**. Quem não tem nada vencido no dia não recebe nada (sem notificação vazia).
+
+**Configuração obrigatória (uma vez só):**
+
+1. Crie uma conta em [resend.com](https://resend.com) (tem plano gratuito).
+2. Em **API Keys**, gere uma chave e copie o valor.
+3. No painel da Vercel → **Settings → Environment Variables**, crie:
+   - `RESEND_API_KEY` → a chave gerada no passo 2.
+   - `CRON_SECRET` → qualquer string aleatória e longa (ex: gerada em um gerenciador de senhas). A Vercel detecta essa variável automaticamente e passa a exigi-la nas chamadas do Cron — é o que impede qualquer pessoa de disparar envios de e-mail manualmente.
+4. Publique de novo (`vercel --prod`) — o cron job definido em `vercel.json` (todo dia às 12h UTC, ~9h em Brasília) é registrado automaticamente nesse deploy.
+5. No [Firebase Console](https://console.firebase.google.com) → Firestore Database → Regras, cole o conteúdo atualizado de `firestore.rules.txt` (adiciona permissão para cada pessoa ler/editar só o próprio documento `users/{uid}`, e só os campos `email`/`remindersEnabled` — o campo `plan`, que controla o limite de IA, continua protegido e só pode ser alterado pelo servidor).
+
+**Importante — limite do Resend sem domínio próprio verificado:** enquanto você não verificar um domínio próprio na Resend, os e-mails só podem ser enviados a partir de `onboarding@resend.dev`, e **só chegam ao e-mail da própria conta Resend** (modo sandbox, para evitar abuso). Ou seja: com a configuração básica acima, dá pra testar o lembrete enviando pra você mesmo, mas para os demais usuários receberem de verdade é preciso verificar um domínio (Resend → Domains → Add Domain, adicionando alguns registros DNS no domínio que você possuir) e, opcionalmente, configurar `REMINDER_FROM_EMAIL` com um endereço desse domínio (ex: `lembretes@seudominio.com`).
+
 ## Responsividade
 
 O layout é mobile-first: no desktop a navegação aparece como abas no topo; em telas estreitas (≤620px) ela vira uma barra fixa na parte inferior, no padrão de apps mobile. Tipografia usa `clamp()` para se ajustar ao tamanho da tela. Testado visualmente em larguras de celular, tablet e desktop.

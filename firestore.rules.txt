@@ -26,5 +26,18 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null
                     && resource.data.ownerId == request.auth.uid;
     }
+
+    // Perfil do usuário (users/{uid}). O campo "plan" controla o limite
+    // mensal de gerações por IA (ver api/_lib/usage.js) e só é alterado
+    // pelo servidor (Admin SDK, que ignora estas regras) — por isso o
+    // app só pode criar/editar os campos "email" e "remindersEnabled",
+    // nunca "plan".
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['email', 'remindersEnabled']);
+      allow update: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'remindersEnabled']);
+    }
   }
 }

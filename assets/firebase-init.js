@@ -98,6 +98,22 @@ window.AppDB = {
   async deleteUserModule(id){
     await deleteDoc(doc(db, "modules", id));
     return true;
+  },
+
+  /* ---- Perfil do usuário (plano, preferência de lembrete por e-mail) ---- */
+  async getUserProfile(){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return null;
+    const ref = doc(db, "users", uid);
+    const snap = await getDoc(ref);
+    return snap.exists() ? snap.data() : null;
+  },
+  async saveUserProfile(data){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const ref = doc(db, "users", uid);
+    await setDoc(ref, data, { merge: true });
+    return true;
   }
 };
 

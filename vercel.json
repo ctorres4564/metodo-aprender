@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/enviar-lembretes", "schedule": "0 12 * * *" }
+  ]
+}
