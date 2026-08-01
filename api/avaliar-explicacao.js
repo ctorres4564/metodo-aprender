@@ -111,7 +111,7 @@ ${studentText}
       },
       body: JSON.stringify({
         model,
-        max_tokens: 800,
+        max_tokens: 2000,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }

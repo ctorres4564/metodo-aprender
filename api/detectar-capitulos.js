@@ -106,7 +106,7 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2500,
+        max_tokens: 4500,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }

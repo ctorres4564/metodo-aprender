@@ -616,8 +616,7 @@ async function handleExplainSubmit(c, studentText){
     console.error(e);
     resultBox.innerHTML = `
       <div class="feedback bad" style="margin-top:12px;">
-        Não foi possível avaliar sua explicação agora (${e.message}). Verifique se a chave da API está
-        configurada no servidor (ANTHROPIC_API_KEY na Vercel), ou tente novamente em instantes.
+        Não foi possível avaliar sua explicação agora (${e.message}). Tente novamente em instantes.
       </div>`;
     submitBtn.disabled = false;
     submitBtn.textContent = "🎓 Avaliar explicação";

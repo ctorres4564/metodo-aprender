@@ -77,7 +77,7 @@ ${referenceText}
       },
       body: JSON.stringify({
         model,
-        max_tokens: 400,
+        max_tokens: 1200,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
