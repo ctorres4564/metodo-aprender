@@ -62,7 +62,10 @@ export default async function handler(req, res) {
 
 Sua tarefa tem duas partes:
 
-PARTE 1 — "resumo": escreva um resumo de 4 a 8 frases (1 ou 2 parágrafos curtos), em português, com SUAS PRÓPRIAS PALAVRAS, apresentando do que trata esse trecho e as ideias centrais que serão estudadas — como a introdução de um bom professor antes de começar a aula. Não copie frases do texto-fonte.
+PARTE 1 — "resumo": escreva um resumo mais completo, em português, com SUAS PRÓPRIAS PALAVRAS, em duas partes dentro do mesmo texto:
+   a) Um parágrafo de introdução (3 a 5 frases) apresentando do que trata esse trecho, como a introdução de um bom professor antes de começar a aula.
+   b) Uma lista dos principais tópicos/conceitos que serão estudados neste módulo — de 5 a 10 itens, cada um em uma linha própria começando com "• " (marcador + espaço), com uma frase curta por item (não precisa ser cada conceito exato das fichas, pode agrupar temas relacionados).
+   Formate como texto simples, com o parágrafo de introdução primeiro, uma linha em branco, e depois a lista de tópicos (uma linha por item, cada linha começando com "• "). Não copie frases do texto-fonte.
 
 PARTE 2 — "concepts": leia o texto-fonte e extraia os conceitos mais importantes e independentes entre si (ideias que fazem sentido sozinhas, sem depender de outra ficha para serem entendidas). Gere no máximo ${MAX_CONCEPTS} conceitos, priorizando qualidade e cobertura das ideias centrais em vez de quantidade.
 
@@ -107,7 +110,7 @@ ${trimmedSource}
       },
       body: JSON.stringify({
         model,
-        max_tokens: 8000,
+        max_tokens: 9000,
         reasoning: { effort: "low", exclude: true },
         messages: [
           { role: "system", content: systemPrompt },
@@ -151,7 +154,7 @@ ${trimmedSource}
         correct: Math.min(3, Math.max(0, Math.round(c.correct)))
       }));
 
-    const resumo = typeof parsed.resumo === "string" ? parsed.resumo.trim().slice(0, 1500) : "";
+    const resumo = typeof parsed.resumo === "string" ? parsed.resumo.trim().slice(0, 3000) : "";
 
     res.status(200).json({ resumo, concepts: cleanConcepts });
   } catch (e) {

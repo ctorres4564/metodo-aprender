@@ -915,13 +915,42 @@ function renderProgress(){
   }
 }
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+}
+
+// Renderiza o resumo do módulo (CONFIG.homeIntro) como texto formatado: linhas
+// normais viram parágrafos, linhas começando com "• " viram itens de lista —
+// para o resumo gerado por IA (introdução + tópicos principais) aparecer
+// como uma lista de verdade, em vez de tudo grudado numa linha só.
+function renderHomeIntroHtml(text){
+  if(!text) return "";
+  const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  let html = "";
+  let inList = false;
+  lines.forEach(line=>{
+    const isBullet = /^[•\-*]\s+/.test(line);
+    const content = escapeHtml(line.replace(/^[•\-*]\s+/, ""));
+    if(isBullet){
+      if(!inList){ html += "<ul>"; inList = true; }
+      html += `<li>${content}</li>`;
+    } else {
+      if(inList){ html += "</ul>"; inList = false; }
+      html += `<p>${content}</p>`;
+    }
+  });
+  if(inList) html += "</ul>";
+  return html;
+}
+
 function applyConfigToDOM(){
   document.title = CONFIG.appTitle;
   const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
   setText("app-logo", CONFIG.logoEmoji);
   setText("app-title", CONFIG.appTitle);
   setText("app-subtitle", CONFIG.appSubtitle);
-  setText("home-intro-text", CONFIG.homeIntro);
+  const introEl = document.getElementById("home-intro-text");
+  if(introEl) introEl.innerHTML = renderHomeIntroHtml(CONFIG.homeIntro);
   const footer = document.getElementById("footer-credit");
   if(footer) footer.innerHTML = CONFIG.sourceCredit + "<br>Progresso salvo automaticamente.";
 }

@@ -100,7 +100,10 @@ nav.tabs button .badge-dot{
 }
 @keyframes fadeIn{ from{opacity:0; transform: translateY(6px);} to{opacity:1; transform:none;} }
 h2.section-title{ margin: 0 0 10px; font-size: 18px; display:flex; align-items:center; gap:8px;}
-p.lead{ color: var(--text-dim); font-size:14px; line-height:1.55; }
+p.lead, div.lead{ color: var(--text-dim); font-size:14px; line-height:1.55; }
+div.lead p{ margin: 0 0 10px; }
+div.lead ul{ margin: 0; padding-left: 20px; }
+div.lead ul li{ margin-bottom: 6px; }
 
 .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
 @media (max-width: 600px){ .grid2{ grid-template-columns: 1fr; } }
