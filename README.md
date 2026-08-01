@@ -126,20 +126,20 @@ Pontos importantes:
 - Limite de ~14 mil caracteres de texto-fonte por geração (aprox. 10 páginas) e até 20 conceitos por vez, para manter custo e qualidade sob controle. Textos maiores podem ser divididos em várias importações.
 - Usa a mesma variável `OPENROUTER_API_KEY` já configurada para o modo Explicar — nenhuma configuração extra é necessária.
 
-### Importar um livro inteiro (vários capítulos de uma vez)
+### Importar de um livro (sob demanda, parte por parte)
 
-Na tela "🗂️ Meus Módulos" há um botão "📖 Importar livro inteiro" (`importar-livro.html`) para quando o PDF tem vários capítulos e a pessoa quer um módulo separado por capítulo, em vez de importar manualmente um por um.
+Na tela "🗂️ Meus Módulos" há um botão "📖 Importar de um livro" (`importar-livro.html`) para quando o conteúdo vem de um livro (ou qualquer texto longo dividido em partes/capítulos/seções) e a pessoa quer gerar módulos aos poucos, sem processar o livro inteiro de uma vez.
 
 Como funciona, na prática:
-1. A pessoa envia o PDF do livro completo (ou cola o texto inteiro). O texto é extraído no navegador (`pdf.js`, até 600 páginas).
-2. A estrutura do documento é detectada por **IA** (`api/detectar-capitulos.js`), não por um padrão fixo de texto — funciona com capítulos numerados ("Capítulo 1", "Chapter 2"...), seções nomeadas ("Introdução", "Método", "Discussão"...), partes, ou qualquer outra convenção de divisão que o documento usar:
-   - Documentos curtos (até ~35 mil caracteres) são enviados inteiros para a IA analisar.
-   - Livros mais longos usam uma versão compacta (só o início de cada página, marcado com o número da página) para manter o custo e o tempo de resposta previsíveis independente do tamanho do livro.
-   - A IA retorna os títulos de cada divisão e um trecho-âncora; o navegador localiza esse trecho no texto original para cortar cada seção com precisão.
-   - Se a chamada de IA falhar (ex: problema de rede), o app cai automaticamente para um método mais simples e gratuito, que só reconhece "Capítulo N"/"Chapter N" literalmente — com aviso claro na tela de que esse modo alternativo foi usado.
-3. A lista de divisões detectadas aparece para revisão: a pessoa pode desmarcar as que não quer, editar os títulos, antes de gerar qualquer conceito.
-4. Ao confirmar, cada divisão selecionada é enviada, uma de cada vez, para `api/gerar-modulo.js` (a mesma função usada na importação de um único módulo), e o resultado já é salvo direto como um novo módulo em "Meus Módulos" — sem passar pela tela de edição de conceitos.
-5. Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceito antes de salvar, diferente do fluxo de módulo único), a recomendação é sempre revisar/editar os módulos gerados depois, pelo botão "✏️ Editar" no catálogo.
+1. A pessoa envia o PDF do livro completo (ou cola o texto inteiro) **uma única vez**. O texto é extraído no navegador (`pdf.js`, até 600 páginas) e fica guardado na memória da página — nenhuma chamada de IA acontece nessa etapa.
+2. A pessoa então digita o que quer transformar em módulo, em texto livre: "Parte 1", "Capítulo 3", "a seção sobre memória de trabalho" — qualquer descrição.
+3. Uma função de IA (`api/localizar-secao.js`) localiza **só essa parte pedida** dentro do livro (não o livro inteiro) — funciona com qualquer convenção de divisão (partes, capítulos, seções nomeadas, subtítulos), já que é a IA que interpreta a descrição, não um padrão fixo de texto. Documentos curtos são analisados inteiros; livros longos usam uma versão compacta (início de cada página) para manter custo e tempo de resposta previsíveis.
+4. O trecho encontrado é enviado para `api/gerar-modulo.js` (mesma função da importação de módulo único), que gera os conceitos, e o resultado já é salvo direto como um novo módulo em "Meus Módulos".
+5. A pessoa pode repetir o passo 2 quantas vezes quiser, pedindo outras partes do mesmo livro, sem reenviar o PDF de novo.
+
+Essa abordagem (uma chamada de IA pequena por módulo pedido) é bem mais rápida e barata do que tentar mapear e gerar o livro inteiro de uma vez — e funciona mesmo em livros com estrutura em vários níveis (ex: partes divididas em subtítulos), já que a pessoa descreve exatamente o que quer, em vez de o app tentar adivinhar todas as divisões sozinho.
+
+Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceito antes de salvar), a recomendação é sempre revisar/editar os módulos gerados depois, pelo botão "✏️ Editar" no catálogo.
 
 **Sobre custo:** cada importação gasta 1 chamada de IA para detectar a estrutura do documento, mais 1 chamada por divisão selecionada para gerar os conceitos. Um livro com 10 capítulos selecionados = ~11 chamadas no total. Por isso a etapa de seleção existe — para a pessoa escolher só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
 
@@ -151,7 +151,7 @@ A analogia gerada fica salva no progresso da pessoa (por conceito), então ela s
 
 ## Controle de uso de IA por usuário (base para monetização)
 
-Todas as 4 funções que chamam a OpenRouter (`avaliar-explicacao`, `gerar-modulo`, `detectar-capitulos`, `gerar-analogia`) agora exigem login: o servidor verifica o token do Firebase de quem está chamando (`api/_lib/usage.js`, usando o Firebase Admin SDK) antes de gastar qualquer crédito de IA. Sem isso, qualquer pessoa sem conta poderia consumir créditos livremente.
+Todas as funções que chamam a OpenRouter (`avaliar-explicacao`, `gerar-modulo`, `localizar-secao`, `gerar-analogia`) agora exigem login: o servidor verifica o token do Firebase de quem está chamando (`api/_lib/usage.js`, usando o Firebase Admin SDK) antes de gastar qualquer crédito de IA. Sem isso, qualquer pessoa sem conta poderia consumir créditos livremente.
 
 Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", único plano que existe por enquanto). O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). A estrutura já reconhece um campo `plan` no documento `users/{uid}` — quando existir cobrança de verdade (Stripe), o webhook só precisa gravar `plan: "premium"` nesse documento que o limite maior passa a valer automaticamente, sem mexer neste código de novo.
 

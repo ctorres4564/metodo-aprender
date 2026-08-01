@@ -4,21 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1c2e22">
-<title>Importar Livro Inteiro</title>
+<title>Importar de um Livro</title>
 <link rel="stylesheet" href="assets/styles.css">
 <style>
-  .chapter-row{
+  .request-row{
     display:flex; align-items:flex-start; gap:12px; padding:12px;
     background: var(--panel-2); border:1px solid var(--border); border-radius:12px; margin-bottom:10px;
   }
-  .chapter-row input[type="checkbox"]{ width:20px; height:20px; margin-top:6px; accent-color: var(--accent); flex-shrink:0; }
-  .chapter-row .chapter-body{ flex:1; min-width:0; }
-  .chapter-row .chapter-meta{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
-  .chapter-status{ font-size:12px; margin-top:6px; }
-  .chapter-status.pending{ color: var(--text-dim); }
-  .chapter-status.working{ color: var(--accent-2); }
-  .chapter-status.ok{ color: var(--ok); }
-  .chapter-status.err{ color: var(--danger); }
+  .request-row .icon{ font-size:18px; flex-shrink:0; margin-top:2px; }
+  .request-row .body{ flex:1; min-width:0; }
+  .request-row .title{ font-weight:700; font-size:14px; }
+  .request-row .meta{ font-size:12px; color:var(--text-dim); margin-top:4px; }
+  .request-row.working .title{ color: var(--accent-2); }
+  .request-row.ok .title{ color: var(--ok); }
+  .request-row.err .title{ color: var(--danger); }
 </style>
 </head>
 <body>
@@ -33,8 +32,8 @@
         <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
         <div class="logo">📖</div>
         <div>
-          <h1>Importar livro inteiro</h1>
-          <p>Detecta capítulos e gera um módulo para cada um</p>
+          <h1>Importar de um livro</h1>
+          <p>Peça um módulo por vez, sob demanda</p>
         </div>
       </div>
       <div class="stats">
@@ -42,12 +41,12 @@
       </div>
     </header>
 
-    <div class="panel">
+    <div class="panel" id="upload-panel">
       <h2 class="section-title">📚 1. Envie o livro</h2>
       <p class="lead" style="margin-top:-4px;">
-        A IA analisa o documento e identifica capítulos, seções ou partes automaticamente — funciona com "Capítulo 1",
-        seções nomeadas ("Introdução", "Método"...), artigos com subseções, entre outras convenções. A detecção pode
-        não ser perfeita — você sempre revisa a lista antes de gerar qualquer módulo.
+        Envie o PDF (ou cole o texto) uma vez. Depois você pede, quantas vezes quiser, "faça um módulo sobre a
+        Parte 1", "sobre o capítulo 3", "sobre a seção que fala de X" — a IA só processa a parte pedida, em vez
+        de ler o livro inteiro de uma vez (mais rápido e mais barato).
       </p>
       <span class="field-label">Título do livro (opcional, usado para nomear os módulos)</span>
       <input type="text" id="book-title" class="auth-input" placeholder="Ex: Manual de Psicologia Evolucionista">
@@ -61,32 +60,23 @@
           <textarea id="book-text-input" class="explain-textarea" rows="1" placeholder="Alternativa ao PDF"></textarea>
         </div>
       </div>
-      <div id="detect-feedback"></div>
-      <button class="btn secondary" id="detect-btn" style="margin-top:10px;">🔍 Detectar capítulos</button>
+      <div id="load-feedback"></div>
+      <button class="btn secondary" id="load-btn" style="margin-top:10px;">📖 Carregar livro</button>
     </div>
 
-    <div class="panel" id="chapters-panel" style="display:none;">
-      <h2 class="section-title">🗂️ 2. Escolha quais capítulos virar módulo</h2>
-      <p class="lead" id="chapters-summary" style="margin-top:-4px;"></p>
-      <div style="display:flex; gap:8px; margin-bottom:10px;">
-        <button class="btn ghost" id="select-all-btn" style="font-size:12px;">Marcar todos</button>
-        <button class="btn ghost" id="select-none-btn" style="font-size:12px;">Desmarcar todos</button>
-      </div>
-      <div id="chapters-list"></div>
-      <div id="generate-feedback"></div>
-      <button class="btn" id="generate-btn" style="margin-top:10px;">✨ Gerar módulos selecionados</button>
+    <div class="panel" id="request-panel" style="display:none;">
+      <h2 class="section-title">🎯 2. Peça um módulo</h2>
+      <p class="lead" style="margin-top:-4px;" id="loaded-info"></p>
+      <span class="field-label">O que você quer transformar em módulo?</span>
+      <input type="text" id="target-input" class="auth-input" placeholder="Ex: Parte 1, Capítulo 3, a seção sobre memória de trabalho...">
+      <div id="request-feedback"></div>
+      <button class="btn" id="request-btn" style="margin-top:10px;">✨ Gerar módulo desta parte</button>
     </div>
 
-    <div class="panel" id="progress-panel" style="display:none;">
-      <h2 class="section-title">⏳ 3. Gerando módulos</h2>
-      <div id="progress-list"></div>
-      <div id="progress-done" style="display:none; margin-top:14px;">
-        <a class="btn" href="index.html" style="text-decoration:none;">🗂️ Ver Meus Módulos</a>
-        <p class="lead" style="margin-top:10px;">
-          Revise cada módulo gerado (edite pelo botão "✏️ Editar" em cada card) — a IA pode ter cometido erros
-          ou simplificado demais o conteúdo.
-        </p>
-      </div>
+    <div class="panel" id="history-panel" style="display:none;">
+      <h2 class="section-title">📋 Módulos pedidos nesta sessão</h2>
+      <div id="history-list"></div>
+      <a class="btn" href="index.html" style="text-decoration:none; margin-top:6px; display:inline-block;">🗂️ Ver Meus Módulos</a>
     </div>
 
   </div><!-- /#app-root -->
@@ -101,8 +91,11 @@
   window.pdfjsLib = pdfjsLib;
 </script>
 <script>
-const MAX_SOURCE_CHARS_PER_CHAPTER = 14000;
-let detectedChapters = [];
+const MAX_SOURCE_CHARS = 14000;
+const TEXT_MODE_THRESHOLD = 35000;
+
+let bookFullText = null;
+let bookPages = null;
 
 async function waitForPdfjs(timeoutMs){
   const start = Date.now();
@@ -134,7 +127,7 @@ async function extractPdfTextFull(file, onProgress){
 }
 
 // Usado quando a pessoa cola texto em vez de enviar PDF: cria "páginas" sintéticas
-// (blocos de tamanho fixo) só para viabilizar o modo de detecção por amostragem.
+// (blocos de tamanho fixo) só para viabilizar o modo de amostragem em livros longos.
 function synthesizePages(fullText, chunkSize){
   const pages = [];
   let num = 1;
@@ -143,45 +136,6 @@ function synthesizePages(fullText, chunkSize){
     num++;
   }
   return pages;
-}
-
-// Método simples (sem IA, grátis): procura literalmente "Capítulo N" / "Chapter N".
-// Usado como reserva caso a detecção por IA falhe (erro de rede, etc.).
-function detectChaptersHeuristic(fullText){
-  const re = /\b(cap[ií]tulo|chapter)\s+(\d{1,3})\b/gi;
-  const raw = [];
-  let m;
-  while((m = re.exec(fullText))){
-    raw.push({ index: m.index, num: parseInt(m[2], 10) });
-  }
-  if(raw.length === 0) return [];
-
-  const transitions = [];
-  let lastNum = null;
-  raw.forEach(r=>{
-    if(r.num !== lastNum){
-      transitions.push(r);
-      lastNum = r.num;
-    }
-  });
-
-  const MIN_CHAPTER_LENGTH = 1200;
-  const chapters = transitions.map((t, i)=>{
-    const start = t.index;
-    const end = i + 1 < transitions.length ? transitions[i + 1].index : fullText.length;
-    return { number: t.num, start, end, length: end - start };
-  }).filter(c => c.length >= MIN_CHAPTER_LENGTH);
-
-  return chapters.map(c=>{
-    const afterMatch = fullText.slice(c.start, c.start + 200);
-    const titleMatch = afterMatch.match(/\b(?:cap[ií]tulo|chapter)\s+\d{1,3}\b[\s:.\-–—]*([^.\n]{0,80})/i);
-    const guessedTitle = (titleMatch && titleMatch[1] && titleMatch[1].trim()) || `Capítulo ${c.number}`;
-    return {
-      title: guessedTitle,
-      text: fullText.slice(c.start, c.end),
-      charCount: c.length
-    };
-  });
 }
 
 function buildPagePreviews(pages, maxChars){
@@ -215,62 +169,14 @@ function findAnchorOffset(haystack, anchor){
   return -1;
 }
 
-// Detecção "inteligente" via IA: entende qualquer convenção de divisão (capítulos
-// numerados, seções nomeadas, artigos com subseções etc.), não só "Capítulo N".
-async function detectChaptersAI(fullText, pages){
-  const TEXT_MODE_THRESHOLD = 35000;
-  let mode, content;
-  if(fullText.length <= TEXT_MODE_THRESHOLD){
-    mode = "text";
-    content = fullText;
-  } else {
-    mode = "previews";
-    content = buildPagePreviews(pages);
-  }
-
-  const resp = await authedFetch("/api/detectar-capitulos", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ content, mode })
-  });
-  const data = await resp.json();
-  if(!resp.ok) throw new Error(data.error || "Falha ao detectar a estrutura do documento via IA.");
-
-  const sections = data.sections || [];
-  if(sections.length === 0) return [];
-
-  const starts = [];
-  sections.forEach(s=>{
-    let offset = -1;
-    if(mode === "text"){
-      offset = findAnchorOffset(fullText, s.anchor);
-    } else {
-      const pageMatch = s.anchor.match(/\[\[PAGE\s+(\d+)\]\]/i);
-      if(pageMatch){
-        const pageNum = parseInt(pageMatch[1], 10);
-        const page = pages.find(p => p.num === pageNum);
-        if(page) offset = page.offset;
-      }
-    }
-    if(offset >= 0) starts.push({ title: s.title, offset });
-  });
-
-  starts.sort((a, b)=> a.offset - b.offset);
-  const deduped = [];
-  starts.forEach(s=>{
-    const prev = deduped[deduped.length - 1];
-    if(!prev || s.offset - prev.offset > 200) deduped.push(s);
-  });
-
-  const MIN_LENGTH = 800;
-  const result = [];
-  deduped.forEach((s, i)=>{
-    const end = i + 1 < deduped.length ? deduped[i + 1].offset : fullText.length;
-    const length = end - s.offset;
-    if(length < MIN_LENGTH) return;
-    result.push({ title: s.title, text: fullText.slice(s.offset, end), charCount: length });
-  });
-  return result;
+function anchorToOffset(anchor, mode){
+  if(!anchor) return -1;
+  if(mode === "text") return findAnchorOffset(bookFullText, anchor);
+  const pageMatch = anchor.match(/\[\[PAGE\s+(\d+)\]\]/i);
+  if(!pageMatch) return -1;
+  const pageNum = parseInt(pageMatch[1], 10);
+  const page = bookPages.find(p => p.num === pageNum);
+  return page ? page.offset : -1;
 }
 
 function slugify(str){
@@ -281,31 +187,9 @@ function generateModuleId(title){
   return "u-" + slugify(title) + "-" + Math.random().toString(36).slice(2,7);
 }
 
-function renderChaptersList(){
-  const list = document.getElementById("chapters-list");
-  list.innerHTML = "";
-  detectedChapters.forEach((ch, idx)=>{
-    const row = document.createElement("div");
-    row.className = "chapter-row";
-    const approxPages = Math.max(1, Math.round(ch.charCount / 1800));
-    row.innerHTML = `
-      <input type="checkbox" class="ch-check" data-idx="${idx}" checked>
-      <div class="chapter-body">
-        <input type="text" class="auth-input ch-title" data-idx="${idx}" value="${ch.title.replace(/"/g,'&quot;')}">
-        <div class="chapter-meta">~${approxPages} página(s) de conteúdo detectadas</div>
-      </div>
-    `;
-    list.appendChild(row);
-  });
-  document.getElementById("chapters-summary").textContent =
-    `${detectedChapters.length} divisão(ões)/capítulo(s) detectado(s). Desmarque os que não quiser gerar, ou ajuste os títulos.`;
-  document.getElementById("chapters-panel").style.display = "block";
-  document.getElementById("chapters-panel").scrollIntoView({ behavior:"smooth", block:"start" });
-}
-
-document.getElementById("detect-btn").addEventListener("click", async ()=>{
-  const fb = document.getElementById("detect-feedback");
-  const btn = document.getElementById("detect-btn");
+document.getElementById("load-btn").addEventListener("click", async ()=>{
+  const fb = document.getElementById("load-feedback");
+  const btn = document.getElementById("load-btn");
   const fileInput = document.getElementById("book-pdf-input");
   const textInput = document.getElementById("book-text-input");
 
@@ -325,133 +209,136 @@ document.getElementById("detect-btn").addEventListener("click", async ()=>{
       pages = extracted.pages;
     }
 
-    if(!fullText || fullText.length < 1000){
-      fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto mais completo (livro inteiro) antes de detectar a estrutura.</div>`;
+    if(!fullText || fullText.length < 500){
+      fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto mais completo antes de carregar.</div>`;
       return;
     }
 
-    if(!pages) pages = synthesizePages(fullText, 3000);
+    bookFullText = fullText;
+    bookPages = pages || synthesizePages(fullText, 3000);
 
-    btn.textContent = "Analisando estrutura com IA...";
-    let usedFallback = false;
-    try{
-      detectedChapters = await detectChaptersAI(fullText, pages);
-    }catch(aiErr){
-      console.error("Detecção por IA falhou, tentando método simples:", aiErr);
-      detectedChapters = detectChaptersHeuristic(fullText);
-      usedFallback = true;
-    }
-
-    if(detectedChapters.length === 0){
-      fb.innerHTML = `<div class="feedback bad">Não consegui identificar divisões nesse documento automaticamente.
-        Se for um texto único (ex: um artigo curto), use a tela <a href="criar-modulo.html">Criar novo módulo</a> em vez desta.</div>`;
-      document.getElementById("chapters-panel").style.display = "none";
-      return;
-    }
-
-    fb.innerHTML = usedFallback
-      ? `<div class="feedback bad">A detecção por IA falhou; usei um método mais simples como alternativa (só reconhece "Capítulo N"/"Chapter N") — revise a lista com atenção.</div>`
-      : `<div class="feedback ok">${detectedChapters.length} divisão(ões) detectada(s) — revise abaixo.</div>`;
-    renderChaptersList();
+    const approxPages = Math.max(1, Math.round(fullText.length / 1800));
+    document.getElementById("loaded-info").textContent =
+      `Livro carregado (~${approxPages} página(s) de texto). Agora peça quantos módulos quiser, um de cada vez.`;
+    document.getElementById("request-panel").style.display = "block";
+    document.getElementById("request-panel").scrollIntoView({ behavior:"smooth", block:"start" });
+    fb.innerHTML = `<div class="feedback ok">Livro carregado com sucesso.</div>`;
   }catch(e){
     console.error(e);
     fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
   }finally{
     btn.disabled = false;
-    btn.textContent = "🔍 Detectar capítulos";
+    btn.textContent = "📖 Carregar livro";
   }
 });
 
-document.getElementById("select-all-btn").addEventListener("click", ()=>{
-  document.querySelectorAll(".ch-check").forEach(cb => cb.checked = true);
-});
-document.getElementById("select-none-btn").addEventListener("click", ()=>{
-  document.querySelectorAll(".ch-check").forEach(cb => cb.checked = false);
-});
+function addHistoryRow(){
+  document.getElementById("history-panel").style.display = "block";
+  const list = document.getElementById("history-list");
+  const row = document.createElement("div");
+  row.className = "request-row working";
+  row.innerHTML = `<span class="icon">🧠</span><div class="body"><div class="title">Localizando e gerando...</div><div class="meta"></div></div>`;
+  list.prepend(row);
+  return row;
+}
 
-document.getElementById("generate-btn").addEventListener("click", async ()=>{
+document.getElementById("request-btn").addEventListener("click", async ()=>{
+  const targetInput = document.getElementById("target-input");
+  const target = targetInput.value.trim();
   const bookTitle = document.getElementById("book-title").value.trim();
-  const checks = Array.from(document.querySelectorAll(".ch-check")).filter(cb => cb.checked);
-  const genFb = document.getElementById("generate-feedback");
+  const fb = document.getElementById("request-feedback");
+  const btn = document.getElementById("request-btn");
 
-  if(checks.length === 0){
-    genFb.innerHTML = `<div class="feedback bad">Selecione pelo menos 1 capítulo.</div>`;
+  fb.innerHTML = "";
+
+  if(!target){
+    fb.innerHTML = `<div class="feedback bad">Diga o que você quer transformar em módulo (ex: "Parte 1").</div>`;
+    return;
+  }
+  if(!bookFullText){
+    fb.innerHTML = `<div class="feedback bad">Carregue um livro primeiro.</div>`;
     return;
   }
 
-  // Atualiza títulos editados pelo usuário antes de gerar
-  document.querySelectorAll(".ch-title").forEach(inp=>{
-    const idx = parseInt(inp.dataset.idx, 10);
-    detectedChapters[idx].title = inp.value.trim() || detectedChapters[idx].title;
-  });
+  btn.disabled = true;
+  const row = addHistoryRow();
 
-  const selectedIdxs = checks.map(cb => parseInt(cb.dataset.idx, 10));
+  try{
+    const mode = bookFullText.length <= TEXT_MODE_THRESHOLD ? "text" : "previews";
+    const content = mode === "text" ? bookFullText : buildPagePreviews(bookPages);
 
-  document.getElementById("generate-btn").disabled = true;
-  document.getElementById("chapters-panel").style.opacity = "0.6";
-  const progressPanel = document.getElementById("progress-panel");
-  const progressList = document.getElementById("progress-list");
-  progressPanel.style.display = "block";
-  progressList.innerHTML = "";
-  progressPanel.scrollIntoView({ behavior:"smooth", block:"start" });
+    row.querySelector(".title").textContent = `🔎 Localizando "${target}"...`;
+    const locResp = await authedFetch("/api/localizar-secao", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content, mode, target })
+    });
+    const locData = await locResp.json();
 
-  const rows = {};
-  selectedIdxs.forEach(idx=>{
-    const ch = detectedChapters[idx];
-    const row = document.createElement("div");
-    row.className = "chapter-status pending";
-    row.textContent = `⏳ ${ch.title} — na fila`;
-    progressList.appendChild(row);
-    rows[idx] = row;
-  });
-
-  for(const idx of selectedIdxs){
-    const ch = detectedChapters[idx];
-    const row = rows[idx];
-    row.className = "chapter-status working";
-    row.textContent = `🧠 Gerando "${ch.title}"...`;
-
-    try{
-      const resp = await authedFetch("/api/gerar-modulo", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title: (bookTitle ? bookTitle + " — " : "") + ch.title,
-          sourceText: ch.text.slice(0, MAX_SOURCE_CHARS_PER_CHAPTER)
-        })
-      });
-      const data = await resp.json();
-
-      if(!resp.ok || !data.concepts || data.concepts.length === 0){
-        row.className = "chapter-status err";
-        row.textContent = `❌ "${ch.title}" — ${data.error || "não foi possível gerar conceitos"}`;
-        continue;
-      }
-
-      const moduleId = generateModuleId((bookTitle ? bookTitle + " " : "") + ch.title);
-      const moduleData = {
-        config: {
-          appTitle: (bookTitle ? bookTitle + " — " : "") + ch.title,
-          appSubtitle: `Importado automaticamente${bookTitle ? " de " + bookTitle : ""}`,
-          logoEmoji: "📘",
-          homeIntro: `Módulo gerado automaticamente a partir do capítulo "${ch.title}".`,
-          sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
-          storageKey: `estudo_${moduleId}_v1`
-        },
-        concepts: data.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c))
-      };
-
-      await window.AppDB.saveUserModule(moduleId, moduleData);
-      row.className = "chapter-status ok";
-      row.textContent = `✅ "${ch.title}" — ${data.concepts.length} conceito(s) gerado(s) e salvo(s)`;
-    }catch(e){
-      console.error(e);
-      row.className = "chapter-status err";
-      row.textContent = `❌ "${ch.title}" — erro ao gerar/salvar`;
+    if(!locResp.ok){
+      throw new Error(locData.error || "Falha ao localizar a seção.");
     }
-  }
+    if(!locData.found){
+      row.className = "request-row err";
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${target}" não encontrada</div><div class="meta">Tente descrever de outra forma, ou confira se esse trecho existe no livro carregado.</div></div>`;
+      return;
+    }
 
-  document.getElementById("progress-done").style.display = "block";
+    const startOffset = anchorToOffset(locData.startAnchor, mode);
+    if(startOffset < 0){
+      row.className = "request-row err";
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Não consegui localizar "${target}" no texto</div><div class="meta">Tente novamente ou descreva de outra forma.</div></div>`;
+      return;
+    }
+    let endOffset = bookFullText.length;
+    if(locData.nextAnchor){
+      const next = anchorToOffset(locData.nextAnchor, mode);
+      if(next > startOffset) endOffset = next;
+    }
+    const sectionText = bookFullText.slice(startOffset, endOffset);
+    const sectionTitle = locData.title || target;
+
+    row.querySelector(".title").textContent = `🧠 Gerando módulo sobre "${sectionTitle}"...`;
+    const genResp = await authedFetch("/api/gerar-modulo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title: (bookTitle ? bookTitle + " — " : "") + sectionTitle,
+        sourceText: sectionText.slice(0, MAX_SOURCE_CHARS)
+      })
+    });
+    const genData = await genResp.json();
+
+    if(!genResp.ok || !genData.concepts || genData.concepts.length === 0){
+      row.className = "request-row err";
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${sectionTitle}"</div><div class="meta">${genData.error || "Não foi possível gerar conceitos."}</div></div>`;
+      return;
+    }
+
+    const moduleId = generateModuleId((bookTitle ? bookTitle + " " : "") + sectionTitle);
+    const moduleData = {
+      config: {
+        appTitle: (bookTitle ? bookTitle + " — " : "") + sectionTitle,
+        appSubtitle: `Importado sob demanda${bookTitle ? " de " + bookTitle : ""}`,
+        logoEmoji: "📘",
+        homeIntro: `Módulo gerado automaticamente a partir de "${sectionTitle}".`,
+        sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
+        storageKey: `estudo_${moduleId}_v1`
+      },
+      concepts: genData.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c))
+    };
+    await window.AppDB.saveUserModule(moduleId, moduleData);
+
+    row.className = "request-row ok";
+    row.innerHTML = `<span class="icon">✅</span><div class="body"><div class="title">"${sectionTitle}"</div><div class="meta">${genData.concepts.length} conceito(s) gerado(s) e salvo(s) em Meus Módulos.</div></div>`;
+    targetInput.value = "";
+  }catch(e){
+    console.error(e);
+    row.className = "request-row err";
+    row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Erro ao processar "${target}"</div><div class="meta">${e.message || "tente novamente."}</div></div>`;
+  }finally{
+    btn.disabled = false;
+  }
 });
 
 initAuthGate(()=>{
