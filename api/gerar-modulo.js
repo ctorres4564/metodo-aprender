@@ -71,8 +71,13 @@ Regras OBRIGATÓRIAS para cada conceito:
 2. "tag": uma categoria/etiqueta curta (1-3 palavras) para agrupar conceitos relacionados.
 3. "text": uma explicação de 2 a 4 frases, em português, escrita com SUAS PRÓPRIAS PALAVRAS — nunca copie frases inteiras do texto-fonte. Parafraseie e simplifique como um bom professor explicaria, em linguagem clara e direta. Isso é importante por direitos autorais: o texto gerado deve ser uma síntese original, não uma cópia.
 4. "q": uma pergunta de múltipla escolha simples que testa se a pessoa entendeu o conceito.
-5. "options": exatamente 4 alternativas de resposta (strings curtas), sendo só uma correta. As alternativas erradas devem ser plausíveis, não absurdas.
-6. "correct": o índice (0 a 3) da alternativa correta em "options".
+5. "options": exatamente 4 alternativas de resposta. Elas precisam ser difíceis de adivinhar por eliminação, mesmo por quem nunca leu o texto-fonte — esse é um erro comum a evitar. Siga estas regras ao criar as 3 alternativas erradas:
+   - Devem ser sobre o MESMO assunto/categoria da resposta certa, nunca de um assunto claramente diferente (ex: se a pergunta é sobre um mecanismo biológico, as 4 opções devem ser mecanismos biológicos plausíveis do mesmo domínio, não uma mistura de coisas aleatórias).
+   - Devem ter aproximadamente o mesmo tamanho e nível de detalhe da resposta certa — nunca deixe a opção correta visivelmente mais longa, mais específica ou mais "bem escrita" que as outras (isso entrega a resposta).
+   - Prefira usar confusões plausíveis e reais sobre o tema: um conceito parecido mas diferente, uma troca de causa por efeito, uma definição parcialmente certa mas incompleta ou distorcida, um equívoco comum que alguém sem entender bem o assunto cometeria.
+   - Evite palavras absolutas nas opções erradas (“sempre”, “nunca”, “todos”, “nenhum”, “impossível”) — isso costuma denunciar que a alternativa está errada.
+   - Evite opções vagas, incompletas ou obviamente sem sentido — todas as 4 devem soar como respostas razoáveis para quem não domina o assunto.
+6. "correct": o índice (0 a 3) da alternativa correta em "options". Varie a posição da resposta certa entre os conceitos gerados (não deixe sempre no índice 0).
 
 Se o texto-fonte for muito curto, genérico demais, ou não tiver conteúdo suficiente para extrair conceitos de qualidade, gere quantos conceitos de qualidade forem possíveis (pode ser menos que ${MAX_CONCEPTS}, inclusive 0 se o texto não permitir nenhum). O "resumo" deve ser gerado sempre que houver conteúdo suficiente para isso.
 
