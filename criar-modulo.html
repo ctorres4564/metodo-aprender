@@ -74,6 +74,8 @@
       <p class="lead" style="margin-top:-4px;">
         Envie um PDF ou cole o texto de um capítulo/artigo e a IA sugere conceitos automaticamente para você revisar
         e ajustar antes de salvar. Funciona melhor com textos de até ~10 páginas por vez.
+        Quer importar um <b>livro inteiro</b> e gerar um módulo por capítulo de uma vez?
+        Use a tela <a href="importar-livro.html">📖 Importar livro inteiro</a>.
       </p>
       <div class="grid2">
         <div>
@@ -112,12 +114,12 @@
 
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script type="module">
+  import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
 <script>
-if(window["pdfjsLib"]){
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
-}
-
 let editingId = null;
 let conceptCount = 0;
 
@@ -195,8 +197,18 @@ function collectConcepts(){
   return { concepts, errors };
 }
 
+async function waitForPdfjs(timeoutMs){
+  const start = Date.now();
+  while(!window["pdfjsLib"]){
+    if(Date.now() - start > timeoutMs) return false;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return true;
+}
+
 async function extractPdfText(file){
-  if(!window["pdfjsLib"]) throw new Error("Leitor de PDF não carregou. Tente recarregar a página.");
+  const ready = await waitForPdfjs(5000);
+  if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   let fullText = "";

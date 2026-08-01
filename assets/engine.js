@@ -57,7 +57,7 @@ function daysBetween(a,b){
 function defaultState(){
   const cards = {};
   CONCEPTS.forEach(c => {
-    cards[c.id] = { ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null, explainCount:0, lastExplainScore:null };
+    cards[c.id] = { ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null, explainCount:0, lastExplainScore:null, analogy:null };
   });
   return {
     xp:0, streak:0, lastStudyDate:null, cards, badges:[], reviewSessions:0, quiz:{played:0, best:0, bestAdaptive:0},
@@ -282,6 +282,9 @@ function renderLearnCard(){
       <span class="concept-tag">${c.tag}</span>
       <div class="concept-title">${c.title}</div>
       <div class="concept-text">${c.text}</div>
+      <div id="analogy-box">
+        ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
+      </div>
       <div class="quiz-q">
         <div class="qtext">✅ Checagem rápida: ${c.q}</div>
         <div id="learn-opts"></div>
@@ -299,6 +302,36 @@ function renderLearnCard(){
     b.onclick = ()=> handleLearnAnswer(opt.isCorrect, b, optsWrap);
     optsWrap.appendChild(b);
   });
+
+  const analogyBtn = document.getElementById("analogy-btn");
+  if(analogyBtn) analogyBtn.onclick = ()=> loadAnalogy(c);
+}
+
+function renderAnalogyHtml(text){
+  return `<div class="feedback ok" style="margin-top:10px;"><b>💡 Outra forma de pensar nisso:</b><br>${text}</div>`;
+}
+
+async function loadAnalogy(c){
+  const box = document.getElementById("analogy-box");
+  box.innerHTML = `<p class="lead" style="margin-top:10px;">🧠 Pensando numa analogia...</p>`;
+  try{
+    const resp = await fetch("/api/gerar-analogia", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: c.title, referenceText: c.text })
+    });
+    const data = await resp.json();
+    if(!resp.ok){
+      box.innerHTML = `<div class="feedback bad" style="margin-top:10px;">${data.error || "Não foi possível gerar a analogia agora."}</div>`;
+      return;
+    }
+    STATE.cards[c.id].analogy = data.analogia;
+    await saveState();
+    box.innerHTML = renderAnalogyHtml(data.analogia);
+  }catch(e){
+    console.error(e);
+    box.innerHTML = `<div class="feedback bad" style="margin-top:10px;">Erro ao gerar analogia. Tente novamente.</div>`;
+  }
 }
 
 async function handleLearnAnswer(isCorrect, btnEl, optsWrap){

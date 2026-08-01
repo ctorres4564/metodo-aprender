@@ -1,6 +1,8 @@
-# App de Estudo — Arquitetura Modular
+# Método Aprender
 
-Plataforma de estudo com repetição espaçada (SM-2) e gamificação, projetada para escalar de "um capítulo" para "vários temas/cursos" sem duplicar código — e com o desenho já preparado para, no futuro, virar um produto de assinatura.
+Plataforma de estudo genérica, com repetição espaçada (SM-2), gamificação e recursos de IA (avaliação Feynman, geração de conceitos a partir de PDF/artigo, analogias). Qualquer pessoa logada pode criar seus próprios módulos sobre qualquer assunto — **a criação de módulos é a funcionalidade central do produto**, não um recurso secundário.
+
+O projeto nasceu focado num único livro (Manual de Psicologia Evolucionista) e evoluiu para uma plataforma multi-assunto: hoje esse conteúdo original é só um **módulo de exemplo** no catálogo (`content/catalog.json`), lado a lado com os módulos que cada usuário cria pela própria interface (`criar-modulo.html`). Nenhum código precisa ser tocado para adicionar conteúdo novo — nem por mim, nem por quem usa o app.
 
 Este pacote **substitui** os protótipos de arquivo único criados anteriormente (`evolucao-comportamento-app.html` e `template-estudo-espacado.html`), que ainda estão na pasta apenas como referência histórica.
 
@@ -40,7 +42,11 @@ Depois abra `http://localhost:8000` no navegador. (Alternativa sem Python: `npx 
 
 Quando este projeto for publicado num host real (Vercel, Netlify, GitHub Pages, um servidor próprio etc.), esse passo deixa de ser necessário — o app já está pronto para rodar em produção do mesmo jeito.
 
-## Como adicionar um novo módulo/capítulo
+## Como adicionar um novo módulo
+
+**Caminho principal (qualquer pessoa, sem código):** pela própria interface, em "➕ Criar novo módulo" no catálogo (`index.html` → `criar-modulo.html`). Preenche o formulário manualmente ou importa um PDF/texto e deixa a IA sugerir os conceitos — ver seções "Criação de módulos dentro do app" e "Importar conceitos de um PDF/artigo com IA" mais abaixo. Esse é o fluxo pensado para o produto final; a opção abaixo é só para conteúdo "oficial"/curado que eu (desenvolvedor) queira versionar no código.
+
+**Caminho alternativo (editando arquivos, só para módulos oficiais/curados):**
 
 1. Crie `content/nome-do-modulo.json` seguindo o esquema:
    ```json
@@ -119,6 +125,29 @@ Pontos importantes:
 - Os conceitos gerados aparecem nos cards de edição para revisão — nada é salvo automaticamente; a pessoa ainda precisa clicar em "Salvar módulo".
 - Limite de ~14 mil caracteres de texto-fonte por geração (aprox. 10 páginas) e até 20 conceitos por vez, para manter custo e qualidade sob controle. Textos maiores podem ser divididos em várias importações.
 - Usa a mesma variável `OPENROUTER_API_KEY` já configurada para o modo Explicar — nenhuma configuração extra é necessária.
+
+### Importar um livro inteiro (vários capítulos de uma vez)
+
+Na tela "🗂️ Meus Módulos" há um botão "📖 Importar livro inteiro" (`importar-livro.html`) para quando o PDF tem vários capítulos e a pessoa quer um módulo separado por capítulo, em vez de importar manualmente um por um.
+
+Como funciona, na prática:
+1. A pessoa envia o PDF do livro completo (ou cola o texto inteiro). O texto é extraído no navegador (`pdf.js`, até 600 páginas).
+2. A estrutura do documento é detectada por **IA** (`api/detectar-capitulos.js`), não por um padrão fixo de texto — funciona com capítulos numerados ("Capítulo 1", "Chapter 2"...), seções nomeadas ("Introdução", "Método", "Discussão"...), partes, ou qualquer outra convenção de divisão que o documento usar:
+   - Documentos curtos (até ~35 mil caracteres) são enviados inteiros para a IA analisar.
+   - Livros mais longos usam uma versão compacta (só o início de cada página, marcado com o número da página) para manter o custo e o tempo de resposta previsíveis independente do tamanho do livro.
+   - A IA retorna os títulos de cada divisão e um trecho-âncora; o navegador localiza esse trecho no texto original para cortar cada seção com precisão.
+   - Se a chamada de IA falhar (ex: problema de rede), o app cai automaticamente para um método mais simples e gratuito, que só reconhece "Capítulo N"/"Chapter N" literalmente — com aviso claro na tela de que esse modo alternativo foi usado.
+3. A lista de divisões detectadas aparece para revisão: a pessoa pode desmarcar as que não quer, editar os títulos, antes de gerar qualquer conceito.
+4. Ao confirmar, cada divisão selecionada é enviada, uma de cada vez, para `api/gerar-modulo.js` (a mesma função usada na importação de um único módulo), e o resultado já é salvo direto como um novo módulo em "Meus Módulos" — sem passar pela tela de edição de conceitos.
+5. Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceito antes de salvar, diferente do fluxo de módulo único), a recomendação é sempre revisar/editar os módulos gerados depois, pelo botão "✏️ Editar" no catálogo.
+
+**Sobre custo:** cada importação gasta 1 chamada de IA para detectar a estrutura do documento, mais 1 chamada por divisão selecionada para gerar os conceitos. Um livro com 10 capítulos selecionados = ~11 chamadas no total. Por isso a etapa de seleção existe — para a pessoa escolher só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
+
+## Explicações alternativas por analogia (aba Aprender)
+
+Em cada conceito da aba Aprender, há um botão "💡 Ver explicação com analogia": ele pede a uma IA (via `api/gerar-analogia.js`, mesma infraestrutura OpenRouter das outras funções) uma explicação alternativa do mesmo conceito usando uma analogia ou metáfora do dia a dia — uma forma diferente de "pensar" sobre a ideia, para ajudar quem não fixou bem com a explicação original.
+
+A analogia gerada fica salva no progresso da pessoa (por conceito), então ela só é gerada uma vez por conceito — nas próximas vezes que a pessoa revisitar aquele conceito, a analogia já salva aparece direto, sem custo extra de API.
 
 ## Responsividade
 

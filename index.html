@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1c2e22">
-<title>Trilhas de Estudo</title>
+<title>Método Aprender</title>
 <link rel="stylesheet" href="assets/styles.css">
 <style>
   .hero{ text-align:center; padding: 10px 0 6px; }
@@ -26,9 +26,9 @@
       <span class="pill" id="user-email" title="Conta conectada"></span>
       <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
     </div>
-    <div class="ic">🎓</div>
-    <h1 id="collection-title">Trilhas de Estudo</h1>
-    <p id="collection-subtitle">Escolha um módulo para começar</p>
+    <div class="ic">🧠</div>
+    <h1 id="collection-title">Método Aprender</h1>
+    <p id="collection-subtitle">Crie e estude qualquer assunto com repetição espaçada, gamificação e IA</p>
   </div>
 
   <div id="setup-banner" class="setup-banner" style="display:none;">
@@ -41,8 +41,15 @@
   <div class="panel">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <h2 class="section-title" style="margin:0;">🗂️ Meus Módulos</h2>
-      <a class="btn secondary" href="criar-modulo.html" style="text-decoration:none;">➕ Criar novo módulo</a>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="importar-livro.html" style="text-decoration:none;">📖 Importar livro inteiro</a>
+        <a class="btn" href="criar-modulo.html" style="text-decoration:none;">➕ Criar novo módulo</a>
+      </div>
     </div>
+    <p class="lead" style="margin-top:6px;">
+      Monte sua própria trilha sobre qualquer assunto — cole um PDF/artigo e deixe a IA sugerir as fichas,
+      ou envie um livro inteiro e gere um módulo por capítulo automaticamente. Sem código, sem precisar de ninguém além de você.
+    </p>
     <div class="catalog-grid" id="user-modules-grid" style="margin-top:12px;"></div>
     <p id="user-modules-empty" style="display:none; color:var(--text-dim); font-size:13px; margin-top:8px;">
       Você ainda não criou nenhum módulo. Clique em "Criar novo módulo" para montar sua primeira trilha.
@@ -50,12 +57,14 @@
   </div>
 
   <div class="panel">
-    <div class="catalog-grid" id="catalog-grid"></div>
+    <h2 class="section-title" style="margin:0 0 6px;">📚 Módulos de exemplo</h2>
+    <p class="lead" style="margin-top:-2px;">Módulos prontos para você explorar e ver como a plataforma funciona na prática.</p>
+    <div class="catalog-grid" id="catalog-grid" style="margin-top:12px;"></div>
   </div>
 
   <footer class="credit">
-    Arquitetura modular: cada trilha carrega seu próprio conteúdo (JSON) sobre o mesmo motor de
-    aprendizagem (repetição espaçada + gamificação). Progresso individual, sincronizado com sua conta.
+    Crie módulos sobre qualquer assunto — cada um carrega seu próprio conteúdo sobre o mesmo motor de
+    aprendizagem (repetição espaçada + gamificação + IA). Progresso individual, sincronizado com sua conta.
   </footer>
 
   </div><!-- /#app-root -->
@@ -70,7 +79,7 @@ async function init(){
     if(!res.ok) throw new Error("catalog fetch failed");
     const data = await res.json();
 
-    document.getElementById("collection-title").textContent = data.collectionTitle || "Trilhas de Estudo";
+    document.getElementById("collection-title").textContent = data.collectionTitle || "Método Aprender";
     document.getElementById("collection-subtitle").textContent = data.collectionSubtitle || "";
 
     const grid = document.getElementById("catalog-grid");

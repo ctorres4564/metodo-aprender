@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<title>Importar Livro Inteiro</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .chapter-row{
+    display:flex; align-items:flex-start; gap:12px; padding:12px;
+    background: var(--panel-2); border:1px solid var(--border); border-radius:12px; margin-bottom:10px;
+  }
+  .chapter-row input[type="checkbox"]{ width:20px; height:20px; margin-top:6px; accent-color: var(--accent); flex-shrink:0; }
+  .chapter-row .chapter-body{ flex:1; min-width:0; }
+  .chapter-row .chapter-meta{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+  .chapter-status{ font-size:12px; margin-top:6px; }
+  .chapter-status.pending{ color: var(--text-dim); }
+  .chapter-status.working{ color: var(--accent-2); }
+  .chapter-status.ok{ color: var(--ok); }
+  .chapter-status.err{ color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <div class="logo">📖</div>
+        <div>
+          <h1>Importar livro inteiro</h1>
+          <p>Detecta capítulos e gera um módulo para cada um</p>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2 class="section-title">📚 1. Envie o livro</h2>
+      <p class="lead" style="margin-top:-4px;">
+        A IA analisa o documento e identifica capítulos, seções ou partes automaticamente — funciona com "Capítulo 1",
+        seções nomeadas ("Introdução", "Método"...), artigos com subseções, entre outras convenções. A detecção pode
+        não ser perfeita — você sempre revisa a lista antes de gerar qualquer módulo.
+      </p>
+      <span class="field-label">Título do livro (opcional, usado para nomear os módulos)</span>
+      <input type="text" id="book-title" class="auth-input" placeholder="Ex: Manual de Psicologia Evolucionista">
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <span class="field-label">Arquivo PDF</span>
+          <input type="file" id="book-pdf-input" accept="application/pdf" class="auth-input">
+        </div>
+        <div>
+          <span class="field-label">…ou cole o texto completo aqui</span>
+          <textarea id="book-text-input" class="explain-textarea" rows="1" placeholder="Alternativa ao PDF"></textarea>
+        </div>
+      </div>
+      <div id="detect-feedback"></div>
+      <button class="btn secondary" id="detect-btn" style="margin-top:10px;">🔍 Detectar capítulos</button>
+    </div>
+
+    <div class="panel" id="chapters-panel" style="display:none;">
+      <h2 class="section-title">🗂️ 2. Escolha quais capítulos virar módulo</h2>
+      <p class="lead" id="chapters-summary" style="margin-top:-4px;"></p>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="btn ghost" id="select-all-btn" style="font-size:12px;">Marcar todos</button>
+        <button class="btn ghost" id="select-none-btn" style="font-size:12px;">Desmarcar todos</button>
+      </div>
+      <div id="chapters-list"></div>
+      <div id="generate-feedback"></div>
+      <button class="btn" id="generate-btn" style="margin-top:10px;">✨ Gerar módulos selecionados</button>
+    </div>
+
+    <div class="panel" id="progress-panel" style="display:none;">
+      <h2 class="section-title">⏳ 3. Gerando módulos</h2>
+      <div id="progress-list"></div>
+      <div id="progress-done" style="display:none; margin-top:14px;">
+        <a class="btn" href="index.html" style="text-decoration:none;">🗂️ Ver Meus Módulos</a>
+        <p class="lead" style="margin-top:10px;">
+          Revise cada módulo gerado (edite pelo botão "✏️ Editar" em cada card) — a IA pode ter cometido erros
+          ou simplificado demais o conteúdo.
+        </p>
+      </div>
+    </div>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script type="module">
+  import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
+<script>
+const MAX_SOURCE_CHARS_PER_CHAPTER = 14000;
+let detectedChapters = [];
+
+async function waitForPdfjs(timeoutMs){
+  const start = Date.now();
+  while(!window["pdfjsLib"]){
+    if(Date.now() - start > timeoutMs) return false;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return true;
+}
+
+async function extractPdfTextFull(file, onProgress){
+  const ready = await waitForPdfjs(5000);
+  if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let fullText = "";
+  const pages = [];
+  const maxPages = Math.min(pdf.numPages, 600);
+  for(let i = 1; i <= maxPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(it => it.str).join(" ");
+    const offset = fullText.length;
+    fullText += pageText + "\n\n";
+    pages.push({ num: i, offset, text: pageText });
+    if(onProgress && i % 10 === 0) onProgress(i, maxPages);
+  }
+  return { fullText, pages };
+}
+
+// Usado quando a pessoa cola texto em vez de enviar PDF: cria "páginas" sintéticas
+// (blocos de tamanho fixo) só para viabilizar o modo de detecção por amostragem.
+function synthesizePages(fullText, chunkSize){
+  const pages = [];
+  let num = 1;
+  for(let offset = 0; offset < fullText.length; offset += chunkSize){
+    pages.push({ num, offset, text: fullText.slice(offset, offset + chunkSize) });
+    num++;
+  }
+  return pages;
+}
+
+// Método simples (sem IA, grátis): procura literalmente "Capítulo N" / "Chapter N".
+// Usado como reserva caso a detecção por IA falhe (erro de rede, etc.).
+function detectChaptersHeuristic(fullText){
+  const re = /\b(cap[ií]tulo|chapter)\s+(\d{1,3})\b/gi;
+  const raw = [];
+  let m;
+  while((m = re.exec(fullText))){
+    raw.push({ index: m.index, num: parseInt(m[2], 10) });
+  }
+  if(raw.length === 0) return [];
+
+  const transitions = [];
+  let lastNum = null;
+  raw.forEach(r=>{
+    if(r.num !== lastNum){
+      transitions.push(r);
+      lastNum = r.num;
+    }
+  });
+
+  const MIN_CHAPTER_LENGTH = 1200;
+  const chapters = transitions.map((t, i)=>{
+    const start = t.index;
+    const end = i + 1 < transitions.length ? transitions[i + 1].index : fullText.length;
+    return { number: t.num, start, end, length: end - start };
+  }).filter(c => c.length >= MIN_CHAPTER_LENGTH);
+
+  return chapters.map(c=>{
+    const afterMatch = fullText.slice(c.start, c.start + 200);
+    const titleMatch = afterMatch.match(/\b(?:cap[ií]tulo|chapter)\s+\d{1,3}\b[\s:.\-–—]*([^.\n]{0,80})/i);
+    const guessedTitle = (titleMatch && titleMatch[1] && titleMatch[1].trim()) || `Capítulo ${c.number}`;
+    return {
+      title: guessedTitle,
+      text: fullText.slice(c.start, c.end),
+      charCount: c.length
+    };
+  });
+}
+
+function buildPagePreviews(pages, maxChars){
+  maxChars = maxChars || 35000;
+  const previewLen = 150;
+  let step = 1;
+  const estimated = pages.length * (previewLen + 15);
+  if(estimated > maxChars){
+    step = Math.ceil(estimated / maxChars);
+  }
+  const lines = [];
+  for(let i = 0; i < pages.length; i += step){
+    const p = pages[i];
+    const snippet = p.text.slice(0, previewLen).replace(/\s+/g, " ").trim();
+    lines.push(`[[PAGE ${p.num}]] ${snippet}`);
+  }
+  return lines.join("\n");
+}
+
+function findAnchorOffset(haystack, anchor){
+  if(!anchor) return -1;
+  const direct = haystack.indexOf(anchor);
+  if(direct !== -1) return direct;
+  const words6 = anchor.trim().split(/\s+/).slice(0, 6).join(" ");
+  if(words6.length >= 6){
+    const idx = haystack.indexOf(words6);
+    if(idx !== -1) return idx;
+  }
+  const words3 = anchor.trim().split(/\s+/).slice(0, 3).join(" ");
+  if(words3.length >= 4) return haystack.indexOf(words3);
+  return -1;
+}
+
+// Detecção "inteligente" via IA: entende qualquer convenção de divisão (capítulos
+// numerados, seções nomeadas, artigos com subseções etc.), não só "Capítulo N".
+async function detectChaptersAI(fullText, pages){
+  const TEXT_MODE_THRESHOLD = 35000;
+  let mode, content;
+  if(fullText.length <= TEXT_MODE_THRESHOLD){
+    mode = "text";
+    content = fullText;
+  } else {
+    mode = "previews";
+    content = buildPagePreviews(pages);
+  }
+
+  const resp = await fetch("/api/detectar-capitulos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content, mode })
+  });
+  const data = await resp.json();
+  if(!resp.ok) throw new Error(data.error || "Falha ao detectar a estrutura do documento via IA.");
+
+  const sections = data.sections || [];
+  if(sections.length === 0) return [];
+
+  const starts = [];
+  sections.forEach(s=>{
+    let offset = -1;
+    if(mode === "text"){
+      offset = findAnchorOffset(fullText, s.anchor);
+    } else {
+      const pageMatch = s.anchor.match(/\[\[PAGE\s+(\d+)\]\]/i);
+      if(pageMatch){
+        const pageNum = parseInt(pageMatch[1], 10);
+        const page = pages.find(p => p.num === pageNum);
+        if(page) offset = page.offset;
+      }
+    }
+    if(offset >= 0) starts.push({ title: s.title, offset });
+  });
+
+  starts.sort((a, b)=> a.offset - b.offset);
+  const deduped = [];
+  starts.forEach(s=>{
+    const prev = deduped[deduped.length - 1];
+    if(!prev || s.offset - prev.offset > 200) deduped.push(s);
+  });
+
+  const MIN_LENGTH = 800;
+  const result = [];
+  deduped.forEach((s, i)=>{
+    const end = i + 1 < deduped.length ? deduped[i + 1].offset : fullText.length;
+    const length = end - s.offset;
+    if(length < MIN_LENGTH) return;
+    result.push({ title: s.title, text: fullText.slice(s.offset, end), charCount: length });
+  });
+  return result;
+}
+
+function slugify(str){
+  return String(str).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/(^-+|-+$)/g,"").slice(0,40) || "modulo";
+}
+function generateModuleId(title){
+  return "u-" + slugify(title) + "-" + Math.random().toString(36).slice(2,7);
+}
+
+function renderChaptersList(){
+  const list = document.getElementById("chapters-list");
+  list.innerHTML = "";
+  detectedChapters.forEach((ch, idx)=>{
+    const row = document.createElement("div");
+    row.className = "chapter-row";
+    const approxPages = Math.max(1, Math.round(ch.charCount / 1800));
+    row.innerHTML = `
+      <input type="checkbox" class="ch-check" data-idx="${idx}" checked>
+      <div class="chapter-body">
+        <input type="text" class="auth-input ch-title" data-idx="${idx}" value="${ch.title.replace(/"/g,'&quot;')}">
+        <div class="chapter-meta">~${approxPages} página(s) de conteúdo detectadas</div>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+  document.getElementById("chapters-summary").textContent =
+    `${detectedChapters.length} divisão(ões)/capítulo(s) detectado(s). Desmarque os que não quiser gerar, ou ajuste os títulos.`;
+  document.getElementById("chapters-panel").style.display = "block";
+  document.getElementById("chapters-panel").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+document.getElementById("detect-btn").addEventListener("click", async ()=>{
+  const fb = document.getElementById("detect-feedback");
+  const btn = document.getElementById("detect-btn");
+  const fileInput = document.getElementById("book-pdf-input");
+  const textInput = document.getElementById("book-text-input");
+
+  fb.innerHTML = "";
+  btn.disabled = true;
+
+  try{
+    let fullText = textInput.value.trim();
+    let pages = null;
+
+    if(!fullText && fileInput.files && fileInput.files[0]){
+      btn.textContent = "Lendo PDF...";
+      const extracted = await extractPdfTextFull(fileInput.files[0], (done, total)=>{
+        btn.textContent = `Lendo PDF... (${done}/${total} páginas)`;
+      });
+      fullText = extracted.fullText;
+      pages = extracted.pages;
+    }
+
+    if(!fullText || fullText.length < 1000){
+      fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto mais completo (livro inteiro) antes de detectar a estrutura.</div>`;
+      return;
+    }
+
+    if(!pages) pages = synthesizePages(fullText, 3000);
+
+    btn.textContent = "Analisando estrutura com IA...";
+    let usedFallback = false;
+    try{
+      detectedChapters = await detectChaptersAI(fullText, pages);
+    }catch(aiErr){
+      console.error("Detecção por IA falhou, tentando método simples:", aiErr);
+      detectedChapters = detectChaptersHeuristic(fullText);
+      usedFallback = true;
+    }
+
+    if(detectedChapters.length === 0){
+      fb.innerHTML = `<div class="feedback bad">Não consegui identificar divisões nesse documento automaticamente.
+        Se for um texto único (ex: um artigo curto), use a tela <a href="criar-modulo.html">Criar novo módulo</a> em vez desta.</div>`;
+      document.getElementById("chapters-panel").style.display = "none";
+      return;
+    }
+
+    fb.innerHTML = usedFallback
+      ? `<div class="feedback bad">A detecção por IA falhou; usei um método mais simples como alternativa (só reconhece "Capítulo N"/"Chapter N") — revise a lista com atenção.</div>`
+      : `<div class="feedback ok">${detectedChapters.length} divisão(ões) detectada(s) — revise abaixo.</div>`;
+    renderChaptersList();
+  }catch(e){
+    console.error(e);
+    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "🔍 Detectar capítulos";
+  }
+});
+
+document.getElementById("select-all-btn").addEventListener("click", ()=>{
+  document.querySelectorAll(".ch-check").forEach(cb => cb.checked = true);
+});
+document.getElementById("select-none-btn").addEventListener("click", ()=>{
+  document.querySelectorAll(".ch-check").forEach(cb => cb.checked = false);
+});
+
+document.getElementById("generate-btn").addEventListener("click", async ()=>{
+  const bookTitle = document.getElementById("book-title").value.trim();
+  const checks = Array.from(document.querySelectorAll(".ch-check")).filter(cb => cb.checked);
+  const genFb = document.getElementById("generate-feedback");
+
+  if(checks.length === 0){
+    genFb.innerHTML = `<div class="feedback bad">Selecione pelo menos 1 capítulo.</div>`;
+    return;
+  }
+
+  // Atualiza títulos editados pelo usuário antes de gerar
+  document.querySelectorAll(".ch-title").forEach(inp=>{
+    const idx = parseInt(inp.dataset.idx, 10);
+    detectedChapters[idx].title = inp.value.trim() || detectedChapters[idx].title;
+  });
+
+  const selectedIdxs = checks.map(cb => parseInt(cb.dataset.idx, 10));
+
+  document.getElementById("generate-btn").disabled = true;
+  document.getElementById("chapters-panel").style.opacity = "0.6";
+  const progressPanel = document.getElementById("progress-panel");
+  const progressList = document.getElementById("progress-list");
+  progressPanel.style.display = "block";
+  progressList.innerHTML = "";
+  progressPanel.scrollIntoView({ behavior:"smooth", block:"start" });
+
+  const rows = {};
+  selectedIdxs.forEach(idx=>{
+    const ch = detectedChapters[idx];
+    const row = document.createElement("div");
+    row.className = "chapter-status pending";
+    row.textContent = `⏳ ${ch.title} — na fila`;
+    progressList.appendChild(row);
+    rows[idx] = row;
+  });
+
+  for(const idx of selectedIdxs){
+    const ch = detectedChapters[idx];
+    const row = rows[idx];
+    row.className = "chapter-status working";
+    row.textContent = `🧠 Gerando "${ch.title}"...`;
+
+    try{
+      const resp = await fetch("/api/gerar-modulo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: (bookTitle ? bookTitle + " — " : "") + ch.title,
+          sourceText: ch.text.slice(0, MAX_SOURCE_CHARS_PER_CHAPTER)
+        })
+      });
+      const data = await resp.json();
+
+      if(!resp.ok || !data.concepts || data.concepts.length === 0){
+        row.className = "chapter-status err";
+        row.textContent = `❌ "${ch.title}" — ${data.error || "não foi possível gerar conceitos"}`;
+        continue;
+      }
+
+      const moduleId = generateModuleId((bookTitle ? bookTitle + " " : "") + ch.title);
+      const moduleData = {
+        config: {
+          appTitle: (bookTitle ? bookTitle + " — " : "") + ch.title,
+          appSubtitle: `Importado automaticamente${bookTitle ? " de " + bookTitle : ""}`,
+          logoEmoji: "📘",
+          homeIntro: `Módulo gerado automaticamente a partir do capítulo "${ch.title}".`,
+          sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
+          storageKey: `estudo_${moduleId}_v1`
+        },
+        concepts: data.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c))
+      };
+
+      await window.AppDB.saveUserModule(moduleId, moduleData);
+      row.className = "chapter-status ok";
+      row.textContent = `✅ "${ch.title}" — ${data.concepts.length} conceito(s) gerado(s) e salvo(s)`;
+    }catch(e){
+      console.error(e);
+      row.className = "chapter-status err";
+      row.textContent = `❌ "${ch.title}" — erro ao gerar/salvar`;
+    }
+  }
+
+  document.getElementById("progress-done").style.display = "block";
+});
+
+initAuthGate(()=>{
+  bindLogoutButton();
+});
+</script>
+</body>
+</html>
