@@ -88,6 +88,13 @@ Essa descrição pode ser um número/nome de divisão (ex: "Parte 1", "Capítulo
 (ex: "a parte sobre memória de trabalho"). Encontre, no conteúdo fornecido, onde essa seção começa e onde a
 PRÓXIMA seção de mesmo nível começa logo depois (para sabermos onde a pedida termina).
 
+ATENÇÃO: se o documento tiver um Sumário/Índice no início (uma lista de títulos com números de página, geralmente
+próxima do começo do conteúdo), NÃO use uma linha desse sumário como o início da seção — o sumário só lista os
+títulos, não é o conteúdo real. Você precisa encontrar onde o conteúdo DAQUELA seção de fato começa (normalmente
+bem mais adiante no documento, com o título aparecendo de novo seguido do texto real, não de reticências e um
+número de página). Se não tiver certeza se um trecho é o sumário ou o conteúdo real, prefira a ocorrência que vem
+depois no documento e tem texto corrido narrativo/explicativo na sequência.
+
 Retorne:
 - "title": um título curto e limpo para a seção encontrada.
 - "startAnchor": ${mode === "text"

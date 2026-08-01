@@ -139,8 +139,8 @@ function synthesizePages(fullText, chunkSize){
 }
 
 function buildPagePreviews(pages, maxChars){
-  maxChars = maxChars || 35000;
-  const previewLen = 150;
+  maxChars = maxChars || 40000;
+  const previewLen = 350;
   let step = 1;
   const estimated = pages.length * (previewLen + 15);
   if(estimated > maxChars){
