@@ -34,13 +34,20 @@ import {
   collection,
   query,
   where,
-  getDocs
+  getDocs,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 function sanitizeKeyPart(str){
   // Garante que o ID do documento no Firestore não tenha caracteres problemáticos
@@ -126,6 +133,77 @@ window.AppDB = {
     const ref = doc(db, "ai_usage", `${uid}_${monthKey}`);
     const snap = await getDoc(ref);
     return snap.exists() ? snap.data() : { count: 0 };
+  },
+
+  /* ---- Biblioteca de materiais (Etapa 1) ----
+     O documento principal (materials/{id}) só é escrito pelo servidor
+     (api/material-*.js) — aqui só há leitura dele. Já a subcoleção
+     "pages" (texto extraído por página) é escrita direto pelo cliente,
+     em lotes, porque pode ter centenas de documentos por material (ver
+     firestore.rules.txt para a regra que restringe isso ao dono). */
+  async listMaterials(){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return [];
+    const q = query(collection(db, "materials"), where("ownerId", "==", uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+  async getMaterial(id){
+    const ref = doc(db, "materials", id);
+    const snap = await getDoc(ref);
+    return snap.exists() ? Object.assign({ id: snap.id }, snap.data()) : null;
+  },
+
+  // pageDocs: [{ pageNumber, partNumber|null, text, extractionMethod, usedOcr }, ...]
+  async writeMaterialPages(materialId, pageDocs){
+    const CHUNK = 400; // margem abaixo do limite de 500 operações por batch do Firestore
+    for(let i = 0; i < pageDocs.length; i += CHUNK){
+      const chunk = pageDocs.slice(i, i + CHUNK);
+      const batch = writeBatch(db);
+      chunk.forEach(p=>{
+        const pageId = p.partNumber
+          ? `${String(p.pageNumber).padStart(6,"0")}-${String(p.partNumber).padStart(3,"0")}`
+          : String(p.pageNumber).padStart(6,"0");
+        const ref = doc(db, "materials", materialId, "pages", pageId);
+        batch.set(ref, {
+          pageNumber: p.pageNumber,
+          partNumber: p.partNumber || null,
+          text: p.text,
+          charCount: p.text.length,
+          extractionMethod: p.extractionMethod,
+          usedOcr: !!p.usedOcr,
+          createdAt: Date.now(),
+          schemaVersion: 1
+        });
+      });
+      await batch.commit();
+    }
+  },
+
+  // Busca TODAS as páginas do material (usado ao reabrir um material da
+  // Biblioteca). Sem orderBy na consulta de propósito — evita depender de
+  // um índice composto no Firestore; a ordenação certa (por página, depois
+  // por parte) é feita aqui mesmo, em memória.
+  async readMaterialPages(materialId){
+    const q = query(collection(db, "materials", materialId, "pages"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data())
+      .sort((a, b) => (a.pageNumber - b.pageNumber) || ((a.partNumber || 0) - (b.partNumber || 0)));
+  }
+};
+
+window.AppStorage = {
+  // Envia o PDF original pro Firebase Storage, na pasta exclusiva desse
+  // usuário. O caminho retornado é salvo no material (storagePath) via
+  // api/material-atualizar-status.js.
+  async uploadMaterialPdf(materialId, file){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const path = `users/${uid}/materials/${materialId}/original.pdf`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file, { contentType: "application/pdf" });
+    return path;
   }
 };
 

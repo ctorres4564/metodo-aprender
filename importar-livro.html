@@ -43,6 +43,7 @@
         </div>
       </div>
       <div class="stats">
+        <a class="pill" href="biblioteca.html" style="text-decoration:none;">📚 Minha Biblioteca</a>
         <span class="pill" id="user-email"></span>
       </div>
     </header>
@@ -50,9 +51,10 @@
     <div class="panel" id="upload-panel">
       <h2 class="section-title">📚 1. Envie o livro</h2>
       <p class="lead" style="margin-top:-4px;">
-        Envie o PDF (ou cole o texto) uma vez. Depois você pede, quantas vezes quiser, "faça um módulo sobre a
-        Parte 1", "sobre o capítulo 3", "sobre a seção que fala de X" — a IA só processa a parte pedida, em vez
-        de ler o livro inteiro de uma vez (mais rápido e mais barato).
+        Envie o PDF (ou cole o texto) uma vez. O material fica salvo na sua
+        <a href="biblioteca.html">Biblioteca</a> — depois você pede, quantas vezes quiser, "faça um módulo sobre a
+        Parte 1", "sobre o capítulo 3", "sobre a seção que fala de X", inclusive em outra sessão, sem enviar o
+        arquivo de novo.
       </p>
       <span class="field-label">Título do livro (opcional, usado para nomear os módulos)</span>
       <input type="text" id="book-title" class="auth-input" placeholder="Ex: Manual de Psicologia Evolucionista">
@@ -91,6 +93,7 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
+<script src="assets/material-limits.js"></script>
 <script src="assets/pwa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js"></script>
 <script src="assets/ocr.js"></script>
@@ -100,11 +103,13 @@
   window.pdfjsLib = pdfjsLib;
 </script>
 <script>
-const MAX_SOURCE_CHARS = 14000;
+const MAX_SOURCE_CHARS = (window.MaterialLimits && window.MaterialLimits.maxSourceCharsPerGeneration) || 14000;
 const TEXT_MODE_THRESHOLD = 35000;
 
 let bookFullText = null;
 let bookPages = null;
+let currentMaterialId = null;
+let currentMaterialTitle = null;
 
 async function waitForPdfjs(timeoutMs){
   const start = Date.now();
@@ -122,13 +127,13 @@ async function extractPdfTextFull(file, onProgress){
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   let fullText = "";
   const pages = [];
-  const maxPages = Math.min(pdf.numPages, 600);
+  const maxPages = Math.min(pdf.numPages, (window.MaterialLimits && window.MaterialLimits.maxPdfPages) || 600);
 
   // Livros muito longos + OCR de todas as páginas escaneadas travaria o navegador por
   // muito tempo (OCR é lento, alguns segundos por página) — limita quantas páginas
   // recebem OCR numa mesma importação. Páginas além do limite mantêm o texto vazio
   // extraído normalmente (o que é melhor do que travar a importação inteira).
-  const OCR_PAGE_CAP = 80;
+  const OCR_PAGE_CAP = (window.MaterialLimits && window.MaterialLimits.maxOcrPages) || 80;
   let ocrCount = 0;
   let ocrCapHit = false;
 
@@ -136,13 +141,14 @@ async function extractPdfTextFull(file, onProgress){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     let pageText = content.items.map(it => it.str).join(" ");
+    let usedOcr = false;
 
     if(window.OcrHelper && window.OcrHelper.pageNeedsOcr(pageText)){
       if(ocrCount < OCR_PAGE_CAP){
         if(onProgress) onProgress(i, maxPages, `OCR na página ${i} (imagem sem texto real)...`);
         try{
           const ocrText = await window.OcrHelper.ocrPdfPage(page);
-          if(ocrText) pageText = ocrText;
+          if(ocrText){ pageText = ocrText; usedOcr = true; }
         }catch(e){
           console.warn("OCR falhou na página", i, e);
         }
@@ -154,7 +160,7 @@ async function extractPdfTextFull(file, onProgress){
 
     const offset = fullText.length;
     fullText += pageText + "\n\n";
-    pages.push({ num: i, offset, text: pageText });
+    pages.push({ num: i, offset, text: pageText, extractionMethod: usedOcr ? "ocr" : "pdf-text", usedOcr });
     if(onProgress && i % 10 === 0) onProgress(i, maxPages);
   }
   if(ocrCount > 0 && window.OcrHelper) await window.OcrHelper.terminateOcrWorker();
@@ -167,7 +173,7 @@ function synthesizePages(fullText, chunkSize){
   const pages = [];
   let num = 1;
   for(let offset = 0; offset < fullText.length; offset += chunkSize){
-    pages.push({ num, offset, text: fullText.slice(offset, offset + chunkSize) });
+    pages.push({ num, offset, text: fullText.slice(offset, offset + chunkSize), extractionMethod: "pasted-text", usedOcr: false });
     num++;
   }
   return pages;
@@ -227,6 +233,16 @@ function anchorToOffset(anchor, mode){
   return page ? page.offset : -1;
 }
 
+function offsetToPageNumber(offset, pages){
+  if(!pages || pages.length === 0) return null;
+  let found = pages[0].num;
+  for(const p of pages){
+    if(p.offset <= offset) found = p.num;
+    else break;
+  }
+  return found;
+}
+
 function slugify(str){
   return String(str).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
     .replace(/[^a-z0-9]+/g,"-").replace(/(^-+|-+$)/g,"").slice(0,40) || "modulo";
@@ -235,24 +251,182 @@ function generateModuleId(title){
   return "u-" + slugify(title) + "-" + Math.random().toString(36).slice(2,7);
 }
 
+/* =====================================================================
+   BIBLIOTECA DE MATERIAIS (Etapa 1)
+   =====================================================================
+   Persistência: o PDF original vai pro Firebase Storage; o texto
+   extraído vai pro Firestore, dividido em documentos por página (e por
+   "parte", se a página for grande demais) em materials/{id}/pages/{pageId}.
+   O documento principal materials/{id} só é escrito pelo servidor (ver
+   api/material-*.js) — o cliente só lê. Isso é o que permite reabrir um
+   material depois (biblioteca.html → importar-livro.html?material=<id>)
+   sem reenviar o arquivo nem rodar OCR de novo.
+   ===================================================================== */
+
+// Divide uma página em partes se o texto passar do limite (ver
+// assets/material-limits.js) — mantém o mesmo pageNumber, varia partNumber.
+function splitPageIntoParts(page, maxChars){
+  const text = page.text || "";
+  if(text.length <= maxChars){
+    return [{ pageNumber: page.num, partNumber: null, text, extractionMethod: page.extractionMethod, usedOcr: !!page.usedOcr }];
+  }
+  const parts = [];
+  let partNumber = 1;
+  for(let i = 0; i < text.length; i += maxChars){
+    parts.push({
+      pageNumber: page.num,
+      partNumber: partNumber++,
+      text: text.slice(i, i + maxChars),
+      extractionMethod: page.extractionMethod,
+      usedOcr: !!page.usedOcr
+    });
+  }
+  return parts;
+}
+
+function buildPageDocsForStorage(pages){
+  const maxChars = (window.MaterialLimits && window.MaterialLimits.maxTextCharsPerPage) || 6000;
+  return pages.flatMap(p => splitPageIntoParts(p, maxChars));
+}
+
+// Reconstrói o formato {fullText, pages:[{num,offset,text}]} usado pelo
+// resto do fluxo (mesmo formato de quando o PDF é lido na hora) a partir
+// dos documentos de página salvos no Firestore — juntando de volta
+// páginas que foram divididas em partes.
+function reconstructPagesFromDocs(pageDocs){
+  const byPage = new Map();
+  pageDocs.forEach(p=>{
+    if(!byPage.has(p.pageNumber)) byPage.set(p.pageNumber, []);
+    byPage.get(p.pageNumber).push(p.text || "");
+  });
+  let fullText = "";
+  const pages = [];
+  Array.from(byPage.keys()).sort((a,b)=>a-b).forEach(num=>{
+    const text = byPage.get(num).join("");
+    const offset = fullText.length;
+    fullText += text + "\n\n";
+    pages.push({ num, offset, text });
+  });
+  return { fullText, pages };
+}
+
+async function createMaterialRecord({ sourceType, title, originalFileName, mimeType, fileSize }){
+  const resp = await authedFetch("/api/material-criar", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sourceType, title, originalFileName, mimeType, fileSize })
+  });
+  const data = await resp.json();
+  if(!resp.ok) throw new Error(data.error || "Não foi possível iniciar o material.");
+  return data.materialId;
+}
+
+async function updateMaterialStatus(materialId, fields){
+  const resp = await authedFetch("/api/material-atualizar-status", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(Object.assign({ materialId }, fields))
+  });
+  const data = await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error(data.error || "Não foi possível atualizar o material.");
+  return data;
+}
+
+// Reabre um material já salvo na Biblioteca (chamado quando a página é
+// aberta como importar-livro.html?material=<id>). Não baixa o PDF nem
+// roda OCR de novo — só busca o texto já processado no Firestore.
+async function openMaterial(materialId){
+  const fb = document.getElementById("load-feedback");
+  document.getElementById("upload-panel").style.display = "none";
+  fb.innerHTML = `<div class="feedback">Carregando material da Biblioteca...</div>`;
+
+  try{
+    const material = await window.AppDB.getMaterial(materialId);
+    if(!material){
+      throw new Error("Material não encontrado, ou você não tem permissão para acessá-lo.");
+    }
+    if(material.status !== "ready"){
+      const statusMsg = {
+        uploading: "ainda está sendo enviado",
+        processing: "ainda está sendo processado",
+        failed: "falhou ao processar" + (material.processingError ? `: ${material.processingError}` : ""),
+        deleting: "está sendo excluído"
+      }[material.status] || "não está pronto";
+      document.getElementById("upload-panel").style.display = "block";
+      fb.innerHTML = `<div class="feedback bad">Este material ${statusMsg}. Volte à <a href="biblioteca.html">Biblioteca</a> em alguns instantes, ou envie o livro novamente.</div>`;
+      return;
+    }
+
+    const pageDocs = await window.AppDB.readMaterialPages(materialId);
+    const { fullText, pages } = reconstructPagesFromDocs(pageDocs);
+
+    if(!fullText || pages.length === 0){
+      throw new Error("Não foi possível carregar o conteúdo salvo deste material.");
+    }
+
+    bookFullText = fullText;
+    bookPages = pages;
+    currentMaterialId = materialId;
+    currentMaterialTitle = material.title;
+
+    document.getElementById("book-title").value = material.title || "";
+    document.getElementById("loaded-info").textContent =
+      `"${material.title}" reaberto da sua Biblioteca (~${pages.length} página(s)) — sem precisar enviar de novo. Peça quantos módulos quiser.`;
+    document.getElementById("request-panel").style.display = "block";
+    fb.innerHTML = "";
+  }catch(e){
+    console.error(e);
+    document.getElementById("upload-panel").style.display = "block";
+    fb.innerHTML = `<div class="feedback bad">${e.message || "Erro ao carregar material."}</div>`;
+  }
+}
+
 document.getElementById("load-btn").addEventListener("click", async ()=>{
   const fb = document.getElementById("load-feedback");
   const btn = document.getElementById("load-btn");
   const fileInput = document.getElementById("book-pdf-input");
   const textInput = document.getElementById("book-text-input");
+  const titleInput = document.getElementById("book-title");
 
   fb.innerHTML = "";
   btn.disabled = true;
 
-  try{
-    let fullText = textInput.value.trim();
-    let pages = null;
-    let ocrCount = 0;
-    let ocrCapHit = false;
+  const pastedText = textInput.value.trim();
+  const file = (!pastedText && fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
+  const sourceType = file ? "pdf" : "text";
 
-    if(!fullText && fileInput.files && fileInput.files[0]){
+  if(!pastedText && !file){
+    fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto antes de carregar.</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  const title = titleInput.value.trim() || (file ? file.name.replace(/\.pdf$/i, "") : "Material colado");
+  let materialId = null;
+
+  try{
+    btn.textContent = "Salvando na Biblioteca...";
+    materialId = await createMaterialRecord({
+      sourceType,
+      title,
+      originalFileName: file ? file.name : null,
+      mimeType: file ? (file.type || "application/pdf") : null,
+      fileSize: file ? file.size : null
+    });
+
+    if(file){
+      btn.textContent = "Enviando PDF...";
+      const storagePath = await window.AppStorage.uploadMaterialPdf(materialId, file);
+      await updateMaterialStatus(materialId, { status: "processing", storagePath });
+    } else {
+      await updateMaterialStatus(materialId, { status: "processing" });
+    }
+
+    let fullText, pages, ocrCount = 0, ocrCapHit = false;
+
+    if(file){
       btn.textContent = "Lendo PDF...";
-      const extracted = await extractPdfTextFull(fileInput.files[0], (done, total, msg)=>{
+      const extracted = await extractPdfTextFull(file, (done, total, msg)=>{
         btn.textContent = msg ? "Lendo PDF... (OCR em andamento)" : `Lendo PDF... (${done}/${total} páginas)`;
         if(msg) fb.innerHTML = `<div class="feedback">${msg} — página ${done} de ${total}</div>`;
       });
@@ -260,19 +434,35 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
       pages = extracted.pages;
       ocrCount = extracted.ocrCount || 0;
       ocrCapHit = !!extracted.ocrCapHit;
+    } else {
+      fullText = pastedText;
+      pages = synthesizePages(fullText, 3000);
     }
 
     if(!fullText || fullText.length < 500){
-      fb.innerHTML = `<div class="feedback bad">Envie um PDF ou cole um texto mais completo antes de carregar.</div>`;
-      return;
+      throw new Error("Envie um PDF ou cole um texto com pelo menos alguns parágrafos.");
     }
 
-    bookFullText = fullText;
-    bookPages = pages || synthesizePages(fullText, 3000);
+    btn.textContent = "Salvando páginas na Biblioteca...";
+    const pageDocs = buildPageDocsForStorage(pages);
+    await window.AppDB.writeMaterialPages(materialId, pageDocs);
 
-    const approxPages = Math.max(1, Math.round(fullText.length / 1800));
+    await updateMaterialStatus(materialId, {
+      status: "ready",
+      pageCount: pages.length,
+      extractionMethod: file ? (ocrCount > 0 ? "pdf-text+ocr" : "pdf-text") : "pasted-text",
+      usedOcr: ocrCount > 0,
+      ocrPageCount: ocrCount,
+      ocrLimitReached: ocrCapHit
+    });
+
+    bookFullText = fullText;
+    bookPages = pages.map(p => ({ num: p.num, offset: p.offset, text: p.text }));
+    currentMaterialId = materialId;
+    currentMaterialTitle = title;
+
     document.getElementById("loaded-info").textContent =
-      `Livro carregado (~${approxPages} página(s) de texto). Agora peça quantos módulos quiser, um de cada vez.`;
+      `Livro carregado (~${pages.length} página(s)) e salvo na sua Biblioteca. Agora peça quantos módulos quiser — e da próxima vez dá pra reabrir este material direto pela Biblioteca, sem enviar de novo.`;
     document.getElementById("request-panel").style.display = "block";
     document.getElementById("request-panel").scrollIntoView({ behavior:"smooth", block:"start" });
 
@@ -286,6 +476,13 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
   }catch(e){
     console.error(e);
     fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+    if(materialId){
+      try{
+        await updateMaterialStatus(materialId, { status: "failed", processingError: (e.message || "Falha desconhecida.").slice(0, 500) });
+      }catch(e2){
+        console.warn("Falha ao marcar material como failed:", e2);
+      }
+    }
   }finally{
     btn.disabled = false;
     btn.textContent = "📖 Carregar livro";
@@ -355,6 +552,21 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
       const next = anchorToOffset(locData.nextAnchor, mode);
       if(next > startOffset) endOffset = next;
     }
+
+    let sourcePageStart = offsetToPageNumber(startOffset, bookPages);
+    let sourcePageEnd = offsetToPageNumber(Math.max(startOffset, endOffset - 1), bookPages);
+
+    // Segurança: não deixa uma seção localizada abranger páginas demais
+    // de uma vez (ver maxPagesPerGeneration em assets/material-limits.js).
+    const maxSpanPages = (window.MaterialLimits && window.MaterialLimits.maxPagesPerGeneration) || 100;
+    if(sourcePageStart != null && sourcePageEnd != null && (sourcePageEnd - sourcePageStart + 1) > maxSpanPages){
+      const clampPage = bookPages.find(p => p.num === sourcePageStart + maxSpanPages - 1);
+      if(clampPage && clampPage.offset < endOffset){
+        endOffset = clampPage.offset;
+        sourcePageEnd = clampPage.num;
+      }
+    }
+
     const sectionText = bookFullText.slice(startOffset, endOffset);
     const sectionTitle = locData.title || target;
 
@@ -385,9 +597,26 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
         sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
         storageKey: `estudo_${moduleId}_v1`
       },
-      concepts: genData.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c))
+      concepts: genData.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c)),
+      sourceMaterialId: currentMaterialId || null,
+      sourceMaterialTitle: currentMaterialTitle || null,
+      sourcePageStart: sourcePageStart,
+      sourcePageEnd: sourcePageEnd,
+      generatedAt: Date.now()
     };
     await window.AppDB.saveUserModule(moduleId, moduleData);
+
+    if(currentMaterialId){
+      try{
+        await authedFetch("/api/material-registrar-modulo", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ materialId: currentMaterialId })
+        });
+      }catch(e){
+        console.warn("Falha ao registrar módulo no material (não afeta o resultado):", e);
+      }
+    }
 
     row.className = "request-row ok";
     row.innerHTML = `<span class="icon">✅</span><div class="body"><div class="title">"${sectionTitle}"</div><div class="meta">${genData.concepts.length} conceito(s) gerado(s) e salvo(s) em Meus Módulos.</div></div>`;
@@ -401,8 +630,15 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
   }
 });
 
+function boot(){
+  const params = new URLSearchParams(window.location.search);
+  const materialId = params.get("material");
+  if(materialId) openMaterial(materialId);
+}
+
 initAuthGate(()=>{
   bindLogoutButton();
+  boot();
 });
 </script>
 </body>

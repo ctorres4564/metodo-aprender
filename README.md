@@ -145,6 +145,33 @@ Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceit
 
 **Sobre custo:** cada importação gasta 1 chamada de IA para detectar a estrutura do documento, mais 1 chamada por divisão selecionada para gerar os conceitos. Um livro com 10 capítulos selecionados = ~11 chamadas no total. Por isso a etapa de seleção existe — para a pessoa escolher só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
 
+### Biblioteca de materiais (PDFs e textos ficam salvos)
+
+Todo PDF enviado (ou texto colado) em "Importar de um livro" agora fica salvo permanentemente na conta da pessoa — em "📚 Minha Biblioteca" (`biblioteca.html`, com atalho também em `index.html`). Isso resolve a principal limitação do fluxo anterior: antes, o texto extraído só existia na memória da aba do navegador, então sair da página ou fechar o computador significava ter que reenviar o PDF (e rodar OCR de novo, se fosse o caso) para pedir mais um módulo do mesmo livro.
+
+Como funciona:
+1. Ao carregar um livro/texto em `importar-livro.html`, o app cria um registro em `materials/{id}` no Firestore (status `uploading` → `processing` → `ready`), envia o PDF original para o **Firebase Storage** (pasta exclusiva da pessoa: `users/{uid}/materials/{id}/original.pdf`) e grava o texto extraído no Firestore, um documento por página (`materials/{id}/pages/{pageId}`) — páginas muito longas são divididas em partes automaticamente.
+2. Em "📚 Minha Biblioteca", cada material aparece como um card com status, número de páginas, se usou OCR e quantos módulos já foram gerados a partir dele.
+3. Clicar em "📖 Usar" reabre `importar-livro.html?material=<id>`: o texto salvo é buscado direto do Firestore (sem reenviar o arquivo nem rodar OCR de novo) e a pessoa já pode pedir o próximo módulo.
+4. Cada módulo gerado a partir de um material guarda essa origem (`sourceMaterialId`, `sourcePageStart`/`sourcePageEnd`) — só como metadado histórico, não afeta o funcionamento do módulo.
+5. "🗑️ Excluir" na Biblioteca apaga o PDF, o texto salvo e o registro do material (função `api/material-excluir.js`); os módulos já gerados a partir dele **não** são apagados, só perdem a referência viva ao material de origem.
+
+**O que esta etapa não inclui (de propósito, para manter o escopo pequeno):** leitor de PDF dentro do app, destaques/anotações no texto, busca dentro dos materiais, e histórico de leitura. A Biblioteca hoje serve só para reabrir e gerar módulos — não para ler o livro.
+
+**Escritas administrativas protegidas:** o documento principal de cada material (`materials/{id}`) só é escrito pelo servidor (`api/material-*.js`, com o Admin SDK) — o navegador só tem permissão de leitura. Isso impede que alguém altere campos como `status`, `generatedModuleCount` ou `ownerId` direto pelo console do navegador. Já a subcoleção de páginas (texto) e o PDF no Storage são escritos direto pelo cliente (evita passar arquivos grandes por uma função serverless, que tem limite de tamanho de corpo), protegidos pelas regras (`firestore.rules.txt` e `storage.rules.txt`), que checam a cada leitura/escrita se quem está pedindo é o dono do material.
+
+**Configuração obrigatória (uma vez só), além do que já existia:**
+
+1. No [Firebase Console](https://console.firebase.google.com) → **Firestore Database → Regras**, cole o `firestore.rules.txt` atualizado (adiciona as regras de `materials` e `materials/{id}/pages`) e publique.
+2. No mesmo console → **Storage** (se ainda não tiver usado o Storage neste projeto, clique em "Vamos começar" para ativá-lo, mantendo o modo produção) → **Regras**, cole o conteúdo de `storage.rules.txt` e publique. Esta é uma tela separada da regra do Firestore — os dois arquivos de regras são independentes.
+3. Publique de novo (`vercel --prod`) para levar `biblioteca.html` e os novos endpoints `api/material-*.js` ao ar.
+
+**Verificação manual de isolamento entre usuários (em vez de testes automatizados):** o ambiente usado para desenvolver este projeto não tem acesso ao registro de pacotes do npm, então não foi possível instalar/rodar o Firebase Emulator Suite (`@firebase/rules-unit-testing`) para testes automatizados das regras. Em vez disso, confira manualmente, com duas contas diferentes:
+- Faça login com a Conta A, importe um livro pequeno e confirme que ele aparece em "Minha Biblioteca".
+- Copie o link "Usar" desse material (contém `?material=<id>`), faça logout, entre com a Conta B e cole o mesmo link — a página deve mostrar "material não encontrado, ou você não tem permissão" (bloqueado pela regra de leitura do Firestore).
+- Ainda com a Conta B, abra o Console do navegador (F12) e tente chamar `window.AppDB.getMaterial("<id-da-conta-A>")` — deve retornar `null`, nunca os dados do material de outra pessoa.
+- Confirme que excluir um material (Conta A) não afeta os módulos já criados a partir dele em "Meus Módulos" (eles continuam lá, só o material some da Biblioteca).
+
 ### OCR para PDFs escaneados (imagem, sem texto real)
 
 A extração normal de texto (`pdf.js`) só funciona quando o PDF tem texto real embutido. PDFs escaneados (fotografados ou digitalizados como imagem) retornam texto vazio nessas páginas. Para esses casos, `assets/ocr.js` aplica OCR automaticamente como fallback, usando **Tesseract.js** (roda 100% no navegador da pessoa usuária, gratuito, sem chave de API) — mais lento que a extração normal (alguns segundos por página), por isso só entra em ação quando uma página tem pouco ou nenhum texto real.
@@ -212,7 +239,7 @@ Implementado em `assets/engine.js` (função `fsrsUpdate` e as funções auxilia
 
 ## Instalável como app (PWA)
 
-O site pode ser "instalado" na tela inicial do celular ou como app de desktop (Chrome/Edge), funcionando como um app nativo (ícone próprio, sem barra de endereço). Isso é feito com `manifest.json` + `sw.js` (service worker) + `assets/pwa.js`, presentes em todas as páginas principais (`index.html`, `app.html`, `criar-modulo.html`, `importar-livro.html`).
+O site pode ser "instalado" na tela inicial do celular ou como app de desktop (Chrome/Edge), funcionando como um app nativo (ícone próprio, sem barra de endereço). Isso é feito com `manifest.json` + `sw.js` (service worker) + `assets/pwa.js`, presentes em todas as páginas principais (`index.html`, `app.html`, `criar-modulo.html`, `importar-livro.html`, `biblioteca.html`).
 
 O service worker guarda em cache só o "shell" do app (HTML/CSS/JS/ícones) — nunca dados dinâmicos (progresso, conteúdo de módulos, respostas de IA), que sempre vêm direto da rede. Estratégia "network-first": sempre busca a versão mais nova primeiro, e só usa o cache se não houver conexão.
 

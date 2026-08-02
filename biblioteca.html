@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Método Aprender">
+<title>Minha Biblioteca</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .material-card{
+    display:flex; flex-direction:column; gap:8px; padding:14px;
+    background: var(--panel-2); border:1px solid var(--border); border-radius:14px;
+  }
+  .material-card .top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .material-card h3{ margin:0; font-size:15px; }
+  .material-card .meta-line{ font-size:12px; color:var(--text-dim); }
+  .status-chip{
+    display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;
+    white-space:nowrap;
+  }
+  .status-ready{ background:rgba(88,196,120,0.18); color:#6fe08a; }
+  .status-processing, .status-uploading{ background:rgba(230,180,60,0.18); color:#e6c04a; }
+  .status-failed{ background:rgba(230,80,80,0.18); color:#ff8888; }
+  .status-deleting{ background:rgba(150,150,150,0.18); color:#bbb; }
+  .material-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
+  .material-actions .btn{ font-size:12px; }
+  .materials-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <div class="logo">📚</div>
+        <div>
+          <h1>Minha Biblioteca</h1>
+          <p>Livros e textos enviados, prontos para gerar módulos sem reenviar</p>
+        </div>
+      </div>
+      <div class="stats">
+        <a class="pill" href="importar-livro.html" style="text-decoration:none;">➕ Nova importação</a>
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div id="library-feedback"></div>
+
+    <div class="panel">
+      <h2 class="section-title" style="margin:0 0 6px;">📚 Materiais salvos</h2>
+      <p class="lead" style="margin-top:-2px;">
+        Cada PDF ou texto que você importa fica salvo aqui. Clique em "Usar" para reabrir um material e pedir
+        novos módulos (por parte, capítulo ou seção) sem enviar o arquivo de novo.
+      </p>
+      <div class="materials-grid" id="materials-grid" style="margin-top:12px;"></div>
+      <p id="materials-empty" style="display:none; color:var(--text-dim); font-size:13px; margin-top:8px;">
+        Você ainda não importou nenhum livro ou texto.
+        <a href="importar-livro.html">Importe o primeiro agora</a>.
+      </p>
+      <p id="materials-loading" style="color:var(--text-dim); font-size:13px; margin-top:8px;">Carregando...</p>
+    </div>
+
+    <footer class="credit">
+      O PDF original e o texto extraído por página ficam salvos com segurança na sua conta — só você tem acesso.
+    </footer>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="assets/api-client.js"></script>
+<script src="assets/pwa.js"></script>
+<script>
+const STATUS_LABELS = {
+  uploading: "Enviando...",
+  processing: "Processando...",
+  ready: "Pronto",
+  failed: "Falhou",
+  deleting: "Excluindo..."
+};
+
+function formatDate(ts){
+  if(!ts) return "";
+  try{
+    return new Date(ts).toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric" });
+  }catch(e){
+    return "";
+  }
+}
+
+function formatSize(bytes){
+  if(!bytes) return "";
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+async function loadMaterials(){
+  const grid = document.getElementById("materials-grid");
+  const empty = document.getElementById("materials-empty");
+  const loading = document.getElementById("materials-loading");
+  const fb = document.getElementById("library-feedback");
+
+  if(!window.AppDB || !window.AppDB.listMaterials){
+    loading.style.display = "none";
+    empty.style.display = "block";
+    return;
+  }
+
+  try{
+    const materials = await window.AppDB.listMaterials();
+    loading.style.display = "none";
+    grid.innerHTML = "";
+
+    if(!materials || materials.length === 0){
+      empty.style.display = "block";
+      return;
+    }
+    empty.style.display = "none";
+
+    materials.forEach(m=>{
+      const card = document.createElement("div");
+      card.className = "material-card";
+      const statusClass = `status-${m.status || "processing"}`;
+      const statusLabel = STATUS_LABELS[m.status] || m.status;
+      const sourceLabel = m.sourceType === "pdf" ? "PDF" : "Texto colado";
+      const sizeInfo = m.sourceType === "pdf" && m.fileSize ? ` · ${formatSize(m.fileSize)}` : "";
+      const ocrInfo = m.usedOcr ? ` · OCR em ${m.ocrPageCount || 0} pág.` : "";
+      const moduleInfo = m.generatedModuleCount
+        ? `${m.generatedModuleCount} módulo${m.generatedModuleCount === 1 ? "" : "s"} gerado${m.generatedModuleCount === 1 ? "" : "s"}`
+        : "Nenhum módulo gerado ainda";
+
+      card.innerHTML = `
+        <div class="top">
+          <h3>${(m.title || "Sem título").replace(/</g,"&lt;")}</h3>
+          <span class="status-chip ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="meta-line">${sourceLabel}${sizeInfo}${ocrInfo}</div>
+        <div class="meta-line">${m.pageCount ? m.pageCount + " página(s) · " : ""}${moduleInfo}</div>
+        <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
+        ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${m.processingError.replace(/</g,"&lt;")}</div>` : ""}
+        <div class="material-actions">
+          ${m.status === "ready" ? `<a class="btn secondary" style="text-decoration:none;" href="importar-livro.html?material=${encodeURIComponent(m.id)}">📖 Usar</a>` : ""}
+          <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+    grid.querySelectorAll(".delete-material").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        const id = btn.dataset.id;
+        const title = btn.dataset.title;
+        if(!confirm(`Excluir "${title}"? Isso apaga o PDF e o texto salvos. Os módulos já gerados a partir dele continuam existindo. Essa ação não pode ser desfeita.`)) return;
+        btn.disabled = true;
+        btn.textContent = "Excluindo...";
+        try{
+          const resp = await authedFetch("/api/material-excluir", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ materialId: id })
+          });
+          const data = await resp.json().catch(()=>({}));
+          if(!resp.ok) throw new Error(data.error || "Falha ao excluir.");
+          loadMaterials();
+        }catch(e){
+          console.error(e);
+          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${e.message || "Não foi possível excluir agora. Tente novamente."}</div>`;
+          btn.disabled = false;
+          btn.textContent = "🗑️ Excluir";
+        }
+      });
+    });
+  }catch(e){
+    console.error(e);
+    loading.style.display = "none";
+    fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">Não foi possível carregar sua Biblioteca agora. Recarregue a página.</div>`;
+  }
+}
+
+initAuthGate(()=>{
+  bindLogoutButton();
+  loadMaterials();
+});
+</script>
+</body>
+</html>

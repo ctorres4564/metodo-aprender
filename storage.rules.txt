@@ -1,0 +1,27 @@
+// =====================================================================
+// REGRAS DE SEGURANÇA DO FIREBASE STORAGE
+// =====================================================================
+// Cole este conteúdo em: Firebase Console → Storage → Regras
+//
+// O que isso garante: cada pessoa autenticada só consegue ler, enviar ou
+// excluir arquivos dentro da própria pasta (users/{uid}/...). Ninguém
+// consegue acessar o PDF de outra pessoa, mesmo sabendo o caminho exato.
+//
+// O limite de tamanho (50 MB) e o tipo de arquivo (application/pdf) são
+// checados aqui também, como segunda camada de defesa além do que já é
+// validado no navegador (assets/material-limits.js) — mantenha os dois
+// sincronizados se o limite mudar.
+// =====================================================================
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{userId}/materials/{materialId}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+                             && request.resource.size < 50 * 1024 * 1024
+                             && request.resource.contentType == 'application/pdf';
+    }
+  }
+}

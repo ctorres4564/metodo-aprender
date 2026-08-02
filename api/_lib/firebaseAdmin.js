@@ -13,6 +13,7 @@
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 function getAdminApp() {
   const existing = getApps();
@@ -30,7 +31,10 @@ function getAdminApp() {
     throw new Error("FIREBASE_SERVICE_ACCOUNT não é um JSON válido.");
   }
 
-  return initializeApp({ credential: cert(serviceAccount) });
+  return initializeApp({
+    credential: cert(serviceAccount),
+    storageBucket: serviceAccount.project_id ? `${serviceAccount.project_id}.firebasestorage.app` : undefined
+  });
 }
 
 export function adminAuth() {
@@ -39,4 +43,8 @@ export function adminAuth() {
 
 export function adminDb() {
   return getFirestore(getAdminApp());
+}
+
+export function adminStorage() {
+  return getStorage(getAdminApp()).bucket();
 }
