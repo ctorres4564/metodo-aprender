@@ -106,6 +106,24 @@
 
   <section id="tab-progresso" class="tab-content" style="display:none;">
     <div class="panel">
+      <h2 class="section-title">💎 Plano</h2>
+      <div class="grid2">
+        <div class="stat-card">
+          <div class="label">Plano atual</div>
+          <div class="num" id="plan-name" style="font-size:20px;">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Gerações por IA usadas este mês</div>
+          <div class="num" id="plan-usage" style="font-size:20px;">—</div>
+          <div class="progressbar" style="margin-top:6px;"><div id="plan-usage-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <p class="lead" id="plan-desc" style="margin-top:12px;"></p>
+      <button class="btn" id="plan-action-btn" style="margin-top:4px;">…</button>
+      <div id="plan-feedback"></div>
+    </div>
+
+    <div class="panel">
       <h2 class="section-title">📧 Lembrete diário por e-mail</h2>
       <p class="lead" style="margin-top:-4px;">Quando ativado, você recebe um e-mail (uma vez por dia) avisando
         quantas fichas estão com revisão vencida — só quando houver alguma.</p>
@@ -247,6 +265,7 @@ async function boot(){
 
     await initApp(moduleData.config, moduleData.concepts);
     initReminderToggle();
+    initPlanPanel();
   }catch(e){
     console.error(e);
     document.getElementById("setup-banner").style.display = "block";
@@ -255,6 +274,71 @@ async function boot(){
         "Não foi possível carregar este módulo. Ele pode ter sido excluído, ou você não tem permissão para acessá-lo.";
     }
   }
+}
+
+// Mantido igual aos limites reais em api/_lib/usage.js — usado só para exibição
+// (o controle de verdade acontece no servidor a cada chamada de IA).
+const PLAN_LIMITS_DISPLAY = { free: 40, premium: 400 };
+
+async function initPlanPanel(){
+  const nameEl = document.getElementById("plan-name");
+  const usageEl = document.getElementById("plan-usage");
+  const usageBar = document.getElementById("plan-usage-bar");
+  const descEl = document.getElementById("plan-desc");
+  const btn = document.getElementById("plan-action-btn");
+  const fb = document.getElementById("plan-feedback");
+  if(!nameEl || !window.AppDB) return;
+
+  let plan = "free";
+  try{
+    const profile = await window.AppDB.getUserProfile();
+    plan = (profile && profile.plan) || "free";
+  }catch(e){ console.warn("Falha ao carregar plano:", e); }
+
+  let usageCount = 0;
+  try{
+    const usage = await window.AppDB.getUserUsage();
+    usageCount = (usage && usage.count) || 0;
+  }catch(e){ console.warn("Falha ao carregar uso de IA:", e); }
+
+  const limit = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
+  const pct = Math.min(100, Math.round((usageCount / limit) * 100));
+
+  nameEl.textContent = plan === "premium" ? "💎 Premium" : "🆓 Free";
+  usageEl.textContent = `${usageCount} / ${limit}`;
+  usageBar.style.width = pct + "%";
+
+  if(plan === "premium"){
+    descEl.textContent = "Sua assinatura Premium está ativa — obrigado por apoiar o projeto! Você pode gerenciar ou cancelar sua assinatura a qualquer momento.";
+    btn.textContent = "⚙️ Gerenciar assinatura";
+  } else {
+    descEl.textContent = "Plano Free: até 40 gerações por IA por mês. Assine o Premium por R$19,90/mês (7 dias grátis) e tenha 400 gerações por mês.";
+    btn.textContent = "✨ Assinar Premium";
+  }
+
+  btn.onclick = async ()=>{
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "Aguarde...";
+    fb.innerHTML = "";
+    try{
+      const endpoint = plan === "premium" ? "/api/stripe-portal" : "/api/criar-checkout";
+      const resp = await authedFetch(endpoint, { method: "POST" });
+      const data = await resp.json();
+      if(!resp.ok || !data.url){
+        fb.innerHTML = `<div class="feedback bad">${data.error || "Não foi possível continuar agora."}</div>`;
+        btn.disabled = false;
+        btn.textContent = originalText;
+        return;
+      }
+      window.location.href = data.url;
+    }catch(e){
+      console.error(e);
+      fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  };
 }
 
 function initReminderToggle(){

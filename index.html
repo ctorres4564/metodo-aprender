@@ -44,6 +44,8 @@
     <code>http://localhost:8000</code>.
   </div>
 
+  <div id="subscription-feedback"></div>
+
   <div class="panel">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <h2 class="section-title" style="margin:0;">🗂️ Meus Módulos</h2>
@@ -180,10 +182,27 @@ async function loadUserModules(){
   }
 }
 
+function showSubscriptionFeedback(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("assinatura");
+  if(!status) return;
+  const box = document.getElementById("subscription-feedback");
+  if(status === "sucesso"){
+    box.innerHTML = `<div class="feedback ok" style="margin-bottom:14px;">🎉 Assinatura confirmada! Pode levar alguns segundos para o plano Premium aparecer — se não atualizar, recarregue a página em instantes.</div>`;
+  } else if(status === "cancelada"){
+    box.innerHTML = `<div class="feedback bad" style="margin-bottom:14px;">Checkout cancelado — nenhuma cobrança foi feita. Você pode tentar assinar novamente quando quiser, na aba Progresso de qualquer módulo.</div>`;
+  }
+  // Remove o parâmetro da URL pra não repetir a mensagem se a página for recarregada.
+  params.delete("assinatura");
+  const cleanUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+  window.history.replaceState({}, "", cleanUrl);
+}
+
 initAuthGate(()=>{
   bindLogoutButton();
   init();
   loadUserModules();
+  showSubscriptionFeedback();
 });
 </script>
 </body>

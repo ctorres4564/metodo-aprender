@@ -39,5 +39,12 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'remindersEnabled']);
     }
+
+    // Contador mensal de uso de IA (ai_usage/{uid}_{ano-mes}). Só leitura — quem
+    // escreve é sempre o servidor (Admin SDK, que ignora estas regras). Leitura
+    // é usada pra mostrar "quantas gerações você já usou este mês" na tela.
+    match /ai_usage/{docId} {
+      allow read: if request.auth != null && docId.matches(request.auth.uid + '_.*');
+    }
   }
 }

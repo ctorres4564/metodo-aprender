@@ -114,6 +114,18 @@ window.AppDB = {
     const ref = doc(db, "users", uid);
     await setDoc(ref, data, { merge: true });
     return true;
+  },
+
+  // Uso de IA do mês corrente (contador gravado pelo servidor em api/_lib/usage.js).
+  // Só leitura — usado pra mostrar "X/Y gerações usadas este mês" na tela.
+  async getUserUsage(){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return null;
+    const d = new Date();
+    const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+    const ref = doc(db, "ai_usage", `${uid}_${monthKey}`);
+    const snap = await getDoc(ref);
+    return snap.exists() ? snap.data() : { count: 0 };
   }
 };
 

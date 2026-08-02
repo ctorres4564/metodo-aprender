@@ -165,7 +165,7 @@ A analogia gerada fica salva no progresso da pessoa (por conceito), então ela s
 
 Todas as funções que chamam a OpenRouter (`avaliar-explicacao`, `gerar-modulo`, `localizar-secao`, `gerar-analogia`) agora exigem login: o servidor verifica o token do Firebase de quem está chamando (`api/_lib/usage.js`, usando o Firebase Admin SDK) antes de gastar qualquer crédito de IA. Sem isso, qualquer pessoa sem conta poderia consumir créditos livremente.
 
-Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", único plano que existe por enquanto). O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). A estrutura já reconhece um campo `plan` no documento `users/{uid}` — quando existir cobrança de verdade (Stripe), o webhook só precisa gravar `plan: "premium"` nesse documento que o limite maior passa a valer automaticamente, sem mexer neste código de novo.
+Cada pessoa tem um limite mensal de gerações: 40/mês no plano "free", 400/mês no plano "premium". O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). O campo `plan` no documento `users/{uid}` é quem decide o limite — e agora é mantido automaticamente pelo webhook da Stripe (ver seção abaixo), sem precisar mexer neste código.
 
 **Configuração obrigatória (uma vez só), além do que já existia:**
 
@@ -176,6 +176,31 @@ Cada pessoa tem um limite mensal de gerações (hoje: 40/mês no plano "free", �
 5. Publique de novo (`vercel --prod`) — esse deploy também vai instalar a nova dependência `firebase-admin` (adicionada em `package.json`) automaticamente.
 
 Sem essa variável configurada, as 4 funções de IA passam a responder com erro claro (em vez de falhar silenciosamente ou funcionar sem controle de custo).
+
+## Cobrança real com Stripe (Fase 2)
+
+Plano Premium: **R$19,90/mês**, com **7 dias grátis** de teste antes da primeira cobrança. Desbloqueia 400 gerações de IA/mês (contra 40/mês no plano Free) — por enquanto essa é a única diferença entre os planos.
+
+Como funciona:
+1. Na aba **Progresso** (dentro de qualquer módulo), o painel "💎 Plano" mostra o plano atual e quantas gerações de IA já foram usadas no mês, com um botão "✨ Assinar Premium".
+2. O botão chama `api/criar-checkout.js`, que cria uma sessão de **Stripe Checkout** (página de pagamento hospedada pela própria Stripe — nenhum dado de cartão passa pelo nosso servidor) e redireciona a pessoa pra lá.
+3. Ao concluir o pagamento, a Stripe chama `api/stripe-webhook.js` diretamente (sem passar pelo navegador), que grava `plan: "premium"` em `users/{uid}` — o limite maior de IA passa a valer na hora seguinte, sem precisar de mais nada.
+4. Quem já é Premium vê o mesmo botão como "⚙️ Gerenciar assinatura", que abre o **Billing Portal** da Stripe (`api/stripe-portal.js`) — de lá dá pra trocar cartão, ver faturas ou cancelar a qualquer momento. Ao cancelar, o webhook volta o `plan` pra `"free"` automaticamente.
+
+**Configuração obrigatória (uma vez só):**
+
+1. Crie uma conta em [dashboard.stripe.com](https://dashboard.stripe.com) (ou use uma que já tenha).
+2. **Criar o produto/preço:** Stripe Dashboard → **Produtos** → "Adicionar produto" → nome "Método Aprender Premium" → preço recorrente de R$19,90, cobrança **Mensal**. Depois de salvar, copie o **ID do preço** (começa com `price_...`, não o ID do produto).
+3. **Pegar a chave secreta:** Dashboard → **Desenvolvedores → Chaves de API** → copie a "Chave secreta" (começa com `sk_test_...` em modo de teste, ou `sk_live_...` em produção).
+4. No painel da Vercel → **Settings → Environment Variables**, crie:
+   - `STRIPE_SECRET_KEY` → a chave do passo 3.
+   - `STRIPE_PRICE_ID` → o ID do preço do passo 2.
+5. **Criar o webhook:** Dashboard → **Desenvolvedores → Webhooks** → "Adicionar endpoint" → URL: `https://metodo-aprender-ten.vercel.app/api/stripe-webhook` → selecione os eventos: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Depois de criar, copie o **"Signing secret"** do endpoint (começa com `whsec_...`).
+6. Volte na Vercel e crie mais uma variável: `STRIPE_WEBHOOK_SECRET` → o valor do passo 5.
+7. Publique de novo (`vercel --prod`) — esse deploy também instala a nova dependência `stripe` (adicionada em `package.json`) automaticamente.
+8. No [Firebase Console](https://console.firebase.google.com) → Firestore Database → Regras, cole o `firestore.rules.txt` atualizado (adiciona permissão de leitura do próprio contador `ai_usage`, usado pra mostrar a barra de uso na tela) e publique.
+
+**Testando sem cobrar de verdade:** enquanto `STRIPE_SECRET_KEY` for uma chave de teste (`sk_test_...`), nenhum pagamento real acontece — a Stripe disponibiliza [números de cartão de teste](https://docs.stripe.com/testing) (ex: `4242 4242 4242 4242`, qualquer validade futura e CVC) pra simular o fluxo inteiro, incluindo o período de teste grátis. Só troque pra chave `sk_live_...` (e crie um novo webhook apontando pra ela, já que webhooks de teste e produção são separados na Stripe) quando quiser começar a cobrar de verdade.
 
 ## Repetição espaçada com FSRS
 
@@ -221,9 +246,12 @@ O layout é mobile-first: no desktop a navegação aparece como abas no topo; em
 - `StorageAdapter` isolado (`assets/storage.js`): hoje já fala com o Firestore (progresso por usuário), com fallback automático para localStorage.
 - **Autenticação real** (Firebase Auth): criação de conta, login e recuperação de senha por e-mail, com progresso individualizado e sincronizado entre dispositivos.
 
-**O que falta para ser, de fato, um produto de assinatura:**
-- **Cobrança/paywall** (ex: Stripe) para de fato bloquear módulos `premium` até a assinatura ser confirmada — hoje o bloqueio no catálogo é só visual (cosmético), não impede o acesso ao arquivo se alguém souber a URL direta.
+**Já pronto (Fase 2):**
+- **Cobrança recorrente de verdade via Stripe** (ver seção "Cobrança real com Stripe" acima) — checkout, webhook e portal de gerenciamento/cancelamento, com o plano `premium` desbloqueando um limite maior de gerações por IA automaticamente.
+
+**O que ainda falta para ser um produto de assinatura mais completo:**
 - **Domínio próprio** (em vez de `*.vercel.app`), opcional mas recomendável para transmitir mais confiança a quem for pagar.
-- Eventualmente, um painel administrativo para gerenciar usuários/assinaturas fora do console do Firebase.
+- Eventualmente, um painel administrativo para gerenciar usuários/assinaturas fora do console do Firebase/Stripe.
+- Se no futuro existirem módulos exclusivos para assinantes (hoje não existem — a única diferença de plano é o limite de IA), seria preciso também bloquear o acesso ao conteúdo desses módulos no servidor, não só escondê-los visualmente no catálogo.
 
 Esses itens envolvem decisões de negócio (qual provedor de cobrança, qual modelo de preço, etc.) que vale conversarmos antes de implementar.
