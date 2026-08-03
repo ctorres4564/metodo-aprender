@@ -158,7 +158,7 @@ Como funciona:
 
 Toda essa Biblioteca (criar material, atualizar status, registrar módulo gerado, excluir) é servida por uma única função serverless, `api/material.js`, que despacha pelo campo `action` no corpo da requisição (`create`, `updateStatus`, `registerModule`, `delete`) — isso mantém o projeto dentro do limite de 12 Serverless Functions do plano Hobby da Vercel.
 
-**O que esta etapa não inclui (de propósito, para manter o escopo pequeno):** leitor de PDF dentro do app, destaques/anotações no texto, busca dentro dos materiais, e histórico de leitura. A Biblioteca hoje serve só para reabrir e gerar módulos — não para ler o livro.
+**O que esta etapa não inclui (de propósito, para manter o escopo pequeno):** busca dentro dos materiais e histórico de leitura. O leitor de PDF com destaques e anotações foi implementado na Etapa 2 (ver seção "Leitor de PDF com destaques e anotações" abaixo).
 
 **Escritas administrativas protegidas:** o documento principal de cada material (`materials/{id}`) só é escrito pelo servidor (`api/material-*.js`, com o Admin SDK) — o navegador só tem permissão de leitura. Isso impede que alguém altere campos como `status`, `generatedModuleCount` ou `ownerId` direto pelo console do navegador. Já a subcoleção de páginas (texto) e o PDF no Storage são escritos direto pelo cliente (evita passar arquivos grandes por uma função serverless, que tem limite de tamanho de corpo), protegidos pelas regras (`firestore.rules.txt` e `storage.rules.txt`), que checam a cada leitura/escrita se quem está pedindo é o dono do material.
 
@@ -173,6 +173,38 @@ Toda essa Biblioteca (criar material, atualizar status, registrar módulo gerado
 - Copie o link "Usar" desse material (contém `?material=<id>`), faça logout, entre com a Conta B e cole o mesmo link — a página deve mostrar "material não encontrado, ou você não tem permissão" (bloqueado pela regra de leitura do Firestore).
 - Ainda com a Conta B, abra o Console do navegador (F12) e tente chamar `window.AppDB.getMaterial("<id-da-conta-A>")` — deve retornar `null`, nunca os dados do material de outra pessoa.
 - Confirme que excluir um material (Conta A) não afeta os módulos já criados a partir dele em "Meus Módulos" (eles continuam lá, só o material some da Biblioteca).
+
+### Leitor de PDF com destaques e anotações (Etapa 2)
+
+Materiais importados como PDF (não texto colado) ganham um botão "📄 Abrir PDF" em "Minha Biblioteca", que abre `leitor.html?material=<id>` — um leitor dentro do próprio app (não abre o PDF em nova aba nem baixa o arquivo), com navegação entre páginas, zoom (+/−, ajustar largura/altura), destaques coloridos e anotações vinculadas a um trecho.
+
+**Como o PDF é aberto sem baixar o arquivo inteiro:** o leitor pede uma URL de download temporária ao Firebase Storage (`getDownloadURL`, só funciona para o dono do material) e passa essa URL para o `PDF.js` (`pdfjsLib.getDocument({ url })`), que busca só os bytes das páginas necessárias via *HTTP Range requests* — não carrega o PDF inteiro de uma vez, e só a página atual é desenhada em tela (nunca todas simultaneamente). Essa URL contém um token de acesso na própria query string (é assim que o Storage autoriza o download); por isso ela **nunca é salva** em nenhum lugar (Firestore, `localStorage`, log do servidor) — é gerada em memória a cada vez que a página é aberta e descartada ao sair dela.
+
+**Seleção, destaque e anotação:** o texto do PDF é reproduzido numa camada invisível e selecionável sobre o canvas (`pdfjsLib.TextLayer`, API oficial do PDF.js desde a versão 4.3, confirmada nesta versão — 6.1.200 — antes da implementação). Ao selecionar um trecho, aparece um menu com 4 cores (amarelo, verde, azul, rosa) — clicar numa cor cria o destaque; um botão "📝 Anotação" cria (se ainda não existir) o destaque e abre um editor de texto vinculado a ele. Destaques já existentes podem ter a cor trocada ou ser removidos clicando neles. A posição de cada destaque é salva como proporção (0–1) da página, não em pixels fixos — assim ele continua correto em qualquer nível de zoom.
+
+**Persistência (Firestore, nada em `localStorage`):**
+```
+materials/{materialId}/highlights/{highlightId}
+  id, materialId, ownerId, pageNumber, text, color,
+  position: { rects: [{xRatio,yRatio,wRatio,hRatio}, ...] },
+  createdAt, updatedAt
+
+materials/{materialId}/notes/{noteId}
+  id, materialId, highlightId, ownerId, pageNumber, text,
+  createdAt, updatedAt
+```
+Como não há nenhum campo administrativo nesses documentos (diferente do documento principal `materials/{id}`), destaques e anotações são escritos **direto pelo cliente** — sem passar por nenhuma função serverless — protegidos só pelas regras do Firestore. Isso foi uma decisão deliberada para não criar mais nenhuma Serverless Function (o projeto já está em 11 de 12 no plano Hobby da Vercel, ver seção da Biblioteca acima).
+
+Excluir um destaque também exclui, em cascata, as anotações vinculadas a ele (senão ficariam "órfãs", sem trecho de referência).
+
+**Regras de segurança:** cada documento de destaque/nota precisa ter `ownerId == uid` de quem está pedindo — mas isso sozinho não é suficiente, porque um campo enviado pelo próprio cliente pode ser forjado. Por isso toda regra (`create`, `update`, `delete`) também confere, via `get()`, que o **material pai** (`materials/{materialId}`) realmente pertence a esse mesmo `uid`, antes de autorizar. Na criação, exige-se também que `materialId` no documento bata com o ID do material na URL da requisição. Na atualização, campos administrativos/estruturais (`ownerId`, `materialId`, `createdAt`, e `highlightId` no caso das notas) são travados — só é permitido alterar `color`/`position` (destaque) ou `text`/`updatedAt` (nota). Veja o conteúdo completo em `firestore.rules.txt`.
+
+**Configuração obrigatória (uma vez só), além do que já existia:**
+
+1. No [Firebase Console](https://console.firebase.google.com) → **Firestore Database → Regras**, cole o `firestore.rules.txt` atualizado (adiciona as regras de `materials/{id}/highlights` e `materials/{id}/notes`) e publique. Não é preciso mexer nas regras do Storage — a leitura do PDF já usa a mesma regra de dono criada na Etapa 1.
+2. Publique de novo (`vercel --prod`) para levar `leitor.html` ao ar.
+
+**Limitações conhecidas desta etapa:** não é possível re-selecionar um trecho de texto que já está sob um destaque (para ajustar a seleção, remova o destaque e destaque de novo); o leitor foi otimizado para desktop/tablet — no celular a barra lateral empilha abaixo do PDF em vez de ficar ao lado, funcional mas não polida; busca dentro do PDF, sincronização com módulos gerados e histórico de leitura ficam para etapas futuras (fora do escopo desta).
 
 ### OCR para PDFs escaneados (imagem, sem texto real)
 
@@ -241,7 +273,7 @@ Implementado em `assets/engine.js` (função `fsrsUpdate` e as funções auxilia
 
 ## Instalável como app (PWA)
 
-O site pode ser "instalado" na tela inicial do celular ou como app de desktop (Chrome/Edge), funcionando como um app nativo (ícone próprio, sem barra de endereço). Isso é feito com `manifest.json` + `sw.js` (service worker) + `assets/pwa.js`, presentes em todas as páginas principais (`index.html`, `app.html`, `criar-modulo.html`, `importar-livro.html`, `biblioteca.html`).
+O site pode ser "instalado" na tela inicial do celular ou como app de desktop (Chrome/Edge), funcionando como um app nativo (ícone próprio, sem barra de endereço). Isso é feito com `manifest.json` + `sw.js` (service worker) + `assets/pwa.js`, presentes em todas as páginas principais (`index.html`, `app.html`, `criar-modulo.html`, `importar-livro.html`, `biblioteca.html`, `leitor.html`).
 
 O service worker guarda em cache só o "shell" do app (HTML/CSS/JS/ícones) — nunca dados dinâmicos (progresso, conteúdo de módulos, respostas de IA), que sempre vêm direto da rede. Estratégia "network-first": sempre busca a versão mais nova primeiro, e só usa o cache se não houver conexão.
 

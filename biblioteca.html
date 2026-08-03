@@ -154,6 +154,7 @@ async function loadMaterials(){
         ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${m.processingError.replace(/</g,"&lt;")}</div>` : ""}
         <div class="material-actions">
           ${m.status === "ready" ? `<a class="btn secondary" style="text-decoration:none;" href="importar-livro.html?material=${encodeURIComponent(m.id)}">📖 Usar</a>` : ""}
+          ${m.status === "ready" && m.sourceType === "pdf" ? `<a class="btn secondary" style="text-decoration:none;" href="leitor.html?material=${encodeURIComponent(m.id)}">📄 Abrir PDF</a>` : ""}
           <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
         </div>
       `;

@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Método Aprender">
+<title>Leitor de PDF</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="reader-wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar" style="position:static;">
+      <div class="brand">
+        <a class="back" href="biblioteca.html" title="Voltar à Biblioteca">←</a>
+        <div class="logo">📖</div>
+        <div>
+          <h1 id="reader-title">Leitor de PDF</h1>
+          <p>Destaques e anotações ficam salvos na sua conta</p>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div id="reader-fatal" style="display:none;"></div>
+
+    <div id="reader-shell" class="reader-shell" style="display:none;">
+      <div class="reader-toolbar">
+        <div class="toolbar-group">
+          <button class="btn ghost" id="prev-page-btn" title="Página anterior">◀</button>
+          <span class="page-indicator" id="page-indicator">Página 1 de 1</span>
+          <button class="btn ghost" id="next-page-btn" title="Próxima página">▶</button>
+        </div>
+        <div class="toolbar-group">
+          <input type="number" id="goto-page-input" class="page-input" min="1" value="1">
+          <button class="btn ghost" id="goto-page-btn">Ir</button>
+        </div>
+        <div class="toolbar-group">
+          <button class="btn ghost" id="zoom-out-btn" title="Diminuir zoom">−</button>
+          <button class="btn ghost" id="zoom-in-btn" title="Aumentar zoom">+</button>
+          <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura">↔ Largura</button>
+          <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura">↕ Altura</button>
+        </div>
+      </div>
+
+      <div class="reader-main">
+        <div class="pdf-viewer" id="pdf-viewer">
+          <div class="pdf-page-container" id="pdf-page-container">
+            <canvas id="pdf-canvas"></canvas>
+            <div class="highlight-layer" id="highlight-layer"></div>
+            <div class="textLayer" id="text-layer"></div>
+
+            <div class="selection-menu" id="selection-menu" style="display:none;">
+              <button class="swatch" data-color="yellow" style="background:#f4b942;" title="Amarelo"></button>
+              <button class="swatch" data-color="green" style="background:#6fcf7d;" title="Verde"></button>
+              <button class="swatch" data-color="blue" style="background:#4fa3d1;" title="Azul"></button>
+              <button class="swatch" data-color="pink" style="background:#e07fb1;" title="Rosa"></button>
+              <span class="menu-sep"></span>
+              <button class="btn secondary menu-btn" id="add-note-btn">📝 Anotação</button>
+            </div>
+
+            <div class="selection-menu" id="highlight-menu" style="display:none;">
+              <button class="swatch" data-color="yellow" style="background:#f4b942;" title="Amarelo"></button>
+              <button class="swatch" data-color="green" style="background:#6fcf7d;" title="Verde"></button>
+              <button class="swatch" data-color="blue" style="background:#4fa3d1;" title="Azul"></button>
+              <button class="swatch" data-color="pink" style="background:#e07fb1;" title="Rosa"></button>
+              <span class="menu-sep"></span>
+              <button class="btn secondary menu-btn" id="highlight-note-btn">📝 Anotação</button>
+              <button class="btn ghost menu-btn" id="highlight-delete-btn" style="color:var(--danger);">🗑️</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="reader-sidebar">
+          <div class="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="highlights">🖍️ Destaques</button>
+            <button class="sidebar-tab" data-tab="notes">📝 Anotações</button>
+          </div>
+          <div class="sidebar-panel" id="sidebar-highlights"></div>
+          <div class="sidebar-panel" id="sidebar-notes" style="display:none;"></div>
+        </aside>
+      </div>
+    </div>
+
+  </div><!-- /#app-root -->
+</div>
+
+<div class="note-editor-backdrop" id="note-editor-backdrop" style="display:none;">
+  <div class="note-editor">
+    <h3 style="margin:0 0 10px; font-size:15px;" id="note-editor-title">📝 Anotação</h3>
+    <p class="note-editor-excerpt" id="note-editor-excerpt"></p>
+    <textarea id="note-editor-text" class="explain-textarea" rows="5" placeholder="Escreva sua anotação sobre este trecho..."></textarea>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button class="btn" id="note-editor-save" style="flex:1;">Salvar</button>
+      <button class="btn ghost" id="note-editor-cancel">Cancelar</button>
+      <button class="btn ghost" id="note-editor-delete" style="display:none; color:var(--danger);">🗑️ Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="assets/pwa.js"></script>
+<script type="module">
+  import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
+<script>
+const COLOR_HEX = {
+  yellow: "#f4b942",
+  green: "#6fcf7d",
+  blue: "#4fa3d1",
+  pink: "#e07fb1"
+};
+
+let materialId = null;
+let material = null;
+let pdfDoc = null;
+let currentPage = 1;
+let totalPages = 1;
+let currentScale = 1;
+let currentViewport = null;
+let highlights = [];
+let notes = [];
+
+let pendingSelectionRange = null;
+let pendingSelectionText = "";
+let activeHighlightId = null;   // destaque cujo menu está aberto
+let editingNoteId = null;       // nota sendo editada (null = criando nova)
+let editingHighlightId = null;  // destaque ao qual a nota em edição pertence
+
+function escapeHtml(str){
+  return String(str || "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function showFatalError(msg){
+  document.getElementById("reader-shell").style.display = "none";
+  const box = document.getElementById("reader-fatal");
+  box.style.display = "block";
+  box.innerHTML = `<div class="feedback bad">${escapeHtml(msg)} <a href="biblioteca.html">Voltar à Biblioteca</a>.</div>`;
+}
+
+async function waitForPdfjs(timeoutMs){
+  const start = Date.now();
+  while(!window["pdfjsLib"]){
+    if(Date.now() - start > timeoutMs) return false;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return true;
+}
+
+/* =====================================================================
+   RENDERIZAÇÃO DA PÁGINA
+   ===================================================================== */
+async function renderPage(num){
+  const page = await pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale: currentScale });
+  currentViewport = viewport;
+  currentPage = num;
+
+  const container = document.getElementById("pdf-page-container");
+  container.style.width = viewport.width + "px";
+  container.style.height = viewport.height + "px";
+
+  const canvas = document.getElementById("pdf-canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  const textLayerDiv = document.getElementById("text-layer");
+  textLayerDiv.innerHTML = "";
+  textLayerDiv.style.width = viewport.width + "px";
+  textLayerDiv.style.height = viewport.height + "px";
+  const textContent = await page.getTextContent();
+  const textLayer = new pdfjsLib.TextLayer({
+    textContentSource: textContent,
+    container: textLayerDiv,
+    viewport
+  });
+  await textLayer.render();
+
+  renderHighlightsForPage(num, viewport);
+  updatePageIndicator();
+  hideSelectionMenu();
+  hideHighlightMenu();
+}
+
+function updatePageIndicator(){
+  document.getElementById("page-indicator").textContent = `Página ${currentPage} de ${totalPages}`;
+  document.getElementById("goto-page-input").value = currentPage;
+  document.getElementById("prev-page-btn").disabled = currentPage <= 1;
+  document.getElementById("next-page-btn").disabled = currentPage >= totalPages;
+}
+
+async function goToPage(n){
+  n = Math.max(1, Math.min(totalPages, Math.round(n)));
+  if(n === currentPage && currentViewport) return;
+  await renderPage(n);
+}
+
+/* =====================================================================
+   ZOOM
+   ===================================================================== */
+async function computeFitWidthScale(){
+  const page = await pdfDoc.getPage(currentPage);
+  const unscaled = page.getViewport({ scale: 1 });
+  const containerWidth = document.getElementById("pdf-viewer").clientWidth - 44;
+  currentScale = Math.max(0.3, containerWidth / unscaled.width);
+}
+
+async function computeFitHeightScale(){
+  const page = await pdfDoc.getPage(currentPage);
+  const unscaled = page.getViewport({ scale: 1 });
+  const containerHeight = document.getElementById("pdf-viewer").clientHeight - 44;
+  currentScale = Math.max(0.3, containerHeight / unscaled.height);
+}
+
+document.getElementById("zoom-in-btn").addEventListener("click", async ()=>{
+  currentScale = Math.min(currentScale * 1.15, 4);
+  await renderPage(currentPage);
+});
+document.getElementById("zoom-out-btn").addEventListener("click", async ()=>{
+  currentScale = Math.max(currentScale / 1.15, 0.3);
+  await renderPage(currentPage);
+});
+document.getElementById("fit-width-btn").addEventListener("click", async ()=>{
+  await computeFitWidthScale();
+  await renderPage(currentPage);
+});
+document.getElementById("fit-height-btn").addEventListener("click", async ()=>{
+  await computeFitHeightScale();
+  await renderPage(currentPage);
+});
+
+/* =====================================================================
+   NAVEGAÇÃO
+   ===================================================================== */
+document.getElementById("prev-page-btn").addEventListener("click", ()=> goToPage(currentPage - 1));
+document.getElementById("next-page-btn").addEventListener("click", ()=> goToPage(currentPage + 1));
+document.getElementById("goto-page-btn").addEventListener("click", ()=>{
+  const n = parseInt(document.getElementById("goto-page-input").value, 10);
+  if(!isNaN(n)) goToPage(n);
+});
+document.getElementById("goto-page-input").addEventListener("keydown", (ev)=>{
+  if(ev.key === "Enter"){
+    const n = parseInt(ev.target.value, 10);
+    if(!isNaN(n)) goToPage(n);
+  }
+});
+
+/* =====================================================================
+   DESTAQUES — renderização visual na página atual
+   ===================================================================== */
+function renderHighlightsForPage(pageNum, viewport){
+  const layer = document.getElementById("highlight-layer");
+  layer.innerHTML = "";
+  layer.style.width = viewport.width + "px";
+  layer.style.height = viewport.height + "px";
+
+  highlights.filter(h => h.pageNumber === pageNum).forEach(h=>{
+    const rects = (h.position && h.position.rects) || [];
+    rects.forEach(r=>{
+      const div = document.createElement("div");
+      div.className = "pdf-highlight";
+      div.style.left = (r.xRatio * viewport.width) + "px";
+      div.style.top = (r.yRatio * viewport.height) + "px";
+      div.style.width = (r.wRatio * viewport.width) + "px";
+      div.style.height = (r.hRatio * viewport.height) + "px";
+      div.style.background = COLOR_HEX[h.color] || COLOR_HEX.yellow;
+      div.dataset.highlightId = h.id;
+      div.title = "Clique para opções deste destaque";
+      div.addEventListener("click", (ev)=>{
+        ev.stopPropagation();
+        openHighlightMenu(h.id, div);
+      });
+      layer.appendChild(div);
+    });
+    if(rects.length && notes.some(n => n.highlightId === h.id)){
+      const dot = document.createElement("span");
+      dot.className = "note-dot";
+      dot.textContent = "📝";
+      const last = rects[rects.length - 1];
+      dot.style.left = ((last.xRatio + last.wRatio) * viewport.width) + "px";
+      dot.style.top = (last.yRatio * viewport.height) + "px";
+      layer.appendChild(dot);
+    }
+  });
+}
+
+function flashHighlight(highlightId){
+  const el = document.querySelector(`.pdf-highlight[data-highlight-id="${highlightId}"]`);
+  if(!el) return;
+  el.classList.add("flash");
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  setTimeout(()=> el.classList.remove("flash"), 2000);
+}
+
+/* =====================================================================
+   SELEÇÃO DE TEXTO → menu de destacar / anotar
+   ===================================================================== */
+function rangeToRatioRects(range){
+  const containerRect = document.getElementById("pdf-page-container").getBoundingClientRect();
+  return Array.from(range.getClientRects())
+    .filter(r => r.width > 0 && r.height > 0)
+    .map(r => ({
+      xRatio: (r.left - containerRect.left) / currentViewport.width,
+      yRatio: (r.top - containerRect.top) / currentViewport.height,
+      wRatio: r.width / currentViewport.width,
+      hRatio: r.height / currentViewport.height
+    }));
+}
+
+function positionMenu(menuEl, clientRect){
+  const containerRect = document.getElementById("pdf-page-container").getBoundingClientRect();
+  menuEl.style.left = Math.max(0, clientRect.left - containerRect.left) + "px";
+  menuEl.style.top = Math.max(0, clientRect.top - containerRect.top - 44) + "px";
+  menuEl.style.display = "flex";
+}
+
+function hideSelectionMenu(){
+  document.getElementById("selection-menu").style.display = "none";
+  pendingSelectionRange = null;
+  pendingSelectionText = "";
+}
+function hideHighlightMenu(){
+  document.getElementById("highlight-menu").style.display = "none";
+  activeHighlightId = null;
+}
+
+function openHighlightMenu(highlightId, el){
+  hideSelectionMenu();
+  activeHighlightId = highlightId;
+  const menu = document.getElementById("highlight-menu");
+  positionMenu(menu, el.getBoundingClientRect());
+}
+
+document.getElementById("pdf-viewer").addEventListener("mouseup", ()=>{
+  setTimeout(()=>{
+    const sel = window.getSelection();
+    if(!sel || sel.isCollapsed || !sel.toString().trim()){
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const textLayerDiv = document.getElementById("text-layer");
+    if(!textLayerDiv.contains(range.commonAncestorContainer)){
+      return;
+    }
+    hideHighlightMenu();
+    pendingSelectionRange = range;
+    pendingSelectionText = sel.toString();
+    positionMenu(document.getElementById("selection-menu"), range.getBoundingClientRect());
+  }, 0);
+});
+
+document.getElementById("pdf-viewer").addEventListener("mousedown", (ev)=>{
+  if(ev.target.closest(".selection-menu")) return;
+  hideHighlightMenu();
+});
+
+/* ---- criar destaque (clique numa cor do menu de seleção) ---- */
+document.querySelectorAll("#selection-menu .swatch").forEach(btn=>{
+  btn.addEventListener("click", async ()=>{
+    if(!pendingSelectionRange) return;
+    const color = btn.dataset.color;
+    const rects = rangeToRatioRects(pendingSelectionRange);
+    const text = pendingSelectionText;
+    hideSelectionMenu();
+    window.getSelection().removeAllRanges();
+    if(rects.length === 0) return;
+    try{
+      const h = await window.AppDB.saveHighlight(materialId, {
+        pageNumber: currentPage,
+        text,
+        color,
+        position: { rects }
+      });
+      highlights.push(h);
+      renderHighlightsForPage(currentPage, currentViewport);
+      renderSidebarHighlights();
+    }catch(e){
+      console.error(e);
+      alert("Não foi possível salvar o destaque agora. Tente novamente.");
+    }
+  });
+});
+
+/* ---- trocar cor de um destaque existente ---- */
+document.querySelectorAll("#highlight-menu .swatch").forEach(btn=>{
+  btn.addEventListener("click", async ()=>{
+    if(!activeHighlightId) return;
+    const color = btn.dataset.color;
+    const id = activeHighlightId;
+    hideHighlightMenu();
+    try{
+      await window.AppDB.updateHighlight(materialId, id, { color });
+      const h = highlights.find(x => x.id === id);
+      if(h) h.color = color;
+      renderHighlightsForPage(currentPage, currentViewport);
+      renderSidebarHighlights();
+    }catch(e){
+      console.error(e);
+      alert("Não foi possível mudar a cor agora. Tente novamente.");
+    }
+  });
+});
+
+/* ---- remover destaque (+ notas vinculadas, em cascata) ---- */
+document.getElementById("highlight-delete-btn").addEventListener("click", async ()=>{
+  if(!activeHighlightId) return;
+  if(!confirm("Remover este destaque? As anotações vinculadas a ele também serão excluídas.")) return;
+  const id = activeHighlightId;
+  hideHighlightMenu();
+  try{
+    await window.AppDB.deleteHighlight(materialId, id);
+    highlights = highlights.filter(h => h.id !== id);
+    notes = notes.filter(n => n.highlightId !== id);
+    renderHighlightsForPage(currentPage, currentViewport);
+    renderSidebarHighlights();
+    renderSidebarNotes();
+  }catch(e){
+    console.error(e);
+    alert("Não foi possível remover o destaque agora. Tente novamente.");
+  }
+});
+
+/* =====================================================================
+   ANOTAÇÕES — editor
+   ===================================================================== */
+function openNoteEditor({ highlightId, noteId, excerpt, text }){
+  editingHighlightId = highlightId;
+  editingNoteId = noteId || null;
+  document.getElementById("note-editor-title").textContent = editingNoteId ? "📝 Editar anotação" : "📝 Nova anotação";
+  document.getElementById("note-editor-excerpt").textContent = excerpt ? `"${excerpt.slice(0, 160)}"` : "";
+  document.getElementById("note-editor-text").value = text || "";
+  document.getElementById("note-editor-delete").style.display = editingNoteId ? "inline-block" : "none";
+  document.getElementById("note-editor-backdrop").style.display = "flex";
+  document.getElementById("note-editor-text").focus();
+}
+function closeNoteEditor(){
+  document.getElementById("note-editor-backdrop").style.display = "none";
+  editingNoteId = null;
+  editingHighlightId = null;
+}
+
+/* ---- "Anotação" a partir de uma seleção nova (cria o destaque primeiro) ---- */
+document.getElementById("add-note-btn").addEventListener("click", async ()=>{
+  if(!pendingSelectionRange) return;
+  const rects = rangeToRatioRects(pendingSelectionRange);
+  const text = pendingSelectionText;
+  hideSelectionMenu();
+  window.getSelection().removeAllRanges();
+  if(rects.length === 0) return;
+  try{
+    const h = await window.AppDB.saveHighlight(materialId, {
+      pageNumber: currentPage,
+      text,
+      color: "yellow",
+      position: { rects }
+    });
+    highlights.push(h);
+    renderHighlightsForPage(currentPage, currentViewport);
+    renderSidebarHighlights();
+    openNoteEditor({ highlightId: h.id, excerpt: h.text });
+  }catch(e){
+    console.error(e);
+    alert("Não foi possível criar o destaque para a anotação agora. Tente novamente.");
+  }
+});
+
+/* ---- "Anotação" a partir do menu de um destaque já existente ---- */
+document.getElementById("highlight-note-btn").addEventListener("click", ()=>{
+  if(!activeHighlightId) return;
+  const h = highlights.find(x => x.id === activeHighlightId);
+  const existing = notes.find(n => n.highlightId === activeHighlightId);
+  hideHighlightMenu();
+  openNoteEditor({
+    highlightId: activeHighlightId,
+    noteId: existing ? existing.id : null,
+    excerpt: h ? h.text : "",
+    text: existing ? existing.text : ""
+  });
+});
+
+document.getElementById("note-editor-cancel").addEventListener("click", closeNoteEditor);
+document.getElementById("note-editor-backdrop").addEventListener("click", (ev)=>{
+  if(ev.target.id === "note-editor-backdrop") closeNoteEditor();
+});
+
+document.getElementById("note-editor-save").addEventListener("click", async ()=>{
+  const text = document.getElementById("note-editor-text").value.trim();
+  if(!text){ alert("Escreva algo antes de salvar."); return; }
+  try{
+    if(editingNoteId){
+      await window.AppDB.updateNote(materialId, editingNoteId, { text });
+      const n = notes.find(x => x.id === editingNoteId);
+      if(n){ n.text = text; n.updatedAt = Date.now(); }
+    } else {
+      const n = await window.AppDB.saveNote(materialId, {
+        highlightId: editingHighlightId,
+        pageNumber: currentPage,
+        text
+      });
+      notes.push(n);
+    }
+    closeNoteEditor();
+    renderHighlightsForPage(currentPage, currentViewport);
+    renderSidebarNotes();
+  }catch(e){
+    console.error(e);
+    alert("Não foi possível salvar a anotação agora. Tente novamente.");
+  }
+});
+
+document.getElementById("note-editor-delete").addEventListener("click", async ()=>{
+  if(!editingNoteId) return;
+  if(!confirm("Excluir esta anotação?")) return;
+  const id = editingNoteId;
+  try{
+    await window.AppDB.deleteNote(materialId, id);
+    notes = notes.filter(n => n.id !== id);
+    closeNoteEditor();
+    renderHighlightsForPage(currentPage, currentViewport);
+    renderSidebarNotes();
+  }catch(e){
+    console.error(e);
+    alert("Não foi possível excluir a anotação agora. Tente novamente.");
+  }
+});
+
+/* =====================================================================
+   SIDEBAR
+   ===================================================================== */
+document.querySelectorAll(".sidebar-tab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("sidebar-highlights").style.display = tab.dataset.tab === "highlights" ? "block" : "none";
+    document.getElementById("sidebar-notes").style.display = tab.dataset.tab === "notes" ? "block" : "none";
+  });
+});
+
+function renderSidebarHighlights(){
+  const el = document.getElementById("sidebar-highlights");
+  if(highlights.length === 0){
+    el.innerHTML = `<p class="sidebar-empty">Nenhum destaque ainda. Selecione um trecho no PDF e escolha uma cor.</p>`;
+    return;
+  }
+  const sorted = [...highlights].sort((a, b) => (a.pageNumber - b.pageNumber) || (a.createdAt - b.createdAt));
+  el.innerHTML = sorted.map(h => `
+    <div class="sidebar-item" data-page="${h.pageNumber}">
+      <span class="sidebar-color-dot" style="background:${COLOR_HEX[h.color] || COLOR_HEX.yellow};"></span>
+      <div class="sidebar-item-body">
+        <div class="sidebar-item-text">${escapeHtml(h.text).slice(0, 140)}</div>
+        <div class="sidebar-item-meta">Página ${h.pageNumber}</div>
+      </div>
+    </div>
+  `).join("");
+  el.querySelectorAll(".sidebar-item").forEach(item=>{
+    item.addEventListener("click", ()=> goToPage(parseInt(item.dataset.page, 10)));
+  });
+}
+
+function renderSidebarNotes(){
+  const el = document.getElementById("sidebar-notes");
+  if(notes.length === 0){
+    el.innerHTML = `<p class="sidebar-empty">Nenhuma anotação ainda. Selecione um trecho e clique em "📝 Anotação".</p>`;
+    return;
+  }
+  const sorted = [...notes].sort((a, b) => (a.pageNumber - b.pageNumber) || (a.createdAt - b.createdAt));
+  el.innerHTML = sorted.map(n=>{
+    const h = highlights.find(x => x.id === n.highlightId);
+    return `
+      <div class="sidebar-item" data-page="${n.pageNumber}" data-highlight-id="${n.highlightId}">
+        <div class="sidebar-item-body">
+          <div class="sidebar-item-excerpt">${h ? '"' + escapeHtml(h.text).slice(0, 90) + '"' : ""}</div>
+          <div class="sidebar-item-text">${escapeHtml(n.text).slice(0, 160)}</div>
+          <div class="sidebar-item-meta">Página ${n.pageNumber}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+  el.querySelectorAll(".sidebar-item").forEach(item=>{
+    item.addEventListener("click", async ()=>{
+      await goToPage(parseInt(item.dataset.page, 10));
+      flashHighlight(item.dataset.highlightId);
+    });
+  });
+}
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+async function boot(){
+  const params = new URLSearchParams(window.location.search);
+  materialId = params.get("material");
+  if(!materialId){
+    showFatalError("Nenhum material informado.");
+    return;
+  }
+
+  try{
+    material = await window.AppDB.getMaterial(materialId);
+    if(!material){
+      showFatalError("Material não encontrado, ou você não tem permissão para acessá-lo.");
+      return;
+    }
+    if(material.sourceType !== "pdf" || !material.storagePath){
+      showFatalError("Este material não tem um PDF associado (foi importado como texto colado, não como arquivo).");
+      return;
+    }
+    if(material.status !== "ready"){
+      showFatalError("Este material ainda não terminou de ser processado. Volte à Biblioteca em instantes.");
+      return;
+    }
+
+    document.getElementById("reader-title").textContent = material.title || "Leitor de PDF";
+
+    // A URL de download é obtida uma vez, usada em memória pelo PDF.js e
+    // nunca persistida (nem logada) — ver comentário em AppStorage.getMaterialPdfUrl.
+    const [pdfUrl, hs, ns] = await Promise.all([
+      window.AppStorage.getMaterialPdfUrl(material.storagePath),
+      window.AppDB.listHighlights(materialId),
+      window.AppDB.listNotes(materialId)
+    ]);
+    highlights = hs;
+    notes = ns;
+
+    const ready = await waitForPdfjs(5000);
+    if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
+
+    // getDocument com uma URL (em vez de bytes já carregados) permite que o
+    // PDF.js busque só as páginas necessárias por HTTP Range, sem baixar o
+    // arquivo inteiro de uma vez (Firebase Storage aceita Range requests).
+    pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+    totalPages = pdfDoc.numPages;
+
+    document.getElementById("reader-shell").style.display = "block";
+    await computeFitWidthScale();
+    await renderPage(1);
+    renderSidebarHighlights();
+    renderSidebarNotes();
+  }catch(e){
+    console.error(e);
+    showFatalError(e.message || "Não foi possível abrir este material agora.");
+  }
+}
+
+initAuthGate(()=>{
+  bindLogoutButton();
+  boot();
+});
+</script>
+</body>
+</html>

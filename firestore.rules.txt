@@ -66,6 +66,74 @@ service cloud.firestore {
         allow read, write: if request.auth != null
                             && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid;
       }
+
+      // Leitor de PDF (Etapa 2): destaques e anotações, escritos direto pelo
+      // cliente (sem função serverless — não há campo administrativo aqui,
+      // diferente do documento materials/{materialId} em si). Duas camadas
+      // de defesa em toda operação: (1) o próprio documento (highlight ou
+      // nota) precisa ter ownerId == uid de quem está pedindo — não confia
+      // só nisso, porque um campo enviado pelo cliente pode ser forjado;
+      // (2) por isso TAMBÉM verifica, via get(), que o material PAI
+      // realmente pertence a esse mesmo uid — impede que alguém crie um
+      // highlight com seu próprio uid dentro do material de outra pessoa.
+      match /highlights/{highlightId} {
+        allow read: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid;
+
+        allow create: if request.auth != null
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.materialId == materialId
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid;
+
+        // Só cor e posição podem mudar (trocar cor do destaque, ou -no
+        // futuro- ajustar a seleção). ownerId, materialId e createdAt são
+        // imutáveis; o texto destacado também (para editar o trecho, a
+        // pessoa exclui o destaque e cria um novo).
+        allow update: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.materialId == resource.data.materialId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['color', 'position', 'updatedAt']);
+
+        allow delete: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid;
+      }
+
+      match /notes/{noteId} {
+        allow read: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid;
+
+        // Além do material pai, confere também que o highlightId informado
+        // existe DENTRO deste mesmo material e pertence a este mesmo uid —
+        // sem isso, seria possível criar uma nota apontando pra um
+        // highlightId de outro material ou de outra pessoa (a nota ficaria
+        // "solta", sem vínculo real com um trecho que a pessoa realmente
+        // destacou).
+        allow create: if request.auth != null
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.materialId == materialId
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid
+                    && get(/databases/$(database)/documents/materials/$(materialId)/highlights/$(request.resource.data.highlightId)).data.ownerId == request.auth.uid;
+
+        // Só o texto da anotação pode mudar. ownerId, materialId,
+        // highlightId (o trecho ao qual a nota está vinculada) e createdAt
+        // são imutáveis.
+        allow update: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.materialId == resource.data.materialId
+                    && request.resource.data.highlightId == resource.data.highlightId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'updatedAt']);
+
+        allow delete: if request.auth != null
+                    && resource.data.ownerId == request.auth.uid
+                    && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid;
+      }
     }
   }
 }

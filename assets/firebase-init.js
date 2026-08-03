@@ -30,6 +30,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   collection,
   query,
@@ -40,7 +41,8 @@ import {
 import {
   getStorage,
   ref as storageRef,
-  uploadBytes
+  uploadBytes,
+  getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -190,6 +192,109 @@ window.AppDB = {
     const snap = await getDocs(q);
     return snap.docs.map(d => d.data())
       .sort((a, b) => (a.pageNumber - b.pageNumber) || ((a.partNumber || 0) - (b.partNumber || 0)));
+  },
+
+  /* ---- Leitor de PDF: destaques e anotações (Etapa 2) ----
+     Escritos direto pelo cliente (sem função serverless — não há campo
+     administrativo aqui). Protegidos pelas regras em firestore.rules.txt,
+     que exigem ownerId == uid E que o material "pai" também pertença a
+     esse mesmo uid (ver comentário nas regras). O where("ownerId","==",uid)
+     nas consultas abaixo não é só um filtro de conveniência: sem ele, o
+     Firestore recusa a query inteira, porque não consegue garantir de
+     antemão que ela só retornaria documentos permitidos pela regra. */
+  async listHighlights(materialId){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return [];
+    const q = query(collection(db, "materials", materialId, "highlights"), where("ownerId", "==", uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  },
+  async saveHighlight(materialId, data){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const ref = doc(collection(db, "materials", materialId, "highlights"));
+    const now = Date.now();
+    const payload = {
+      id: ref.id,
+      materialId,
+      ownerId: uid,
+      pageNumber: data.pageNumber,
+      text: String(data.text || "").slice(0, 2000),
+      color: data.color || "yellow",
+      position: data.position || { rects: [] },
+      createdAt: now,
+      updatedAt: now
+    };
+    await setDoc(ref, payload);
+    return payload;
+  },
+  // Só cor e posição são aceitos aqui (mesmo conjunto liberado pela regra
+  // de update) — qualquer outro campo passado em "fields" é ignorado.
+  async updateHighlight(materialId, highlightId, fields){
+    const ref = doc(db, "materials", materialId, "highlights", highlightId);
+    const update = { updatedAt: Date.now() };
+    if(fields.color !== undefined) update.color = fields.color;
+    if(fields.position !== undefined) update.position = fields.position;
+    await updateDoc(ref, update);
+    return true;
+  },
+  // Exclui em cascata as anotações vinculadas a esse destaque antes de
+  // excluir o destaque em si — uma nota nunca deve sobreviver "órfã",
+  // sem o trecho ao qual está vinculada.
+  async deleteHighlight(materialId, highlightId){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const notesQ = query(
+      collection(db, "materials", materialId, "notes"),
+      where("ownerId", "==", uid),
+      where("highlightId", "==", highlightId)
+    );
+    const snap = await getDocs(notesQ);
+    if(!snap.empty){
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, "materials", materialId, "highlights", highlightId));
+    return true;
+  },
+
+  async listNotes(materialId){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) return [];
+    const q = query(collection(db, "materials", materialId, "notes"), where("ownerId", "==", uid));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  },
+  async saveNote(materialId, data){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const ref = doc(collection(db, "materials", materialId, "notes"));
+    const now = Date.now();
+    const payload = {
+      id: ref.id,
+      materialId,
+      highlightId: data.highlightId,
+      ownerId: uid,
+      pageNumber: data.pageNumber,
+      text: String(data.text || "").slice(0, 4000),
+      createdAt: now,
+      updatedAt: now
+    };
+    await setDoc(ref, payload);
+    return payload;
+  },
+  // Só o texto é aceito aqui (mesmo conjunto liberado pela regra de update).
+  async updateNote(materialId, noteId, fields){
+    const ref = doc(db, "materials", materialId, "notes", noteId);
+    const update = { updatedAt: Date.now() };
+    if(fields.text !== undefined) update.text = String(fields.text).slice(0, 4000);
+    await updateDoc(ref, update);
+    return true;
+  },
+  async deleteNote(materialId, noteId){
+    await deleteDoc(doc(db, "materials", materialId, "notes", noteId));
+    return true;
   }
 };
 
@@ -204,6 +309,20 @@ window.AppStorage = {
     const fileRef = storageRef(storage, path);
     await uploadBytes(fileRef, file, { contentType: "application/pdf" });
     return path;
+  },
+
+  // Gera uma URL de download temporária para o PDF já salvo (usada pelo
+  // leitor, para o PDF.js buscar as páginas sob demanda direto do
+  // Storage). IMPORTANTE: essa URL funciona como um link de acesso
+  // compartilhável (contém um token de acesso na query string) — por
+  // isso NUNCA deve ser persistida (Firestore, localStorage) nem
+  // registrada em log. É gerada em memória, usada só durante a sessão
+  // atual da página, e descartada ao navegar para outro lugar.
+  async getMaterialPdfUrl(storagePath){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const fileRef = storageRef(storage, storagePath);
+    return await getDownloadURL(fileRef);
   }
 };
 
