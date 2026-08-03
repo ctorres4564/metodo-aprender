@@ -168,10 +168,10 @@ async function loadMaterials(){
         btn.disabled = true;
         btn.textContent = "Excluindo...";
         try{
-          const resp = await authedFetch("/api/material-excluir", {
+          const resp = await authedFetch("/api/material", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ materialId: id })
+            body: JSON.stringify({ action: "delete", materialId: id })
           });
           const data = await resp.json().catch(()=>({}));
           if(!resp.ok) throw new Error(data.error || "Falha ao excluir.");

@@ -154,7 +154,9 @@ Como funciona:
 2. Em "📚 Minha Biblioteca", cada material aparece como um card com status, número de páginas, se usou OCR e quantos módulos já foram gerados a partir dele.
 3. Clicar em "📖 Usar" reabre `importar-livro.html?material=<id>`: o texto salvo é buscado direto do Firestore (sem reenviar o arquivo nem rodar OCR de novo) e a pessoa já pode pedir o próximo módulo.
 4. Cada módulo gerado a partir de um material guarda essa origem (`sourceMaterialId`, `sourcePageStart`/`sourcePageEnd`) — só como metadado histórico, não afeta o funcionamento do módulo.
-5. "🗑️ Excluir" na Biblioteca apaga o PDF, o texto salvo e o registro do material (função `api/material-excluir.js`); os módulos já gerados a partir dele **não** são apagados, só perdem a referência viva ao material de origem.
+5. "🗑️ Excluir" na Biblioteca apaga o PDF, o texto salvo e o registro do material (função `api/material.js`, action `delete`); os módulos já gerados a partir dele **não** são apagados, só perdem a referência viva ao material de origem.
+
+Toda essa Biblioteca (criar material, atualizar status, registrar módulo gerado, excluir) é servida por uma única função serverless, `api/material.js`, que despacha pelo campo `action` no corpo da requisição (`create`, `updateStatus`, `registerModule`, `delete`) — isso mantém o projeto dentro do limite de 12 Serverless Functions do plano Hobby da Vercel.
 
 **O que esta etapa não inclui (de propósito, para manter o escopo pequeno):** leitor de PDF dentro do app, destaques/anotações no texto, busca dentro dos materiais, e histórico de leitura. A Biblioteca hoje serve só para reabrir e gerar módulos — não para ler o livro.
 

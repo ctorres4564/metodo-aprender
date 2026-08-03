@@ -49,8 +49,7 @@ service cloud.firestore {
 
     // Biblioteca de materiais (Etapa 1). O documento principal
     // (materials/{materialId}) só é escrito pelo servidor — via
-    // api/material-criar.js, api/material-atualizar-status.js,
-    // api/material-registrar-modulo.js e api/material-excluir.js (todos
+    // api/material.js (ações create/updateStatus/registerModule/delete,
     // usando o Admin SDK, que ignora estas regras). O app só pode LER o
     // próprio material; isso impede que alguém manipule direto pelo
     // navegador campos administrativos como "status", "generatedModuleCount"

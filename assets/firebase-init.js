@@ -196,7 +196,7 @@ window.AppDB = {
 window.AppStorage = {
   // Envia o PDF original pro Firebase Storage, na pasta exclusiva desse
   // usuário. O caminho retornado é salvo no material (storagePath) via
-  // api/material-atualizar-status.js.
+  // api/material.js (action "updateStatus").
   async uploadMaterialPdf(materialId, file){
     const uid = auth.currentUser && auth.currentUser.uid;
     if(!uid) throw new Error("Não autenticado");

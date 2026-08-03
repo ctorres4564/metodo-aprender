@@ -258,7 +258,7 @@ function generateModuleId(title){
    extraído vai pro Firestore, dividido em documentos por página (e por
    "parte", se a página for grande demais) em materials/{id}/pages/{pageId}.
    O documento principal materials/{id} só é escrito pelo servidor (ver
-   api/material-*.js) — o cliente só lê. Isso é o que permite reabrir um
+   api/material.js) — o cliente só lê. Isso é o que permite reabrir um
    material depois (biblioteca.html → importar-livro.html?material=<id>)
    sem reenviar o arquivo nem rodar OCR de novo.
    ===================================================================== */
@@ -311,10 +311,10 @@ function reconstructPagesFromDocs(pageDocs){
 }
 
 async function createMaterialRecord({ sourceType, title, originalFileName, mimeType, fileSize }){
-  const resp = await authedFetch("/api/material-criar", {
+  const resp = await authedFetch("/api/material", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sourceType, title, originalFileName, mimeType, fileSize })
+    body: JSON.stringify({ action: "create", sourceType, title, originalFileName, mimeType, fileSize })
   });
   const data = await resp.json();
   if(!resp.ok) throw new Error(data.error || "Não foi possível iniciar o material.");
@@ -322,10 +322,10 @@ async function createMaterialRecord({ sourceType, title, originalFileName, mimeT
 }
 
 async function updateMaterialStatus(materialId, fields){
-  const resp = await authedFetch("/api/material-atualizar-status", {
+  const resp = await authedFetch("/api/material", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(Object.assign({ materialId }, fields))
+    body: JSON.stringify(Object.assign({ action: "updateStatus", materialId }, fields))
   });
   const data = await resp.json().catch(()=>({}));
   if(!resp.ok) throw new Error(data.error || "Não foi possível atualizar o material.");
@@ -608,10 +608,10 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
 
     if(currentMaterialId){
       try{
-        await authedFetch("/api/material-registrar-modulo", {
+        await authedFetch("/api/material", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ materialId: currentMaterialId })
+          body: JSON.stringify({ action: "registerModule", materialId: currentMaterialId })
         });
       }catch(e){
         console.warn("Falha ao registrar módulo no material (não afeta o resultado):", e);
