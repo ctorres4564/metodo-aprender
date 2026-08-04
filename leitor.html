@@ -53,6 +53,10 @@
           <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura">↔ Largura</button>
           <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura">↕ Altura</button>
         </div>
+        <div class="toolbar-group">
+          <button class="btn ghost" id="toggle-sidebar-btn" title="Mostrar/ocultar painel lateral">☰ Painel</button>
+          <button class="btn ghost" id="expand-btn" title="Expandir leitor (Esc para sair)">⛶ Expandir</button>
+        </div>
       </div>
 
       <div class="reader-main">
@@ -246,6 +250,42 @@ document.getElementById("fit-width-btn").addEventListener("click", async ()=>{
 document.getElementById("fit-height-btn").addEventListener("click", async ()=>{
   await computeFitHeightScale();
   await renderPage(currentPage);
+});
+
+/* =====================================================================
+   MODO EXPANDIDO
+   ===================================================================== */
+let isExpanded = false;
+
+function setExpanded(active){
+  isExpanded = active;
+  document.body.classList.toggle("reader-expanded", active);
+  const btn = document.getElementById("expand-btn");
+  btn.textContent = active ? "⤢ Recolher" : "⛶ Expandir";
+  btn.title = active ? "Sair da visualização expandida (Esc)" : "Expandir leitor (Esc para sair)";
+
+  // Espera o navegador aplicar o novo layout (cabeçalho escondido, leitor
+  // em tela cheia) antes de recalcular "Ajustar à largura" — medir a
+  // largura disponível antes disso pegaria o tamanho antigo. Página atual,
+  // destaques e anotações não são tocados; só a escala de zoom muda, tanto
+  // ao expandir quanto ao voltar ao tamanho normal (pra não ficar com o
+  // zoom da tela cheia num visualizador bem menor).
+  requestAnimationFrame(()=>{
+    if(!pdfDoc) return;
+    computeFitWidthScale().then(()=> renderPage(currentPage));
+  });
+}
+
+document.getElementById("expand-btn").addEventListener("click", ()=> setExpanded(!isExpanded));
+
+document.getElementById("toggle-sidebar-btn").addEventListener("click", ()=>{
+  document.querySelector(".reader-sidebar").classList.toggle("sidebar-hidden");
+});
+
+document.addEventListener("keydown", (ev)=>{
+  if(ev.key === "Escape" && isExpanded){
+    setExpanded(false);
+  }
 });
 
 /* =====================================================================
@@ -660,7 +700,10 @@ async function boot(){
     pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     totalPages = pdfDoc.numPages;
 
-    document.getElementById("reader-shell").style.display = "block";
+    // display:flex (não "block") porque .reader-shell já é flex-column no
+    // CSS (assets/styles.css) — necessário pra .reader-main crescer
+    // corretamente dentro dela no modo expandido (ver setExpanded()).
+    document.getElementById("reader-shell").style.display = "flex";
     await computeFitWidthScale();
     await renderPage(1);
     renderSidebarHighlights();
