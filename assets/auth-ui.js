@@ -222,6 +222,11 @@ function bindLogoutButton(){
   btn.addEventListener("click", async ()=>{
     if(window.AppAuth){
       await window.AppAuth.signOutUser();
+      // SEGURANÇA (SEC-06): remove os dados locais do app (progresso em
+      // cache no localStorage) para não expor nada a quem usar este
+      // navegador depois. A sessão do Firebase Auth fica em IndexedDB e
+      // já foi encerrada pelo signOut acima.
+      try{ localStorage.clear(); }catch(e){ console.warn("Falha ao limpar dados locais:", e); }
       window.location.reload();
     }
   });

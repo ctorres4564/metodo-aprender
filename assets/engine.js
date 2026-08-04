@@ -421,16 +421,16 @@ function renderLearnCard(){
     <h2 class="section-title">📖 Conceito ${learnIndex+1} de ${total}</h2>
     ${track}
     <div class="concept-card" id="learn-card">
-      <span class="concept-tag">${c.tag}</span>
-      <div class="concept-title">${c.title}</div>
-      <div class="concept-text">${c.text}</div>
+      <span class="concept-tag">${escapeHtml(c.tag)}</span>
+      <div class="concept-title">${escapeHtml(c.title)}</div>
+      <div class="concept-text">${escapeHtml(c.text)}</div>
       ${sourceLinkHtml(c)}
       ${linkedNotesHtml(c)}
       <div id="analogy-box">
         ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
       </div>
       <div class="quiz-q">
-        <div class="qtext">✅ Checagem rápida: ${c.q}</div>
+        <div class="qtext">✅ Checagem rápida: ${escapeHtml(c.q)}</div>
         <div id="learn-opts"></div>
         <div id="learn-feedback"></div>
       </div>
@@ -452,7 +452,7 @@ function renderLearnCard(){
 }
 
 function renderAnalogyHtml(text){
-  return `<div class="feedback ok" style="margin-top:10px;"><b>💡 Outra forma de pensar nisso:</b><br>${text}</div>`;
+  return `<div class="feedback ok" style="margin-top:10px;"><b>💡 Outra forma de pensar nisso:</b><br>${escapeHtml(text)}</div>`;
 }
 
 async function loadAnalogy(c){
@@ -598,8 +598,8 @@ function renderReviewCard(){
     <div class="flash-outer">
       <div class="flashcard" id="flashcard">
         <div class="face front">
-          <span class="concept-tag">${c.tag}</span>
-          <div class="qtext">${c.title}</div>
+          <span class="concept-tag">${escapeHtml(c.tag)}</span>
+          <div class="qtext">${escapeHtml(c.title)}</div>
           <div class="hint" id="flip-hint" style="display:none;">toque para virar</div>
         </div>
         <div class="face back">
@@ -714,8 +714,8 @@ function renderExplainCard(){
     <h2 class="section-title">🗣️ Técnica de Feynman</h2>
     <p class="lead" style="margin-top:-4px;">Explique o conceito abaixo com suas próprias palavras, como se estivesse ensinando alguém que nunca ouviu falar nisso. Não vale copiar frases prontas — o objetivo é você perceber sozinho(a) o que já entendeu bem e o que ainda está confuso.</p>
     <div class="concept-card">
-      <span class="concept-tag">${c.tag}</span>
-      <div class="concept-title">${c.title}</div>
+      <span class="concept-tag">${escapeHtml(c.tag)}</span>
+      <div class="concept-title">${escapeHtml(c.title)}</div>
       ${cs.explainCount > 0 ? `<p class="lead" style="margin-top:-6px;">Última nota: <b>${cs.lastExplainScore ?? "—"}/100</b> (tentativa ${cs.explainCount})</p>` : ""}
       <textarea id="explain-input" class="explain-textarea" rows="6" placeholder="Comece explicando aqui, com suas próprias palavras..."></textarea>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:10px; flex-wrap:wrap;">
@@ -776,7 +776,7 @@ function renderExplainResult(c, data, previousScore){
     : (nota>=85 ? 5 : nota>=65 ? 4 : nota>=40 ? 3 : 1);
 
   const listHtml = (items, icon) => (items && items.length)
-    ? `<ul style="margin:6px 0 0; padding-left:18px;">${items.map(i=>`<li style="margin-bottom:4px;">${icon} ${i}</li>`).join("")}</ul>`
+    ? `<ul style="margin:6px 0 0; padding-left:18px;">${items.map(i=>`<li style="margin-bottom:4px;">${icon} ${escapeHtml(i)}</li>`).join("")}</ul>`
     : `<p class="lead" style="margin:6px 0 0;">—</p>`;
 
   let comparisonHtml = "";
@@ -796,7 +796,7 @@ function renderExplainResult(c, data, previousScore){
       <div class="score-big" style="font-size:32px;">${nota}/100</div>
       <div class="progressbar" style="margin-bottom:10px;"><div style="width:${nota}%"></div></div>
       ${comparisonHtml}
-      <p class="feedback ${nota>=65?'ok':'bad'}">${data.feedback || ""}</p>
+      <p class="feedback ${nota>=65?'ok':'bad'}">${escapeHtml(data.feedback || "")}</p>
       <div class="grid2" style="margin-top:10px;">
         <div class="stat-card">
           <div class="label">✅ Você cobriu</div>
@@ -918,8 +918,8 @@ function renderQuizQuestion(){
     </div>
     <div class="progressbar" style="margin-bottom:16px;"><div style="width:${(index/order.length)*100}%"></div></div>
     <div class="concept-card">
-      <span class="concept-tag">${c.tag}</span>
-      <div class="qtext" style="margin-top:8px;">${c.q}</div>
+      <span class="concept-tag">${escapeHtml(c.tag)}</span>
+      <div class="qtext" style="margin-top:8px;">${escapeHtml(c.q)}</div>
       <div id="quiz-opts" style="margin-top:12px;"></div>
       <div id="quiz-feedback"></div>
     </div>
@@ -1023,7 +1023,7 @@ function renderProgress(){
     row.className = "concept-row";
     row.innerHTML = `
       <div>
-        <div style="font-weight:700;">${c.title}</div>
+        <div style="font-weight:700;">${escapeHtml(c.title)}</div>
         <div style="color:var(--text-dim); font-size:11.5px;">${cs.seen ? "Próxima revisão: " + cs.nextReview : "Ainda não apresentado"}</div>
       </div>
       <span class="status-chip ${st.cls}">${st.label}</span>
@@ -1097,7 +1097,7 @@ function applyConfigToDOM(){
   const introEl = document.getElementById("home-intro-text");
   if(introEl) introEl.innerHTML = renderHomeIntroHtml(CONFIG.homeIntro);
   const footer = document.getElementById("footer-credit");
-  if(footer) footer.innerHTML = CONFIG.sourceCredit + "<br>Progresso salvo automaticamente.";
+  if(footer) footer.innerHTML = escapeHtml(CONFIG.sourceCredit || "") + "<br>Progresso salvo automaticamente.";
 }
 
 /* =====================================================================

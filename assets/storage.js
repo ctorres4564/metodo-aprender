@@ -13,6 +13,19 @@
    saber qual dos dois back-ends está sendo usado.
    ===================================================================== */
 const StorageAdapter = {
+  // SEGURANÇA (SEC-06): as chaves do localStorage levam o uid como prefixo
+  // ("u:<uid>:<key>"), para que o progresso de uma pessoa nunca apareça na
+  // sessão de outra conta que use o mesmo navegador. Chaves antigas (sem
+  // prefixo) são migradas na primeira leitura e apagadas em seguida; o
+  // logout limpa todo o localStorage (ver bindLogoutButton em auth-ui.js).
+  _uid(){
+    const u = window.AppAuth && window.AppAuth.currentUser && window.AppAuth.currentUser();
+    return u ? u.uid : null;
+  },
+  _key(key){
+    const uid = this._uid();
+    return uid ? `u:${uid}:${key}` : key;
+  },
   async load(key){
     if(window.AppDB){
       try{
@@ -23,8 +36,21 @@ const StorageAdapter = {
       }
     }
     try{
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : null;
+      const uid = this._uid();
+      const raw = localStorage.getItem(this._key(key));
+      if(raw) return JSON.parse(raw);
+      // Migração de chaves antigas (sem uid): copia para a chave com
+      // prefixo e remove a antiga, que era compartilhada entre contas.
+      if(uid){
+        const legacy = localStorage.getItem(key);
+        if(legacy){
+          const parsed = JSON.parse(legacy);
+          localStorage.setItem(this._key(key), legacy);
+          localStorage.removeItem(key);
+          return parsed;
+        }
+      }
+      return null;
     }catch(e){
       console.warn("StorageAdapter.load falhou:", e);
       return null;
@@ -40,7 +66,7 @@ const StorageAdapter = {
       }
     }
     try{
-      localStorage.setItem(key, JSON.stringify(data));
+      localStorage.setItem(this._key(key), JSON.stringify(data));
       ok = true;
     }catch(e){
       console.warn("StorageAdapter.save (localStorage) falhou:", e);

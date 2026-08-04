@@ -151,7 +151,18 @@ async function handleUpdateStatus(req, res, user) {
 
     const update = { status, updatedAt: Date.now() };
 
-    if (typeof body.storagePath === "string") update.storagePath = body.storagePath.slice(0, 500);
+    // SEGURANÇA (SEC-01): o storagePath só pode apontar para a pasta do
+    // próprio usuário e deste material. Ele é usado depois pelo delete via
+    // Admin SDK, que IGNORA as regras do Storage — sem este filtro, seria
+    // possível apagar arquivos de outras pessoas.
+    if (typeof body.storagePath === "string") {
+      const expectedPrefix = `users/${user.uid}/materials/${materialId}/`;
+      if (!body.storagePath.startsWith(expectedPrefix)) {
+        res.status(400).json({ error: "storagePath inválido para este material." });
+        return;
+      }
+      update.storagePath = body.storagePath.slice(0, 500);
+    }
     if (typeof body.pageCount === "number") update.pageCount = Math.max(0, Math.round(body.pageCount));
     if (typeof body.extractionMethod === "string") update.extractionMethod = body.extractionMethod.slice(0, 40);
     if (typeof body.usedOcr === "boolean") update.usedOcr = body.usedOcr;
@@ -294,10 +305,20 @@ async function handleDelete(req, res, user) {
 
     await ref.update({ status: "deleting", updatedAt: Date.now() });
 
-    const storagePath = snap.data().storagePath;
-    if (storagePath) {
+    // SEGURANÇA (SEC-01): não confia no storagePath persistido — ele veio do
+    // cliente em algum momento e o Admin SDK ignora as regras do Storage.
+    // O caminho padrão é determinístico; um path persistido diferente só é
+    // aceito se estiver dentro do prefixo users/{uid}/materials/{materialId}/
+    // (compatibilidade com documentos antigos com nomes fora do padrão).
+    const expectedPrefix = `users/${user.uid}/materials/${materialId}/`;
+    const pathsToDelete = new Set([`${expectedPrefix}original.pdf`]);
+    const storedPath = snap.data().storagePath;
+    if (typeof storedPath === "string" && storedPath.startsWith(expectedPrefix)) {
+      pathsToDelete.add(storedPath);
+    }
+    for (const p of pathsToDelete) {
       try {
-        await adminStorage().file(storagePath).delete({ ignoreNotFound: true });
+        await adminStorage().file(p).delete({ ignoreNotFound: true });
       } catch (e) {
         console.error("Falha ao excluir PDF do Storage (continuando mesmo assim):", e.message);
       }

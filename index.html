@@ -86,6 +86,11 @@
 <script src="assets/auth-ui.js"></script>
 <script src="assets/pwa.js"></script>
 <script>
+// Dados de módulos do usuário (Firestore) são interpolados em innerHTML
+// abaixo — escape obrigatório antes de qualquer interpolação (SEC-03).
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
 async function init(){
   try{
     const res = await fetch("content/catalog.json");
@@ -147,9 +152,9 @@ async function loadUserModules(){
       const count = (m.concepts || []).length;
       card.innerHTML = `
         <a href="app.html?m=${encodeURIComponent(m.id)}&src=user" style="text-decoration:none; color:inherit; display:block;">
-          <div class="ic">${cfg.logoEmoji || "📘"}</div>
-          <h3>${cfg.appTitle || "Sem título"}</h3>
-          <p>${cfg.appSubtitle || ""}</p>
+          <div class="ic">${escapeHtml(cfg.logoEmoji || "📘")}</div>
+          <h3>${escapeHtml(cfg.appTitle || "Sem título")}</h3>
+          <p>${escapeHtml(cfg.appSubtitle || "")}</p>
           <div class="meta">
             <span>${count} conceito${count === 1 ? "" : "s"}</span>
             <span class="plan-chip plan-free">Meu módulo</span>

@@ -31,7 +31,7 @@
                            https://metodo-aprender-ten.vercel.app).
    ===================================================================== */
 
-import { adminDb } from "./_lib/firebaseAdmin.js";
+import { adminAuth, adminDb } from "./_lib/firebaseAdmin.js";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM_EMAIL = process.env.REMINDER_FROM_EMAIL || "onboarding@resend.dev";
@@ -111,7 +111,19 @@ export default async function handler(req, res) {
     for (const userDoc of usersSnap.docs) {
       summary.usersChecked++;
       const uid = userDoc.id;
-      const email = userDoc.data().email;
+
+      // SEGURANÇA (SEC-02): o campo users/{uid}.email é gravável pelo próprio
+      // usuário (ver firestore.rules.txt) e não serve como destino de envio —
+      // seria possível cadastrar o endereço de outra pessoa e mandar e-mails
+      // para ela. O destinatário é SEMPRE o e-mail verificado do Firebase
+      // Auth, que só o provedor de identidade pode atestar.
+      let email = null;
+      try {
+        const authUser = await adminAuth().getUser(uid);
+        if (authUser.email && authUser.emailVerified) email = authUser.email;
+      } catch (e) {
+        console.error(`Falha ao ler a conta ${uid} no Auth:`, e.message);
+      }
       if (!email) continue;
 
       try {

@@ -148,7 +148,29 @@ ${studentText}
       return;
     }
 
-    res.status(200).json(parsed);
+    // SEGURANÇA (SEC-04): valida e limita cada campo antes de devolver ao
+    // cliente. A saída do modelo é influenciada pelo texto enviado (prompt
+    // injection via PDF) e esses campos são renderizados em HTML no cliente
+    // — nunca repassar o JSON do modelo sem filtrar.
+    const cleanStr = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
+    const cleanList = (v, maxItems, maxLen) =>
+      (Array.isArray(v) ? v : []).filter(i => typeof i === "string").slice(0, maxItems).map(i => i.slice(0, maxLen));
+
+    const notaRaw = Number(parsed.nota);
+    const nota = Number.isFinite(notaRaw) ? Math.min(100, Math.max(0, Math.round(notaRaw))) : 0;
+    // Mesma regra de fallback que o cliente já aplicava (assets/engine.js).
+    const qualidadeSM2 = [1, 3, 4, 5].includes(parsed.qualidadeSM2)
+      ? parsed.qualidadeSM2
+      : (nota >= 85 ? 5 : nota >= 65 ? 4 : nota >= 40 ? 3 : 1);
+
+    res.status(200).json({
+      nota,
+      pontosCobertos: cleanList(parsed.pontosCobertos, 10, 300),
+      pontosFaltando: cleanList(parsed.pontosFaltando, 10, 300),
+      equivocos: cleanList(parsed.equivocos, 10, 300),
+      feedback: cleanStr(parsed.feedback, 1000),
+      qualidadeSM2
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro interno ao avaliar a explicação." });
