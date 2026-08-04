@@ -231,7 +231,7 @@ async function boot(){
       if(!userMod || !userMod.concepts || userMod.concepts.length === 0){
         throw new Error("módulo do usuário não encontrado ou vazio");
       }
-      moduleData = { config: userMod.config, concepts: userMod.concepts };
+      moduleData = { config: userMod.config, concepts: userMod.concepts, sourceMaterialId: userMod.sourceMaterialId || null };
       const editLink = document.createElement("a");
       editLink.href = `criar-modulo.html?edit=${encodeURIComponent(moduleId)}`;
       editLink.className = "pill";
@@ -263,7 +263,7 @@ async function boot(){
       }
     });
 
-    await initApp(moduleData.config, moduleData.concepts);
+    await initApp(moduleData.config, moduleData.concepts, moduleData.sourceMaterialId || null);
     initReminderToggle();
     initPlanPanel();
   }catch(e){

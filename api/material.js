@@ -12,7 +12,7 @@
    regras de negócio, tratamento de erros e respostas HTTP — só a forma
    de roteamento mudou (era por URL, agora é por `action`).
 
-   Recebe sempre: { action: "create"|"updateStatus"|"registerModule"|"delete", ...demais campos por ação }
+   Recebe sempre: { action: "create"|"updateStatus"|"registerModule"|"recordRead"|"delete", ...demais campos por ação }
 
    action "create"         → cria o documento inicial de um material.
      Recebe: { sourceType, title, originalFileName, mimeType, fileSize }
@@ -26,6 +26,11 @@
    action "registerModule" → incrementa generatedModuleCount atomicamente.
      Recebe: { materialId }
      Retorna: { ok: true, generatedModuleCount }
+
+   action "recordRead"     → histórico de leitura (Etapa 2): registra que o
+                              dono do material abriu/leu uma página agora.
+     Recebe: { materialId, page? }
+     Retorna: { ok: true }
 
    action "delete"         → exclui PDF (Storage) + páginas (subcoleção) +
                               documento principal. Idempotente.
@@ -179,6 +184,45 @@ async function handleRegisterModule(req, res, user) {
   }
 }
 
+/* ---- action: recordRead ------------------------------------------------
+   Histórico de leitura (Etapa 2). Escreve lastOpenedAt sempre, e
+   lastPageRead só quando um número de página válido é enviado (o cliente
+   já valida isso, mas revalidamos aqui já que é o servidor quem decide o
+   que é persistido). Chamada com debounce pelo leitor (ver
+   leitor.html:scheduleRecordRead) — não é crítica, então erros aqui nunca
+   devem impedir a leitura em si. */
+async function handleRecordRead(req, res, user) {
+  const { materialId, page } = req.body || {};
+  if (!materialId || typeof materialId !== "string") {
+    res.status(400).json({ error: "materialId é obrigatório." });
+    return;
+  }
+
+  try {
+    const ref = adminDb().collection("materials").doc(materialId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Material não encontrado." });
+      return;
+    }
+    if (snap.data().ownerId !== user.uid) {
+      res.status(403).json({ error: "Você não tem permissão para alterar este material." });
+      return;
+    }
+
+    const update = { lastOpenedAt: Date.now() };
+    if (typeof page === "number" && Number.isFinite(page) && page > 0) {
+      update.lastPageRead = Math.round(page);
+    }
+
+    await ref.update(update);
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error("Erro ao registrar leitura do material:", e);
+    res.status(500).json({ error: "Não foi possível registrar a leitura agora." });
+  }
+}
+
 /* ---- action: delete -------------------------------------------------- */
 async function deleteAllPages(materialRef) {
   const pagesRef = materialRef.collection("pages");
@@ -259,9 +303,11 @@ export default async function handler(req, res) {
       return handleUpdateStatus(req, res, user);
     case "registerModule":
       return handleRegisterModule(req, res, user);
+    case "recordRead":
+      return handleRecordRead(req, res, user);
     case "delete":
       return handleDelete(req, res, user);
     default:
-      res.status(400).json({ error: "action inválida (use 'create', 'updateStatus', 'registerModule' ou 'delete')." });
+      res.status(400).json({ error: "action inválida (use 'create', 'updateStatus', 'registerModule', 'recordRead' ou 'delete')." });
   }
 }

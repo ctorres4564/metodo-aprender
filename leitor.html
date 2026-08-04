@@ -117,6 +117,7 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/pwa.js"></script>
+<script src="assets/api-client.js"></script>
 <script type="module">
   import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.mjs";
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.mjs";
@@ -203,6 +204,30 @@ async function renderPage(num){
   updatePageIndicator();
   hideSelectionMenu();
   hideHighlightMenu();
+  scheduleRecordRead();
+}
+
+/* =====================================================================
+   HISTÓRICO DE LEITURA (Etapa 2)
+   ===================================================================== */
+// Registra "esteve aqui" (materialId + página atual) no material, pra
+// biblioteca.html poder mostrar "última leitura". Debounced: cada
+// renderPage() reagenda o envio pra ~2.5s depois da última mudança de
+// página, em vez de escrever no Firestore a cada página passada — evita
+// gastar escrita em cada página de uma rolagem rápida, só registra onde
+// o usuário efetivamente parou. Falha de rede aqui nunca deve travar a
+// leitura, por isso só um console.warn em caso de erro.
+let recordReadTimer = null;
+function scheduleRecordRead(){
+  if(!materialId) return;
+  clearTimeout(recordReadTimer);
+  recordReadTimer = setTimeout(()=>{
+    authedFetch("/api/material", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "recordRead", materialId, page: currentPage })
+    }).catch(e => console.warn("Falha ao registrar leitura (não afeta a leitura em si):", e));
+  }, 2500);
 }
 
 function updatePageIndicator(){
@@ -754,12 +779,20 @@ async function boot(){
     pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     totalPages = pdfDoc.numPages;
 
+    // Etapa 2 — "voltar ao trecho original": leitor.html?...&page=N abre
+    // direto na página N (usado pelo link de origem de um conceito em
+    // assets/engine.js). Sem o parâmetro, ou com um valor inválido, abre
+    // na página 1 como sempre.
+    const pageParam = parseInt(params.get("page"), 10);
+    const startPage = (!isNaN(pageParam) && pageParam >= 1 && pageParam <= totalPages) ? pageParam : 1;
+    currentPage = startPage; // computeFitWidthScale() usa currentPage pra medir a página certa
+
     // display:flex (não "block") porque .reader-shell já é flex-column no
     // CSS (assets/styles.css) — necessário pra .reader-main crescer
     // corretamente dentro dela no modo expandido (ver setExpanded()).
     document.getElementById("reader-shell").style.display = "flex";
     await computeFitWidthScale();
-    await renderPage(1);
+    await renderPage(startPage);
     renderSidebarHighlights();
     renderSidebarNotes();
   }catch(e){

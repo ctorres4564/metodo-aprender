@@ -243,6 +243,29 @@ function offsetToPageNumber(offset, pages){
   return found;
 }
 
+// Etapa 2 — referência de origem por conceito: insere marcadores
+// "[[PAGINA:N]]" nas quebras de página dentro do trecho [startOffset,
+// endOffset), pra que o gerador de IA (api/gerar-modulo.js) consiga dizer
+// de qual página cada conceito veio. Só marca páginas que já têm algum
+// texto antes delas dentro do trecho (evita marcador solto no início).
+function insertPageMarkers(fullText, pages, startOffset, endOffset){
+  if(!pages || pages.length === 0) return fullText.slice(startOffset, endOffset);
+  const breaks = pages
+    .filter(p => p.offset > startOffset && p.offset < endOffset)
+    .sort((a,b)=> a.offset - b.offset);
+  if(breaks.length === 0) return fullText.slice(startOffset, endOffset);
+
+  let out = "";
+  let cursor = startOffset;
+  for(const p of breaks){
+    out += fullText.slice(cursor, p.offset);
+    out += `\n\n[[PAGINA:${p.num}]]\n\n`;
+    cursor = p.offset;
+  }
+  out += fullText.slice(cursor, endOffset);
+  return out;
+}
+
 function slugify(str){
   return String(str).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
     .replace(/[^a-z0-9]+/g,"-").replace(/(^-+|-+$)/g,"").slice(0,40) || "modulo";
@@ -567,7 +590,7 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
       }
     }
 
-    const sectionText = bookFullText.slice(startOffset, endOffset);
+    const sectionText = insertPageMarkers(bookFullText, bookPages, startOffset, endOffset);
     const sectionTitle = locData.title || target;
 
     row.querySelector(".title").textContent = `🧠 Gerando módulo sobre "${sectionTitle}"...`;
@@ -597,7 +620,15 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
         sourceCredit: `Conceitos gerados por IA a partir de PDF enviado por você. Revise antes de confiar no conteúdo.`,
         storageKey: `estudo_${moduleId}_v1`
       },
-      concepts: genData.concepts.map((c, i)=> Object.assign({ id: slugify(c.title) + "-" + i }, c)),
+      concepts: genData.concepts.map((c, i)=>{
+        // "page" vem da IA (ver [[PAGINA:N]] em insertPageMarkers/api/gerar-modulo.js).
+        // Validamos contra o intervalo real do módulo antes de confiar nele —
+        // se vier fora do intervalo (ou ausente), cai pra sourcePageStart.
+        const rawPage = typeof c.page === "number" ? c.page : null;
+        const validPage = (rawPage != null && sourcePageStart != null && sourcePageEnd != null
+          && rawPage >= sourcePageStart && rawPage <= sourcePageEnd) ? rawPage : sourcePageStart;
+        return Object.assign({ id: slugify(c.title) + "-" + i, sourcePage: validPage }, c);
+      }),
       sourceMaterialId: currentMaterialId || null,
       sourceMaterialTitle: currentMaterialTitle || null,
       sourcePageStart: sourcePageStart,

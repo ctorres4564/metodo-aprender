@@ -151,10 +151,11 @@ async function loadMaterials(){
         <div class="meta-line">${sourceLabel}${sizeInfo}${ocrInfo}</div>
         <div class="meta-line">${m.pageCount ? m.pageCount + " página(s) · " : ""}${moduleInfo}</div>
         <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
+        ${m.lastOpenedAt ? `<div class="meta-line">Última leitura: ${formatDate(m.lastOpenedAt)}${m.lastPageRead ? ` · pág. ${m.lastPageRead}` : ""}</div>` : ""}
         ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${m.processingError.replace(/</g,"&lt;")}</div>` : ""}
         <div class="material-actions">
           ${m.status === "ready" ? `<a class="btn secondary" style="text-decoration:none;" href="importar-livro.html?material=${encodeURIComponent(m.id)}">📖 Usar</a>` : ""}
-          ${m.status === "ready" && m.sourceType === "pdf" ? `<a class="btn secondary" style="text-decoration:none;" href="leitor.html?material=${encodeURIComponent(m.id)}">📄 Abrir PDF</a>` : ""}
+          ${m.status === "ready" && m.sourceType === "pdf" ? `<a class="btn secondary" style="text-decoration:none;" href="leitor.html?material=${encodeURIComponent(m.id)}${m.lastPageRead ? "&page=" + encodeURIComponent(m.lastPageRead) : ""}">📄 ${m.lastPageRead ? "Continuar leitura" : "Abrir PDF"}</a>` : ""}
           <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
         </div>
       `;

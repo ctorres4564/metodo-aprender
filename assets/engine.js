@@ -16,6 +16,17 @@
 let CONFIG = null;
 let CONCEPTS = [];
 let STATE = null;
+// Etapa 2 — "voltar ao trecho original": id do material da Biblioteca que
+// originou este módulo (null pra módulos sem origem em PDF, ex.: fluxo de
+// criar-modulo.html/catálogo estático). Cada conceito pode ter um campo
+// "sourcePage" (ver importar-livro.html) — juntos, dão o link pro leitor.
+let SOURCE_MATERIAL_ID = null;
+
+function sourceLinkHtml(c){
+  if(!SOURCE_MATERIAL_ID || !c.sourcePage) return "";
+  const url = `leitor.html?material=${encodeURIComponent(SOURCE_MATERIAL_ID)}&page=${encodeURIComponent(c.sourcePage)}`;
+  return `<a class="btn ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:10px; display:inline-block; text-decoration:none; font-size:12.5px;">↩ Ver trecho original (pág. ${c.sourcePage})</a>`;
+}
 
 const LEVELS = [
   {min:0, name:"Iniciante"},
@@ -374,6 +385,7 @@ function renderLearnCard(){
       <span class="concept-tag">${c.tag}</span>
       <div class="concept-title">${c.title}</div>
       <div class="concept-text">${c.text}</div>
+      ${sourceLinkHtml(c)}
       <div id="analogy-box">
         ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
       </div>
@@ -555,6 +567,7 @@ function renderReviewCard(){
         </div>
       </div>
     </div>
+    <div style="text-align:center;">${sourceLinkHtml(c)}</div>
     <div id="confidence-row">
       <p class="lead" style="text-align:center; margin-top:0;">Antes de ver a resposta: quão confiante você está de que lembra este conceito?</p>
       <div class="rate-row">
@@ -1051,9 +1064,10 @@ function applyConfigToDOM(){
    PONTO DE ENTRADA — chamado por app.html depois de buscar o JSON
    do módulo (CONFIG + CONCEPTS) em /content.
    ===================================================================== */
-async function initApp(config, concepts){
+async function initApp(config, concepts, sourceMaterialId){
   CONFIG = config;
   CONCEPTS = concepts;
+  SOURCE_MATERIAL_ID = sourceMaterialId || null;
   STATE = await loadState();
   bindTabs();
   applyConfigToDOM();

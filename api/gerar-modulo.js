@@ -4,7 +4,14 @@
    usando um modelo de linguagem via OpenRouter.
    =====================================================================
    Recebe: { title, sourceText }
-   Retorna: { resumo, concepts: [{ tag, title, text, q, options[4], correct }] }
+   Retorna: { resumo, concepts: [{ tag, title, text, q, options[4], correct, page }] }
+
+   "page" (Etapa 2 — referência de origem por conceito): quando sourceText
+   contém marcadores "[[PAGINA:N]]" (inseridos por importar-livro.html nas
+   quebras de página do trecho enviado), o modelo é instruído a informar em
+   qual página cada conceito se baseia. Sem marcadores no texto (ex.: fluxo
+   de criar-modulo.html, que não tem paginação), "page" vem null e o
+   cliente simplesmente não mostra o link "voltar ao trecho original".
 
    Importante: o texto retornado por "text" deve ser uma explicação em
    linguagem própria/paraseada do conceito — não uma cópia literal do
@@ -81,14 +88,17 @@ Regras OBRIGATÓRIAS para cada conceito:
    - Evite palavras absolutas nas opções erradas (“sempre”, “nunca”, “todos”, “nenhum”, “impossível”) — isso costuma denunciar que a alternativa está errada.
    - Evite opções vagas, incompletas ou obviamente sem sentido — todas as 4 devem soar como respostas razoáveis para quem não domina o assunto.
 6. "correct": o índice (0 a 3) da alternativa correta em "options". Varie a posição da resposta certa entre os conceitos gerados (não deixe sempre no índice 0).
+7. "page": SOMENTE se o texto-fonte contiver marcadores no formato "[[PAGINA:N]]" (um número inteiro após os dois-pontos): informe o número da página onde está o trecho que originou esse conceito — use o marcador "[[PAGINA:N]]" mais próximo ANTES do trecho usado. Se o texto-fonte não tiver nenhum marcador "[[PAGINA:N]]", omita completamente o campo "page" (ou use null).
 
 Se o texto-fonte for muito curto, genérico demais, ou não tiver conteúdo suficiente para extrair conceitos de qualidade, gere quantos conceitos de qualidade forem possíveis (pode ser menos que ${MAX_CONCEPTS}, inclusive 0 se o texto não permitir nenhum). O "resumo" deve ser gerado sempre que houver conteúdo suficiente para isso.
+
+Os marcadores "[[PAGINA:N]]", quando presentes, são apenas metadados de posição — nunca os mencione nem os copie dentro de "resumo", "text", "q" ou "options".
 
 Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto antes ou depois:
 {
   "resumo": "...",
   "concepts": [
-    { "tag": "...", "title": "...", "text": "...", "q": "...", "options": ["...", "...", "...", "..."], "correct": 0 }
+    { "tag": "...", "title": "...", "text": "...", "q": "...", "options": ["...", "...", "...", "..."], "correct": 0, "page": 12 }
   ]
 }`;
 
@@ -151,7 +161,8 @@ ${trimmedSource}
         text: String(c.text).slice(0, 800),
         q: String(c.q).slice(0, 240),
         options: c.options.map(o => String(o).slice(0, 160)),
-        correct: Math.min(3, Math.max(0, Math.round(c.correct)))
+        correct: Math.min(3, Math.max(0, Math.round(c.correct))),
+        page: (typeof c.page === "number" && Number.isFinite(c.page) && c.page > 0) ? Math.round(c.page) : null
       }));
 
     const resumo = typeof parsed.resumo === "string" ? parsed.resumo.trim().slice(0, 3000) : "";
