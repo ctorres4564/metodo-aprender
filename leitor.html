@@ -264,6 +264,12 @@ function setExpanded(active){
   btn.textContent = active ? "⤢ Recolher" : "⛶ Expandir";
   btn.title = active ? "Sair da visualização expandida (Esc)" : "Expandir leitor (Esc para sair)";
 
+  // Ao expandir, a sidebar já entra recolhida (o PDF ocupa a tela toda) —
+  // o botão "☰ Painel" continua disponível pra trazer ela de volta quando
+  // precisar. Ao voltar ao tamanho normal, a sidebar reaparece (esse é o
+  // padrão fora do modo expandido).
+  document.querySelector(".reader-sidebar").classList.toggle("sidebar-hidden", active);
+
   // Espera o navegador aplicar o novo layout (cabeçalho escondido, leitor
   // em tela cheia) antes de recalcular "Ajustar à largura" — medir a
   // largura disponível antes disso pegaria o tamanho antigo. Página atual,
