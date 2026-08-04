@@ -232,6 +232,20 @@ async function boot(){
         throw new Error("módulo do usuário não encontrado ou vazio");
       }
       moduleData = { config: userMod.config, concepts: userMod.concepts, sourceMaterialId: userMod.sourceMaterialId || null };
+
+      // Etapa 3 — anotações feitas no leitor de PDF e vinculadas a um
+      // conceito deste módulo específico. Nunca deve travar o carregamento
+      // do módulo: se falhar, o módulo abre normalmente, só sem as notas.
+      if(moduleData.sourceMaterialId && window.AppDB && window.AppDB.listNotes){
+        try{
+          const allNotes = await window.AppDB.listNotes(moduleData.sourceMaterialId);
+          moduleData.linkedNotes = allNotes.filter(n => n.linkedModuleId === moduleId);
+        }catch(e){
+          console.warn("Falha ao carregar anotações vinculadas a este módulo:", e);
+          moduleData.linkedNotes = [];
+        }
+      }
+
       const editLink = document.createElement("a");
       editLink.href = `criar-modulo.html?edit=${encodeURIComponent(moduleId)}`;
       editLink.className = "pill";
@@ -263,7 +277,7 @@ async function boot(){
       }
     });
 
-    await initApp(moduleData.config, moduleData.concepts, moduleData.sourceMaterialId || null);
+    await initApp(moduleData.config, moduleData.concepts, moduleData.sourceMaterialId || null, moduleId, moduleData.linkedNotes || []);
     initReminderToggle();
     initPlanPanel();
   }catch(e){

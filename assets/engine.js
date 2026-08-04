@@ -23,6 +23,11 @@ let STATE = null;
 // página, extraído em importar-livro.html — nunca escrito pela IA) — juntos
 // dão a citação do trecho original e o link pro leitor.
 let SOURCE_MATERIAL_ID = null;
+// Etapa 3 — "associar anotação a conceitos ou módulos": id deste módulo
+// (usado pra achar quais anotações do leitor foram vinculadas a ele) e a
+// lista de anotações já filtradas (por app.html) pra este módulo.
+let MODULE_ID = null;
+let LINKED_NOTES = [];
 
 function sourceLinkHtml(c){
   if(!SOURCE_MATERIAL_ID) return "";
@@ -35,6 +40,31 @@ function sourceLinkHtml(c){
     html += `<a class="btn ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:8px; display:inline-block; text-decoration:none; font-size:12.5px;">↩ Ver trecho original (pág. ${c.sourcePage})</a>`;
   }
   return html;
+}
+
+// Anotações feitas no leitor de PDF e vinculadas especificamente a este
+// conceito (via linkedConceptId). Retorna [] quando não há nenhuma.
+function notesForConcept(c){
+  if(!LINKED_NOTES || LINKED_NOTES.length === 0) return [];
+  return LINKED_NOTES.filter(n => n.linkedConceptId === c.id);
+}
+
+function linkedNotesHtml(c){
+  const notes = notesForConcept(c);
+  if(notes.length === 0) return "";
+  const items = notes.map(n => `
+    <li style="margin:4px 0;">
+      <a href="leitor.html?material=${encodeURIComponent(SOURCE_MATERIAL_ID)}&page=${encodeURIComponent(n.pageNumber)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit;">
+        📝 ${escapeHtml(n.text).slice(0, 140)}
+      </a>
+    </li>
+  `).join("");
+  return `
+    <div style="margin-top:10px; font-size:12.5px; color:var(--text-dim);">
+      <div style="font-weight:600; margin-bottom:2px;">Suas anotações sobre este conceito:</div>
+      <ul style="margin:0; padding-left:18px;">${items}</ul>
+    </div>
+  `;
 }
 
 const LEVELS = [
@@ -395,6 +425,7 @@ function renderLearnCard(){
       <div class="concept-title">${c.title}</div>
       <div class="concept-text">${c.text}</div>
       ${sourceLinkHtml(c)}
+      ${linkedNotesHtml(c)}
       <div id="analogy-box">
         ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
       </div>
@@ -576,7 +607,7 @@ function renderReviewCard(){
         </div>
       </div>
     </div>
-    <div style="text-align:center;">${sourceLinkHtml(c)}</div>
+    <div style="text-align:center;">${sourceLinkHtml(c)}${linkedNotesHtml(c)}</div>
     <div id="confidence-row">
       <p class="lead" style="text-align:center; margin-top:0;">Antes de ver a resposta: quão confiante você está de que lembra este conceito?</p>
       <div class="rate-row">
@@ -1073,10 +1104,12 @@ function applyConfigToDOM(){
    PONTO DE ENTRADA — chamado por app.html depois de buscar o JSON
    do módulo (CONFIG + CONCEPTS) em /content.
    ===================================================================== */
-async function initApp(config, concepts, sourceMaterialId){
+async function initApp(config, concepts, sourceMaterialId, moduleId, linkedNotes){
   CONFIG = config;
   CONCEPTS = concepts;
   SOURCE_MATERIAL_ID = sourceMaterialId || null;
+  MODULE_ID = moduleId || null;
+  LINKED_NOTES = Array.isArray(linkedNotes) ? linkedNotes : [];
   STATE = await loadState();
   bindTabs();
   applyConfigToDOM();

@@ -118,9 +118,9 @@ service cloud.firestore {
                     && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid
                     && get(/databases/$(database)/documents/materials/$(materialId)/highlights/$(request.resource.data.highlightId)).data.ownerId == request.auth.uid;
 
-        // Só o texto da anotação pode mudar. ownerId, materialId,
-        // highlightId (o trecho ao qual a nota está vinculada) e createdAt
-        // são imutáveis.
+        // O texto e o vínculo opcional com um módulo/conceito (Etapa 3)
+        // podem mudar. ownerId, materialId, highlightId (o trecho ao qual a
+        // nota está vinculada) e createdAt são imutáveis.
         allow update: if request.auth != null
                     && resource.data.ownerId == request.auth.uid
                     && get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid
@@ -128,7 +128,7 @@ service cloud.firestore {
                     && request.resource.data.materialId == resource.data.materialId
                     && request.resource.data.highlightId == resource.data.highlightId
                     && request.resource.data.createdAt == resource.data.createdAt
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'updatedAt']);
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'updatedAt', 'linkedModuleId', 'linkedConceptId']);
 
         allow delete: if request.auth != null
                     && resource.data.ownerId == request.auth.uid

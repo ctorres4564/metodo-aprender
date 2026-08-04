@@ -279,17 +279,24 @@ window.AppDB = {
       ownerId: uid,
       pageNumber: data.pageNumber,
       text: String(data.text || "").slice(0, 4000),
+      // Etapa 3 — vínculo opcional com um módulo/conceito gerado a partir
+      // deste mesmo material (null quando a nota não está vinculada).
+      linkedModuleId: data.linkedModuleId || null,
+      linkedConceptId: data.linkedModuleId ? (data.linkedConceptId || null) : null,
       createdAt: now,
       updatedAt: now
     };
     await setDoc(ref, payload);
     return payload;
   },
-  // Só o texto é aceito aqui (mesmo conjunto liberado pela regra de update).
+  // Texto e o vínculo de módulo/conceito são aceitos aqui (mesmo conjunto
+  // liberado pela regra de update em firestore.rules.txt).
   async updateNote(materialId, noteId, fields){
     const ref = doc(db, "materials", materialId, "notes", noteId);
     const update = { updatedAt: Date.now() };
     if(fields.text !== undefined) update.text = String(fields.text).slice(0, 4000);
+    if(fields.linkedModuleId !== undefined) update.linkedModuleId = fields.linkedModuleId || null;
+    if(fields.linkedConceptId !== undefined) update.linkedConceptId = fields.linkedModuleId ? (fields.linkedConceptId || null) : null;
     await updateDoc(ref, update);
     return true;
   },

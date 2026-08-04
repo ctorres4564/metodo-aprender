@@ -106,6 +106,17 @@
     <h3 style="margin:0 0 10px; font-size:15px;" id="note-editor-title">📝 Anotação</h3>
     <p class="note-editor-excerpt" id="note-editor-excerpt"></p>
     <textarea id="note-editor-text" class="explain-textarea" rows="5" placeholder="Escreva sua anotação sobre este trecho..."></textarea>
+    <div style="margin-top:10px;">
+      <label style="font-size:11.5px; color:var(--text-dim); display:block; margin-bottom:4px;">Vincular a um módulo/conceito (opcional)</label>
+      <div style="display:flex; gap:6px;">
+        <select id="note-editor-module" class="auth-input" style="flex:1; font-size:12.5px; padding:8px;">
+          <option value="">Nenhum módulo</option>
+        </select>
+        <select id="note-editor-concept" class="auth-input" style="flex:1; font-size:12.5px; padding:8px;" disabled>
+          <option value="">Nenhum conceito</option>
+        </select>
+      </div>
+    </div>
     <div style="display:flex; gap:8px; margin-top:12px;">
       <button class="btn" id="note-editor-save" style="flex:1;">Salvar</button>
       <button class="btn ghost" id="note-editor-cancel">Cancelar</button>
@@ -146,6 +157,12 @@ let pendingSelectionText = "";
 let activeHighlightId = null;   // destaque cujo menu está aberto
 let editingNoteId = null;       // nota sendo editada (null = criando nova)
 let editingHighlightId = null;  // destaque ao qual a nota em edição pertence
+
+// Etapa 3 — associar anotação a conceito/módulo: módulos do próprio usuário
+// gerados a partir DESTE material (sourceMaterialId === materialId), pra
+// oferecer no seletor do editor de anotação. Carregado uma vez no boot();
+// se falhar, o seletor simplesmente fica vazio (nunca bloqueia a leitura).
+let candidateModules = [];
 
 function escapeHtml(str){
   return String(str || "").replace(/[&<>"']/g, c => ({
@@ -550,12 +567,62 @@ document.getElementById("highlight-delete-btn").addEventListener("click", async 
 /* =====================================================================
    ANOTAÇÕES — editor
    ===================================================================== */
-function openNoteEditor({ highlightId, noteId, excerpt, text }){
+// Preenche o <select> de módulos com candidateModules; "concept" e
+// "moduleId" (se informados) pré-selecionam o vínculo de uma nota
+// existente sendo editada.
+//
+// Se o vínculo já salvo apontar pra um módulo/conceito que não está na
+// lista atual (porque candidateModules falhou ao carregar, ou porque o
+// módulo/conceito foi excluído/renomeado depois), NÃO deixamos o <select>
+// cair silenciosamente em "Nenhum módulo" — isso faria o botão Salvar
+// apagar um vínculo válido sem o usuário perceber. Em vez disso injetamos
+// uma opção sintética que preserva o id original até o usuário escolher
+// outra coisa de propósito.
+function populateModuleSelect(preselectModuleId, preselectConceptId){
+  const moduleSel = document.getElementById("note-editor-module");
+  let options = candidateModules.map(m => `<option value="${m.id}">${escapeHtml((m.config && m.config.appTitle) || m.id)}</option>`);
+  if(preselectModuleId && !candidateModules.some(m => m.id === preselectModuleId)){
+    options.unshift(`<option value="${preselectModuleId}">Vínculo atual (indisponível)</option>`);
+  }
+  moduleSel.innerHTML = `<option value="">Nenhum módulo</option>` + options.join("");
+  moduleSel.value = preselectModuleId || "";
+  populateConceptSelect(preselectModuleId, preselectConceptId);
+}
+function populateConceptSelect(moduleId, preselectConceptId){
+  const conceptSel = document.getElementById("note-editor-concept");
+  const mod = candidateModules.find(m => m.id === moduleId);
+  const concepts = (mod && Array.isArray(mod.concepts)) ? mod.concepts : [];
+  let options = concepts.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`);
+  if(preselectConceptId && !concepts.some(c => c.id === preselectConceptId)){
+    options.unshift(`<option value="${preselectConceptId}">Vínculo atual (indisponível)</option>`);
+  }
+  conceptSel.innerHTML = `<option value="">Nenhum conceito</option>` + options.join("");
+  conceptSel.disabled = concepts.length === 0 && !preselectConceptId;
+  conceptSel.value = preselectConceptId || "";
+}
+document.getElementById("note-editor-module").addEventListener("change", (ev)=>{
+  populateConceptSelect(ev.target.value, null);
+});
+
+// Rótulo curto ("Módulo → Conceito") pra exibir na lista lateral de
+// anotações quando a nota está vinculada a um módulo/conceito.
+function linkedConceptLabel(note){
+  if(!note.linkedModuleId) return null;
+  const mod = candidateModules.find(m => m.id === note.linkedModuleId);
+  if(!mod) return null;
+  const modTitle = (mod.config && mod.config.appTitle) || mod.id;
+  if(!note.linkedConceptId) return modTitle;
+  const concept = Array.isArray(mod.concepts) ? mod.concepts.find(c => c.id === note.linkedConceptId) : null;
+  return concept ? `${modTitle} → ${concept.title}` : modTitle;
+}
+
+function openNoteEditor({ highlightId, noteId, excerpt, text, linkedModuleId, linkedConceptId }){
   editingHighlightId = highlightId;
   editingNoteId = noteId || null;
   document.getElementById("note-editor-title").textContent = editingNoteId ? "📝 Editar anotação" : "📝 Nova anotação";
   document.getElementById("note-editor-excerpt").textContent = excerpt ? `"${excerpt.slice(0, 160)}"` : "";
   document.getElementById("note-editor-text").value = text || "";
+  populateModuleSelect(linkedModuleId || "", linkedConceptId || "");
   document.getElementById("note-editor-delete").style.display = editingNoteId ? "inline-block" : "none";
   document.getElementById("note-editor-backdrop").style.display = "flex";
   document.getElementById("note-editor-text").focus();
@@ -601,7 +668,9 @@ document.getElementById("highlight-note-btn").addEventListener("click", ()=>{
     highlightId: activeHighlightId,
     noteId: existing ? existing.id : null,
     excerpt: h ? h.text : "",
-    text: existing ? existing.text : ""
+    text: existing ? existing.text : "",
+    linkedModuleId: existing ? existing.linkedModuleId : null,
+    linkedConceptId: existing ? existing.linkedConceptId : null
   });
 });
 
@@ -613,16 +682,20 @@ document.getElementById("note-editor-backdrop").addEventListener("click", (ev)=>
 document.getElementById("note-editor-save").addEventListener("click", async ()=>{
   const text = document.getElementById("note-editor-text").value.trim();
   if(!text){ alert("Escreva algo antes de salvar."); return; }
+  const linkedModuleId = document.getElementById("note-editor-module").value || null;
+  const linkedConceptId = linkedModuleId ? (document.getElementById("note-editor-concept").value || null) : null;
   try{
     if(editingNoteId){
-      await window.AppDB.updateNote(materialId, editingNoteId, { text });
+      await window.AppDB.updateNote(materialId, editingNoteId, { text, linkedModuleId, linkedConceptId });
       const n = notes.find(x => x.id === editingNoteId);
-      if(n){ n.text = text; n.updatedAt = Date.now(); }
+      if(n){ n.text = text; n.updatedAt = Date.now(); n.linkedModuleId = linkedModuleId; n.linkedConceptId = linkedConceptId; }
     } else {
       const n = await window.AppDB.saveNote(materialId, {
         highlightId: editingHighlightId,
         pageNumber: currentPage,
-        text
+        text,
+        linkedModuleId,
+        linkedConceptId
       });
       notes.push(n);
     }
@@ -693,12 +766,13 @@ function renderSidebarNotes(){
   const sorted = [...notes].sort((a, b) => (a.pageNumber - b.pageNumber) || (a.createdAt - b.createdAt));
   el.innerHTML = sorted.map(n=>{
     const h = highlights.find(x => x.id === n.highlightId);
+    const linkLabel = linkedConceptLabel(n);
     return `
       <div class="sidebar-item" data-page="${n.pageNumber}" data-highlight-id="${n.highlightId}">
         <div class="sidebar-item-body">
           <div class="sidebar-item-excerpt">${h ? '"' + escapeHtml(h.text).slice(0, 90) + '"' : ""}</div>
           <div class="sidebar-item-text">${escapeHtml(n.text).slice(0, 160)}</div>
-          <div class="sidebar-item-meta">Página ${n.pageNumber}</div>
+          <div class="sidebar-item-meta">Página ${n.pageNumber}${linkLabel ? ` · 🔗 ${escapeHtml(linkLabel)}` : ""}</div>
         </div>
       </div>
     `;
@@ -760,13 +834,21 @@ async function boot(){
     // "Failed to fetch". getBytes() evita isso: a requisição é feita pelo
     // canal autenticado do próprio SDK, sem depender de Range/CORS. Também
     // não gera nenhuma URL de acesso compartilhável em memória.
-    const [pdfBytes, hs, ns] = await Promise.all([
+    const [pdfBytes, hs, ns, mods] = await Promise.all([
       window.AppStorage.getMaterialPdfBytes(material.storagePath),
       window.AppDB.listHighlights(materialId),
-      window.AppDB.listNotes(materialId)
+      window.AppDB.listNotes(materialId),
+      // Etapa 3 — módulos deste usuário gerados a partir DESTE material, pra
+      // oferecer no seletor "vincular a um conceito" do editor de anotação.
+      // Nunca deve travar a abertura do leitor — se falhar, o seletor fica
+      // vazio (a pessoa ainda consegue anotar normalmente, só sem vínculo).
+      window.AppDB.listUserModules()
+        .then(all => all.filter(m => m.sourceMaterialId === materialId))
+        .catch(e => { console.warn("Falha ao carregar módulos pra vínculo de anotação:", e); return []; })
     ]);
     highlights = hs;
     notes = ns;
+    candidateModules = mods;
 
     const ready = await waitForPdfjs(5000);
     if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
