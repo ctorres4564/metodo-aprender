@@ -310,6 +310,38 @@ document.getElementById("goto-page-input").addEventListener("keydown", (ev)=>{
   }
 });
 
+// Rolar a roda do mouse (ou gesto de rolagem do trackpad) sobre o PDF troca
+// de página, sem precisar tocar na toolbar. Enquanto a página atual ainda
+// tem conteúdo pra rolar (comum com zoom alto, onde a página fica mais alta
+// que a área visível), a rolagem continua normal, revelando o resto da
+// página — só troca de página quando o usuário já está no topo/fim dela e
+// continua rolando na mesma direção. Um cooldown curto evita pular várias
+// páginas de uma vez com um gesto forte de trackpad (que dispara muitos
+// eventos "wheel" seguidos).
+let wheelPageChangeCooldown = false;
+document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
+  const el = ev.currentTarget;
+  const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
+  const atTop = el.scrollTop <= 0;
+
+  if(ev.deltaY > 0 && atBottom && currentPage < totalPages){
+    ev.preventDefault();
+    if(wheelPageChangeCooldown) return;
+    wheelPageChangeCooldown = true;
+    goToPage(currentPage + 1).then(()=>{ el.scrollTop = 0; });
+    setTimeout(()=>{ wheelPageChangeCooldown = false; }, 450);
+  } else if(ev.deltaY < 0 && atTop && currentPage > 1){
+    ev.preventDefault();
+    if(wheelPageChangeCooldown) return;
+    wheelPageChangeCooldown = true;
+    goToPage(currentPage - 1).then(()=>{ el.scrollTop = 0; });
+    setTimeout(()=>{ wheelPageChangeCooldown = false; }, 450);
+  }
+  // Nos demais casos (ainda há conteúdo pra rolar na direção pedida),
+  // não faz nada especial — deixa o navegador rolar normalmente dentro
+  // da página, sem interferir.
+}, { passive: false });
+
 /* =====================================================================
    DESTAQUES — renderização visual na página atual
    ===================================================================== */
