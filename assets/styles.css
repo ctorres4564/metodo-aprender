@@ -375,7 +375,12 @@ body.reader-expanded #app-root{ flex:1; min-height:0; }
 body.reader-expanded #reader-shell{ height:100%; }
 body.reader-expanded .reader-toolbar{ flex-shrink:0; }
 body.reader-expanded .reader-main{ flex:1; min-height:0; align-items:stretch; }
-body.reader-expanded .pdf-viewer{ max-height:none; }
+/* min-height:0 é necessário aqui: por padrão, um item flex não encolhe
+   além da altura do próprio conteúdo (min-height:auto), então sem isso o
+   .pdf-viewer podia crescer além do espaço disponível em vez de ficar do
+   tamanho da tela com scroll interno — o que também confundia a detecção
+   de "topo/fim da página" usada pra trocar de página com a roda do mouse. */
+body.reader-expanded .pdf-viewer{ max-height:none; min-height:0; }
 body.reader-expanded .reader-sidebar{ max-height:none; }
 
 .reader-sidebar.sidebar-hidden{ display:none; }

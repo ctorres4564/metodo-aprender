@@ -321,8 +321,13 @@ document.getElementById("goto-page-input").addEventListener("keydown", (ev)=>{
 let wheelPageChangeCooldown = false;
 document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
   const el = ev.currentTarget;
-  const atBottom = Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
-  const atTop = el.scrollTop <= 0;
+  // Se a página inteira já cabe na área visível (nada pra rolar internamente
+  // — comum no modo expandido, onde o visualizador é bem maior), considera
+  // que já está "no topo e no fim" ao mesmo tempo, pra rolar sempre trocar
+  // de página em vez de não fazer nada.
+  const scrollable = el.scrollHeight - el.clientHeight > 1;
+  const atBottom = !scrollable || Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
+  const atTop = !scrollable || el.scrollTop <= 0;
 
   if(ev.deltaY > 0 && atBottom && currentPage < totalPages){
     ev.preventDefault();
