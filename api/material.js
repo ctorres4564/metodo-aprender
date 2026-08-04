@@ -211,8 +211,14 @@ async function handleRecordRead(req, res, user) {
     }
 
     const update = { lastOpenedAt: Date.now() };
-    if (typeof page === "number" && Number.isFinite(page) && page > 0) {
-      update.lastPageRead = Math.round(page);
+    if (typeof page === "number" && Number.isFinite(page)) {
+      const roundedPage = Math.round(page);
+      const maxPage = typeof snap.data().pageCount === "number" && snap.data().pageCount > 0
+        ? snap.data().pageCount
+        : Infinity;
+      if (roundedPage > 0 && roundedPage <= maxPage) {
+        update.lastPageRead = roundedPage;
+      }
     }
 
     await ref.update(update);
