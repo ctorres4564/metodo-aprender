@@ -18,14 +18,23 @@ let CONCEPTS = [];
 let STATE = null;
 // Etapa 2 — "voltar ao trecho original": id do material da Biblioteca que
 // originou este módulo (null pra módulos sem origem em PDF, ex.: fluxo de
-// criar-modulo.html/catálogo estático). Cada conceito pode ter um campo
-// "sourcePage" (ver importar-livro.html) — juntos, dão o link pro leitor.
+// criar-modulo.html/catálogo estático). Cada conceito pode ter "sourcePage"
+// (número da página) e "sourceExcerpt" (trecho curto do texto real daquela
+// página, extraído em importar-livro.html — nunca escrito pela IA) — juntos
+// dão a citação do trecho original e o link pro leitor.
 let SOURCE_MATERIAL_ID = null;
 
 function sourceLinkHtml(c){
-  if(!SOURCE_MATERIAL_ID || !c.sourcePage) return "";
-  const url = `leitor.html?material=${encodeURIComponent(SOURCE_MATERIAL_ID)}&page=${encodeURIComponent(c.sourcePage)}`;
-  return `<a class="btn ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:10px; display:inline-block; text-decoration:none; font-size:12.5px;">↩ Ver trecho original (pág. ${c.sourcePage})</a>`;
+  if(!SOURCE_MATERIAL_ID) return "";
+  let html = "";
+  if(c.sourceExcerpt){
+    html += `<blockquote class="lead" style="font-style:italic; font-size:12px; margin:10px 0 0; padding:6px 10px; border-left:2px solid var(--border); background:rgba(255,255,255,0.03); border-radius:0 8px 8px 0;">"${escapeHtml(c.sourceExcerpt)}"</blockquote>`;
+  }
+  if(c.sourcePage){
+    const url = `leitor.html?material=${encodeURIComponent(SOURCE_MATERIAL_ID)}&page=${encodeURIComponent(c.sourcePage)}`;
+    html += `<a class="btn ghost" href="${url}" target="_blank" rel="noopener" style="margin-top:8px; display:inline-block; text-decoration:none; font-size:12.5px;">↩ Ver trecho original (pág. ${c.sourcePage})</a>`;
+  }
+  return html;
 }
 
 const LEVELS = [

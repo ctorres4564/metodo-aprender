@@ -243,6 +243,25 @@ function offsetToPageNumber(offset, pages){
   return found;
 }
 
+// Etapa 2 — trecho original citável por conceito: pega um pedaço curto do
+// texto REAL da página (não algo que a IA escreveu) pra mostrar como
+// citação junto do conceito. Sempre extraído do bookPages já salvo — nunca
+// depende da IA reproduzir o texto certo, então não tem risco de citação
+// incorreta/alucinada. Corta num espaço, não no meio de uma palavra.
+function extractExcerpt(pages, pageNum, maxLen){
+  maxLen = maxLen || 220;
+  if(pageNum == null) return null;
+  const page = pages && pages.find(p => p.num === pageNum);
+  if(!page || !page.text) return null;
+  const text = page.text.trim().replace(/\s+/g, " ");
+  if(!text) return null;
+  if(text.length <= maxLen) return text;
+  let cut = text.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  if(lastSpace > maxLen * 0.6) cut = cut.slice(0, lastSpace);
+  return cut.trim() + "…";
+}
+
 // Etapa 2 — referência de origem por conceito: insere marcadores
 // "[[PAGINA:N]]" nas quebras de página dentro do trecho [startOffset,
 // endOffset), pra que o gerador de IA (api/gerar-modulo.js) consiga dizer
@@ -627,7 +646,10 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
         const rawPage = typeof c.page === "number" ? c.page : null;
         const validPage = (rawPage != null && sourcePageStart != null && sourcePageEnd != null
           && rawPage >= sourcePageStart && rawPage <= sourcePageEnd) ? rawPage : sourcePageStart;
-        return Object.assign({ id: slugify(c.title) + "-" + i, sourcePage: validPage }, c);
+        // sourceExcerpt: trecho citável, extraído do texto real da página
+        // (não escrito pela IA) — ver extractExcerpt().
+        const excerpt = extractExcerpt(bookPages, validPage);
+        return Object.assign({ id: slugify(c.title) + "-" + i, sourcePage: validPage, sourceExcerpt: excerpt }, c);
       }),
       sourceMaterialId: currentMaterialId || null,
       sourceMaterialTitle: currentMaterialTitle || null,
