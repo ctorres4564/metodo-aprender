@@ -631,10 +631,18 @@ async function boot(){
 
     document.getElementById("reader-title").textContent = material.title || "Leitor de PDF";
 
-    // A URL de download é obtida uma vez, usada em memória pelo PDF.js e
-    // nunca persistida (nem logada) — ver comentário em AppStorage.getMaterialPdfUrl.
-    const [pdfUrl, hs, ns] = await Promise.all([
-      window.AppStorage.getMaterialPdfUrl(material.storagePath),
+    // Baixa o PDF autenticado como ArrayBuffer (AppStorage.getMaterialPdfBytes,
+    // via getBytes() do SDK do Firebase) em vez de pedir uma URL de download
+    // e deixar o PDF.js buscá-la sozinho. Motivo: getDocument({url}) faz o
+    // PDF.js emitir requisições HTTP com cabeçalho Range direto pro domínio
+    // firebasestorage.googleapis.com — cross-origin a partir deste app — e
+    // esse tipo de requisição exige CORS configurado no bucket (não
+    // configurado neste projeto); sem isso o navegador bloqueia com
+    // "Failed to fetch". getBytes() evita isso: a requisição é feita pelo
+    // canal autenticado do próprio SDK, sem depender de Range/CORS. Também
+    // não gera nenhuma URL de acesso compartilhável em memória.
+    const [pdfBytes, hs, ns] = await Promise.all([
+      window.AppStorage.getMaterialPdfBytes(material.storagePath),
       window.AppDB.listHighlights(materialId),
       window.AppDB.listNotes(materialId)
     ]);
@@ -644,10 +652,12 @@ async function boot(){
     const ready = await waitForPdfjs(5000);
     if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
 
-    // getDocument com uma URL (em vez de bytes já carregados) permite que o
-    // PDF.js busque só as páginas necessárias por HTTP Range, sem baixar o
-    // arquivo inteiro de uma vez (Firebase Storage aceita Range requests).
-    pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+    // data (ArrayBuffer) em vez de url: o PDF.js abre o documento inteiro a
+    // partir dos bytes já em memória, sem nenhuma requisição de rede extra.
+    // Trade-off: o arquivo inteiro já foi baixado antes de abrir (ver
+    // "impacto de memória" no relatório desta correção) — a renderização em
+    // si continua página a página (só a página atual é desenhada no canvas).
+    pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     totalPages = pdfDoc.numPages;
 
     document.getElementById("reader-shell").style.display = "block";

@@ -42,7 +42,8 @@ import {
   getStorage,
   ref as storageRef,
   uploadBytes,
-  getDownloadURL
+  getDownloadURL,
+  getBytes
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -311,18 +312,39 @@ window.AppStorage = {
     return path;
   },
 
-  // Gera uma URL de download temporária para o PDF já salvo (usada pelo
-  // leitor, para o PDF.js buscar as páginas sob demanda direto do
-  // Storage). IMPORTANTE: essa URL funciona como um link de acesso
-  // compartilhável (contém um token de acesso na query string) — por
-  // isso NUNCA deve ser persistida (Firestore, localStorage) nem
-  // registrada em log. É gerada em memória, usada só durante a sessão
-  // atual da página, e descartada ao navegar para outro lugar.
+  // Gera uma URL de download temporária para o PDF já salvo. NÃO é usada
+  // pelo leitor (ver getMaterialPdfBytes abaixo) — o PDF.js, ao abrir essa
+  // URL diretamente via getDocument({url}), faz requisições HTTP com
+  // cabeçalho Range para buscar páginas sob demanda; essas requisições
+  // saem do domínio do app (metodoaprender.com) para
+  // firebasestorage.googleapis.com, e esse cabeçalho Range exige CORS
+  // configurado no bucket (algo que este projeto não configura, de
+  // propósito, pra não precisar mexer em infraestrutura fora do Firebase
+  // Console) — sem isso, o navegador bloqueia com "Failed to fetch".
+  // Mantida aqui só como utilidade genérica, caso seja útil no futuro
+  // (ex: um link de "abrir em nova aba"). IMPORTANTE se for usada: essa
+  // URL funciona como um link de acesso compartilhável (contém um token
+  // na query string) — nunca deve ser persistida (Firestore,
+  // localStorage) nem registrada em log.
   async getMaterialPdfUrl(storagePath){
     const uid = auth.currentUser && auth.currentUser.uid;
     if(!uid) throw new Error("Não autenticado");
     const fileRef = storageRef(storage, storagePath);
     return await getDownloadURL(fileRef);
+  },
+
+  // Baixa o PDF inteiro, autenticado, como ArrayBuffer — usada pelo leitor.
+  // Diferente de getMaterialPdfUrl, isso NÃO gera nenhuma URL de acesso
+  // (nada compartilhável em memória, nem em log): getBytes() faz a
+  // requisição autenticada direto pelo SDK do Firebase (mesmo canal já
+  // usado por uploadBytes) e devolve os bytes crus. Evita depender de
+  // CORS/Range no bucket, ao custo de baixar o arquivo inteiro de uma vez
+  // em vez de por página sob demanda (ver leitor.html, função boot()).
+  async getMaterialPdfBytes(storagePath){
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if(!uid) throw new Error("Não autenticado");
+    const fileRef = storageRef(storage, storagePath);
+    return await getBytes(fileRef);
   }
 };
 
