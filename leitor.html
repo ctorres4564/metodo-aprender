@@ -689,7 +689,18 @@ function renderSidebarNotes(){
 /* =====================================================================
    BOOT
    ===================================================================== */
+// window.AppAuth.onChange() (initAuthGate) pode disparar mais de uma vez
+// com um usuário autenticado (ex.: primeiro com o usuário em cache,
+// depois de novo após o Firebase revalidar a sessão) — sem essa proteção,
+// boot() rodava duas vezes em paralelo, e as duas chamadas a
+// page.render() disputavam o mesmo <canvas>, uma delas lançando "Cannot
+// use the same canvas during multiple render() operations" e deixando a
+// TextLayer sem nenhum <span> (por isso a seleção de texto não funcionava,
+// mesmo com o PDF aparecendo normalmente).
+let didBoot = false;
 async function boot(){
+  if(didBoot) return;
+  didBoot = true;
   const params = new URLSearchParams(window.location.search);
   materialId = params.get("material");
   if(!materialId){
