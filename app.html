@@ -211,7 +211,17 @@
 <script src="assets/storage.js"></script>
 <script src="assets/engine.js"></script>
 <script>
+// A2-09: onAuthStateChanged (window.AppAuth.onChange, chamado dentro de
+// initAuthGate em auth-ui.js) pode disparar mais de uma vez pro mesmo
+// usuário — não só no primeiro login/logout, mas em qualquer reavaliação
+// do estado de auth. Sem essa guarda, cada disparo repetia boot() inteiro:
+// registrava os mesmos event listeners de novo (então um clique passava a
+// disparar a mesma ação várias vezes) e recarregava o módulo do zero.
+// Mesmo padrão já usado em leitor.html (ver variável didBoot lá).
+let didBoot = false;
 async function boot(){
+  if(didBoot) return;
+  didBoot = true;
   const params = new URLSearchParams(window.location.search);
   const moduleId = params.get("m");
   const isUserModule = params.get("src") === "user";

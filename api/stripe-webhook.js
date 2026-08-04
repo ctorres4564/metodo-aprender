@@ -36,7 +36,41 @@ async function buffer(readable) {
   return Buffer.concat(chunks);
 }
 
+// DADOS (A1-01): um "set(..., {merge:true})" incondicional recria o
+// documento users/{uid} do zero se ele não existir — o que acontece
+// sempre que um evento de ASSINATURA (subscription.created/updated/
+// deleted) chega DEPOIS de a pessoa já ter excluído a conta (ver
+// api/account.js: cancelamos a assinatura na Stripe como parte da
+// exclusão, e a Stripe manda esses eventos de volta de forma assíncrona,
+// já sem o documento correspondente no Firestore). Sem checar existência
+// antes, a conta "ressuscitava" com só os campos daquele evento (plan,
+// stripeSubscriptionStatus), sem o resto do perfil, e sem que a pessoa
+// tenha pedido isso.
+//
+// "checkout.session.completed" é diferente E NÃO usa esta guarda (ver
+// createUserFields abaixo): esse evento só existe porque uma pessoa está,
+// nesse exato momento, terminando um checkout ativo no navegador — é o
+// próprio momento legítimo de primeira criação do documento users/{uid}
+// (que não é criado em nenhum outro lugar antes da primeira assinatura;
+// ver assets/firebase-init.js saveUserProfile, só chamado ao mexer no
+// toggle de lembretes). Bloquear esse evento quebraria a ativação do
+// plano Premium para qualquer pessoa que assine sem nunca ter mexido
+// nesse toggle.
 async function setUserFields(uid, fields) {
+  if (!uid) {
+    console.error("Evento da Stripe sem uid em metadata — ignorado.");
+    return;
+  }
+  const ref = adminDb().collection("users").doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    console.warn(`Evento de assinatura da Stripe para uid=${uid}, mas a conta já foi excluída — ignorado.`);
+    return;
+  }
+  await ref.set(fields, { merge: true });
+}
+
+async function createUserFields(uid, fields) {
   if (!uid) {
     console.error("Evento da Stripe sem uid em metadata — ignorado.");
     return;
@@ -79,7 +113,7 @@ export default async function handler(req, res) {
         const session = event.data.object;
         const uid = session.client_reference_id || (session.metadata && session.metadata.uid);
         if (uid && session.customer) {
-          await setUserFields(uid, { stripeCustomerId: session.customer });
+          await createUserFields(uid, { stripeCustomerId: session.customer });
         }
         break;
       }

@@ -2,7 +2,7 @@
    Verificação de login + controle de uso mensal de IA por usuário.
    =====================================================================
    Usado por todas as funções que chamam a OpenRouter (avaliar-explicacao,
-   gerar-modulo, detectar-capitulos, gerar-analogia) para garantir que:
+   gerar-modulo, localizar-secao, gerar-analogia, regenerar-conceito) para garantir que:
    1. Só quem tem conta (login válido) consegue gastar créditos de IA.
    2. Cada pessoa tem um limite mensal de gerações, por plano.
 
@@ -88,6 +88,33 @@ export async function checkAndConsumeUsage(user) {
   });
 
   return result;
+}
+
+// SEGURANÇA/FINANCEIRO (A1-03): checkAndConsumeUsage já consome 1 unidade
+// da cota mensal ANTES da chamada à OpenRouter (precisa ser assim — é o
+// jeito de garantir atomicidade sem duas transações). Isso significa que
+// qualquer falha depois disso (timeout, erro de rede, HTTP não-2xx, JSON
+// inválido, ou resposta da IA que não passa na validação do endpoint)
+// cobrava da pessoa uma geração que ela nunca recebeu. refundUsage
+// devolve exatamente 1 unidade ao contador do mês corrente — chamada por
+// cada endpoint de IA em todo caminho de falha após checkAndConsumeUsage
+// e antes de uma resposta 200 válida ao cliente. Nunca deixa o contador
+// negativo, e nunca lança erro (uma falha ao estornar não deve virar um
+// erro 500 pro usuário, que já está lidando com a falha original).
+export async function refundUsage(uid) {
+  if (!uid) return;
+  const db = adminDb();
+  const ref = db.collection("ai_usage").doc(`${uid}_${currentMonthKey()}`);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists ? snap.data().count || 0 : 0;
+      if (current <= 0) return;
+      tx.set(ref, { count: current - 1, updatedAt: Date.now() }, { merge: true });
+    });
+  } catch (e) {
+    console.error(`Falha ao estornar cota de IA para uid=${uid} (seguindo em frente):`, e.message);
+  }
 }
 
 // Atalho usado no início de cada handler de IA: garante login + cota,

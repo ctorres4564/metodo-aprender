@@ -15,8 +15,8 @@
      um modelo padrão razoável para esta tarefa.
    ===================================================================== */
 
-import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
-import { extractJson } from "./_lib/parseJson.js";
+import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
@@ -108,45 +108,16 @@ ${studentText}
 """`;
 
   try {
-    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "authorization": `Bearer ${apiKey}`,
-        // Cabeçalhos recomendados (não obrigatórios) pela OpenRouter para identificar o app:
-        "HTTP-Referer": process.env.APP_URL || "https://metodo-aprender.vercel.app",
-        "X-Title": "Metodo Aprender - Modo Feynman"
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 3000,
-        reasoning: { effort: "low", exclude: true },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" }
-      })
+    const parsed = await callOpenRouter({
+      apiKey,
+      model,
+      maxTokens: 3000,
+      title: "Metodo Aprender - Modo Feynman",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ]
     });
-
-    if (!orRes.ok) {
-      const errText = await orRes.text();
-      console.error("Erro OpenRouter:", orRes.status, errText);
-      res.status(502).json({ error: "Falha ao consultar o avaliador de IA." });
-      return;
-    }
-
-    const data = await orRes.json();
-    const rawText = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-
-    let parsed;
-    try {
-      parsed = extractJson(rawText);
-    } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
-      res.status(502).json({ error: "Resposta do avaliador em formato inesperado." });
-      return;
-    }
 
     // SEGURANÇA (SEC-04): valida e limita cada campo antes de devolver ao
     // cliente. A saída do modelo é influenciada pelo texto enviado (prompt
@@ -172,6 +143,16 @@ ${studentText}
       qualidadeSM2
     });
   } catch (e) {
+    // A1-03: qualquer falha aqui (timeout/rede/HTTP/parse na OpenRouter, ou
+    // um erro inesperado na validação abaixo) acontece DEPOIS de já ter
+    // consumido 1 unidade da cota mensal (checkAndConsumeUsage, acima) e
+    // ANTES de qualquer resposta válida ter chegado à pessoa — por isso
+    // sempre estorna, independente da causa.
+    await refundUsage(user.uid);
+    if (e && e.code) {
+      res.status(statusForOpenRouterError(e)).json({ error: e.message });
+      return;
+    }
     console.error(e);
     res.status(500).json({ error: "Erro interno ao avaliar a explicação." });
   }

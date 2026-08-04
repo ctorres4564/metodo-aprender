@@ -48,6 +48,31 @@ export default async function handler(req, res) {
     const snap = await adminDb().collection("users").doc(user.uid).get();
     const existingCustomerId = snap.exists ? snap.data().stripeCustomerId : null;
 
+    // FINANCEIRO (A2-05): sem esta checagem, era possível abrir um novo
+    // checkout (e cobrar uma segunda assinatura) mesmo já tendo uma ativa —
+    // ex.: duas abas abertas, ou clicar de novo antes do redirecionamento
+    // anterior terminar. Verifica na própria Stripe (fonte da verdade, não
+    // no "plan" do Firestore, que só é atualizado pelo webhook e pode
+    // atrasar alguns segundos) se já existe alguma assinatura em andamento
+    // pra este customer antes de criar outra.
+    if (existingCustomerId) {
+      const existingSubs = await stripe.subscriptions.list({
+        customer: existingCustomerId,
+        status: "all",
+        limit: 20
+      });
+      const hasOngoing = existingSubs.data.some((s) =>
+        ["trialing", "active", "past_due", "unpaid", "incomplete"].includes(s.status)
+      );
+      if (hasOngoing) {
+        res.status(400).json({
+          error: "Você já tem uma assinatura em andamento. Gerencie-a no painel do plano.",
+          code: "already_subscribed"
+        });
+        return;
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],

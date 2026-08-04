@@ -267,19 +267,31 @@ async function handleRecordRead(req, res, user) {
 }
 
 /* ---- action: delete -------------------------------------------------- */
-async function deleteAllPages(materialRef) {
-  const pagesRef = materialRef.collection("pages");
-  // Repete em lotes até a subcoleção ficar vazia — assim funciona tanto
-  // pra materiais com poucas páginas quanto pra livros de 600+ páginas,
-  // e também retoma corretamente se uma tentativa anterior parou no meio.
+// Repete em lotes até a subcoleção ficar vazia — assim funciona tanto pra
+// materiais com poucas páginas/destaques/anotações quanto pra livros
+// grandes, e também retoma corretamente se uma tentativa anterior parou
+// no meio.
+async function deleteSubcollection(collectionRef) {
   while (true) {
-    const snap = await pagesRef.limit(PAGE_DELETE_BATCH_SIZE).get();
+    const snap = await collectionRef.limit(PAGE_DELETE_BATCH_SIZE).get();
     if (snap.empty) break;
     const batch = adminDb().batch();
     snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
     if (snap.size < PAGE_DELETE_BATCH_SIZE) break;
   }
+}
+
+// SEGURANÇA/DADOS (A1-02): excluir só "pages" deixava "highlights" e
+// "notes" (leitor de PDF, Etapa 2/3) órfãos no Firestore — nunca mais
+// acessíveis por nenhuma tela do app, mas continuavam existindo e sendo
+// contados/lidos indevidamente. As três subcoleções pertencem ao mesmo
+// material e precisam ser removidas juntas (mesmo conjunto já usado em
+// api/account.js para exclusão de conta).
+async function deleteMaterialSubcollections(materialRef) {
+  await deleteSubcollection(materialRef.collection("pages"));
+  await deleteSubcollection(materialRef.collection("highlights"));
+  await deleteSubcollection(materialRef.collection("notes"));
 }
 
 async function handleDelete(req, res, user) {
@@ -324,7 +336,7 @@ async function handleDelete(req, res, user) {
       }
     }
 
-    await deleteAllPages(ref);
+    await deleteMaterialSubcollections(ref);
     await ref.delete();
 
     res.status(200).json({ ok: true });

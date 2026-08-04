@@ -3,10 +3,12 @@
    documento longo, com base numa descrição em texto livre do(a) usuário(a)
    (ex: "Parte 1", "capítulo 3", "a seção sobre memória de trabalho").
    =====================================================================
-   Diferente de api/detectar-capitulos.js (que tenta mapear TODAS as
-   divisões do documento de uma vez, custando uma chamada cara por livro),
-   esta função só precisa achar UMA seção por vez — muito mais rápida e
-   barata, e não depende do documento seguir um padrão fixo de numeração.
+   Ao contrário de tentar mapear TODAS as divisões do documento de uma vez
+   (o que custaria uma chamada cara por livro), esta função só precisa
+   achar UMA seção por vez — muito mais rápida e barata, e não depende do
+   documento seguir um padrão fixo de numeração. (MORTO-01: api/detectar-
+   capitulos.js, que fazia esse mapeamento completo, nunca chegou a ser
+   usado por nenhuma tela do app e foi removido.)
 
    Recebe: { content, mode, target }
      - mode "text": content é o texto completo do documento.
@@ -24,8 +26,8 @@
    Variáveis de ambiente: mesmas usadas pelas outras funções em api/
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
-import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
-import { extractJson } from "./_lib/parseJson.js";
+import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_CONTENT_CHARS = 45000;
@@ -119,45 +121,21 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
   const userPrompt = `Conteúdo:\n"""\n${trimmedContent}\n"""`;
 
   try {
-    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": process.env.APP_URL || "https://metodo-aprender.vercel.app",
-        "X-Title": "Metodo Aprender - Localizar Secao"
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1500,
-        reasoning: { effort: "low", exclude: true },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" }
-      })
+    const parsed = await callOpenRouter({
+      apiKey,
+      model,
+      maxTokens: 1500,
+      title: "Metodo Aprender - Localizar Secao",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ]
     });
 
-    if (!orRes.ok) {
-      const errText = await orRes.text();
-      console.error("Erro OpenRouter:", orRes.status, errText);
-      res.status(502).json({ error: "Falha ao consultar o localizador de seção." });
-      return;
-    }
-
-    const data = await orRes.json();
-    const rawText = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-
-    let parsed;
-    try {
-      parsed = extractJson(rawText);
-    } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
-      res.status(502).json({ error: "Resposta do localizador em formato inesperado." });
-      return;
-    }
-
+    // Importante (A1-03): "não encontrei a seção pedida" é uma resposta
+    // válida da IA, não uma falha — ela consultou o conteúdo e concluiu
+    // honestamente que não achou o que a pessoa descreveu. A cota NÃO é
+    // estornada aqui (diferente dos caminhos de erro abaixo).
     if (!parsed.startAnchor) {
       res.status(200).json({ found: false });
       return;
@@ -170,6 +148,11 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
       nextAnchor: parsed.nextAnchor ? String(parsed.nextAnchor).slice(0, 300) : ""
     });
   } catch (e) {
+    await refundUsage(user.uid);
+    if (e && e.code) {
+      res.status(statusForOpenRouterError(e)).json({ error: e.message });
+      return;
+    }
     console.error(e);
     res.status(500).json({ error: "Erro interno ao localizar a seção." });
   }

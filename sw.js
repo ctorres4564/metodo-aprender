@@ -49,15 +49,29 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
-  // Nunca cacheia chamadas de API (dados sempre precisam ser atuais) nem
-  // requisições que não sejam GET.
-  if (req.method !== "GET" || req.url.includes("/api/")) return;
+  // SEGURANÇA/CACHE (A1-04 + A3-08): nunca cacheia chamadas de API (dados
+  // sempre precisam ser atuais), requisições que não sejam GET, nem nada
+  // fora do próprio domínio do app — antes disso, o filtro só excluía
+  // "/api/", o que deixava passar (e cachear) respostas de Firestore,
+  // Firebase Storage, o SDK do Firebase via gstatic, bibliotecas via
+  // cdnjs e chamadas à Stripe, todas cross-origin. Cache do "shell" deve
+  // cobrir só os arquivos estáticos do próprio app (ver SHELL_FILES acima).
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/")) return;
 
   event.respondWith(
     fetch(req)
       .then((res) => {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+        // Só grava no cache respostas de sucesso (res.ok) e "basic" (mesmo
+        // origin, sem redirecionar pra fora) — nunca respostas de erro
+        // (4xx/5xx, ex.: uma página 404) nem "opacas" (cross-origin em modo
+        // no-cors, status sempre 0, impossível saber se deu certo).
+        if (res.ok && res.type === "basic") {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(req))

@@ -1,8 +1,8 @@
 /* =====================================================================
    Cliente de API autenticado.
    =====================================================================
-   As funções de IA (avaliar-explicacao, gerar-modulo, detectar-capitulos,
-   gerar-analogia) agora exigem login: o servidor verifica o token do
+   As funções de IA (avaliar-explicacao, gerar-modulo, localizar-secao,
+   gerar-analogia, regenerar-conceito) agora exigem login: o servidor verifica o token do
    Firebase para saber quem está chamando e controlar o limite mensal de
    uso por pessoa. Este helper injeta esse token automaticamente em toda
    chamada — usar authedFetch(url, options) em vez de fetch(url, options)

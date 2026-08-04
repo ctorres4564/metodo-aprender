@@ -24,6 +24,7 @@
 
 import { verifyUserFromRequest } from "./_lib/usage.js";
 import { adminDb, adminAuth, adminStorage } from "./_lib/firebaseAdmin.js";
+import { getStripe } from "./_lib/stripe.js";
 import { FieldPath } from "firebase-admin/firestore";
 
 const BATCH_SIZE = 400; // margem de segurança abaixo do limite de 500 por batch do Firestore
@@ -49,6 +50,28 @@ async function deleteMaterialSubcollections(materialRef) {
   await deleteQueryInBatches(materialRef.collection("notes"));
 }
 
+// SEGURANÇA/FINANCEIRO (A1-01): sem isso, excluir a conta apagava todos os
+// dados no Firestore mas deixava a assinatura ativa na Stripe rodando —
+// a pessoa continuaria sendo cobrada todo mês por uma conta que não existe
+// mais e não tem como cancelar sozinha (o Billing Portal exige login).
+// Roda ANTES de qualquer exclusão de dados: se falhar, é melhor abortar
+// cedo (a pessoa ainda loga e tenta de novo) do que apagar tudo e deixar
+// uma cobrança órfã rodando pra sempre.
+const CANCELABLE_SUBSCRIPTION_STATUSES = ["trialing", "active", "past_due", "unpaid", "incomplete"];
+
+async function cancelStripeSubscriptions(uid) {
+  const userSnap = await adminDb().collection("users").doc(uid).get();
+  const customerId = userSnap.exists ? userSnap.data().stripeCustomerId : null;
+  if (!customerId) return; // pessoa nunca assinou — nada a cancelar.
+
+  const stripe = getStripe();
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+  for (const sub of subs.data) {
+    if (!CANCELABLE_SUBSCRIPTION_STATUSES.includes(sub.status)) continue;
+    await stripe.subscriptions.cancel(sub.id);
+  }
+}
+
 // progress/{uid}_{storageKey} e ai_usage/{uid}_{ano-mes} usam o uid como
 // prefixo determinístico do id do documento (ver firebase-init.js e
 // api/_lib/usage.js) — em vez de depender de um campo "uid" gravado
@@ -66,6 +89,13 @@ async function handleDeleteAccount(req, res, user) {
   const db = adminDb();
 
   try {
+    // 0. Cancela qualquer assinatura Stripe ativa ANTES de apagar qualquer
+    //    dado (ver comentário em cancelStripeSubscriptions). Se isso falhar,
+    //    o catch abaixo aborta a exclusão inteira — a pessoa ainda consegue
+    //    logar e tentar de novo, em vez de ficar com dados apagados e uma
+    //    cobrança que ninguém mais consegue cancelar.
+    await cancelStripeSubscriptions(uid);
+
     // 1. Materiais: Storage (PDF original) + subcoleções (pages/highlights/
     //    notes) + o documento do material em si.
     const materialsSnap = await db.collection("materials").where("ownerId", "==", uid).get();

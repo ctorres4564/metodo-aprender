@@ -31,8 +31,8 @@
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
 
-import { verifyUserFromRequest, checkAndConsumeUsage } from "./_lib/usage.js";
-import { extractJson } from "./_lib/parseJson.js";
+import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_SOURCE_CHARS = 14000;
@@ -151,44 +151,16 @@ ${trimmedSource}
 """${annotationsBlock}`;
 
   try {
-    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": process.env.APP_URL || "https://metodo-aprender.vercel.app",
-        "X-Title": "Metodo Aprender - Gerar Modulo"
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 9000,
-        reasoning: { effort: "low", exclude: true },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" }
-      })
+    const parsed = await callOpenRouter({
+      apiKey,
+      model,
+      maxTokens: 9000,
+      title: "Metodo Aprender - Gerar Modulo",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ]
     });
-
-    if (!orRes.ok) {
-      const errText = await orRes.text();
-      console.error("Erro OpenRouter:", orRes.status, errText);
-      res.status(502).json({ error: "Falha ao consultar o gerador de IA." });
-      return;
-    }
-
-    const data = await orRes.json();
-    const rawText = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-
-    let parsed;
-    try {
-      parsed = extractJson(rawText);
-    } catch (parseErr) {
-      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
-      res.status(502).json({ error: "Resposta do gerador em formato inesperado." });
-      return;
-    }
 
     const concepts = Array.isArray(parsed.concepts) ? parsed.concepts : [];
 
@@ -210,6 +182,11 @@ ${trimmedSource}
 
     res.status(200).json({ resumo, concepts: cleanConcepts });
   } catch (e) {
+    await refundUsage(user.uid);
+    if (e && e.code) {
+      res.status(statusForOpenRouterError(e)).json({ error: e.message });
+      return;
+    }
     console.error(e);
     res.status(500).json({ error: "Erro interno ao gerar conceitos." });
   }
