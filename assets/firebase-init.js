@@ -85,18 +85,41 @@ window.AppDB = {
     return true;
   },
 
-  /* ---- Módulos criados pelo(a) próprio(a) usuário(a) ---- */
+  /* ---- Módulos criados pelo(a) próprio(a) usuário(a) ----
+     Etapa 4 — "migração": módulos criados antes da Biblioteca existir (ou
+     antes de qualquer um dos recursos das Etapas 2/3) não têm
+     sourceMaterialId, generatedAt, schemaVersion etc. no documento salvo.
+     Em vez de reescrever esses documentos no Firestore (arriscado sem
+     poder testar contra os dados reais de cada usuário), normalizamos aqui
+     mesmo, na leitura: todo módulo devolvido por listUserModules/
+     getUserModule sempre tem esses campos presentes (com fallback seguro),
+     então o resto do app (busca, vínculo de anotação, "voltar ao trecho
+     original") nunca precisa checar "esse módulo é antigo?" — ele já
+     recebe um formato consistente. Não escreve nada de volta: é só uma
+     normalização em memória, sem risco pros dados salvos. */
+  normalizeUserModule(m){
+    if(!m) return m;
+    return Object.assign({
+      sourceMaterialId: null,
+      sourceMaterialTitle: null,
+      sourcePageStart: null,
+      sourcePageEnd: null,
+      generatedAt: m.updatedAt || m.createdAt || null,
+      schemaVersion: 1,
+      concepts: []
+    }, m);
+  },
   async listUserModules(){
     const uid = auth.currentUser && auth.currentUser.uid;
     if(!uid) return [];
     const q = query(collection(db, "modules"), where("ownerId", "==", uid));
     const snap = await getDocs(q);
-    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    return snap.docs.map(d => this.normalizeUserModule(Object.assign({ id: d.id }, d.data())));
   },
   async getUserModule(id){
     const ref = doc(db, "modules", id);
     const snap = await getDoc(ref);
-    return snap.exists() ? Object.assign({ id: snap.id }, snap.data()) : null;
+    return snap.exists() ? this.normalizeUserModule(Object.assign({ id: snap.id }, snap.data())) : null;
   },
   async saveUserModule(id, moduleData){
     const uid = auth.currentUser && auth.currentUser.uid;

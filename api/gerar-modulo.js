@@ -3,8 +3,17 @@
    estudo) a partir de um texto-fonte (capítulo de livro, artigo etc.),
    usando um modelo de linguagem via OpenRouter.
    =====================================================================
-   Recebe: { title, sourceText }
+   Recebe: { title, sourceText, annotations? }
    Retorna: { resumo, concepts: [{ tag, title, text, q, options[4], correct, page }] }
+
+   "annotations" (Etapa 4 — anotações como contexto pra IA, opcional):
+   lista de destaques/anotações que o(a) usuário(a) já fez nesse trecho do
+   livro, no leitor de PDF (ver importar-livro.html, que monta essa lista a
+   partir de window.AppDB.listHighlights/listNotes filtrando pela faixa de
+   páginas da seção sendo gerada). Quando presente, o modelo é instruído a
+   dar atenção especial a esses pontos — não pra copiá-los, mas pra
+   aumentar a chance de que o que a pessoa já achou importante vire uma
+   ficha de estudo. Cada item: { page, kind: "destaque"|"anotação", text }.
 
    "page" (Etapa 2 — referência de origem por conceito): quando sourceText
    contém marcadores "[[PAGINA:N]]" (inseridos por importar-livro.html nas
@@ -28,6 +37,30 @@ import { extractJson } from "./_lib/parseJson.js";
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_SOURCE_CHARS = 14000;
 const MAX_CONCEPTS = 20;
+const MAX_ANNOTATIONS = 40;
+const MAX_ANNOTATION_CHARS = 300;
+
+// Monta o bloco de contexto com os destaques/anotações do(a) usuário(a),
+// já limpo e limitado. Retorna "" quando não há nada válido — nesse caso
+// o prompt final fica idêntico ao que era antes desta funcionalidade
+// existir (não muda o comportamento pra quem nunca destaca/anota nada).
+function buildAnnotationsBlock(annotations) {
+  if (!Array.isArray(annotations) || annotations.length === 0) return "";
+  const cleaned = annotations
+    .filter(a => a && typeof a.text === "string" && a.text.trim())
+    .slice(0, MAX_ANNOTATIONS)
+    .map(a => {
+      const kind = a.kind === "anotação" ? "anotação" : "destaque";
+      const page = (typeof a.page === "number" && Number.isFinite(a.page) && a.page > 0) ? Math.round(a.page) : null;
+      // Aspas internas viram aspas simples só pra não quebrar visualmente o
+      // formato "- [...] "texto"" do prompt (o texto já vem sem quebras de
+      // linha, então isso não abre brecha pra sair do formato de lista).
+      const text = a.text.trim().replace(/\s+/g, " ").replace(/"/g, "'").slice(0, MAX_ANNOTATION_CHARS);
+      return `- [${page ? "pág. " + page + ", " : ""}${kind}] "${text}"`;
+    });
+  if (cleaned.length === 0) return "";
+  return `\n\nTrechos que o(a) usuário(a) já destacou ou anotou neste material (dê atenção especial a esses pontos: é provável que sejam os que mais importam pra ele(a) — procure garantir que os conceitos gerados cubram essas ideias, mas sempre com "text" em linguagem própria, nunca copiando este texto literalmente):\n${cleaned.join("\n")}`;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -41,7 +74,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { title, sourceText } = req.body || {};
+  const { title, sourceText, annotations } = req.body || {};
 
   if (!sourceText || typeof sourceText !== "string" || sourceText.trim().length < 200) {
     res.status(400).json({ error: "Texto muito curto para gerar conceitos. Envie um trecho mais completo." });
@@ -64,6 +97,7 @@ export default async function handler(req, res) {
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   const trimmedSource = sourceText.slice(0, MAX_SOURCE_CHARS);
+  const annotationsBlock = buildAnnotationsBlock(annotations);
 
   const systemPrompt = `Você ajuda a criar módulos de estudo com repetição espaçada a partir de um texto-fonte (capítulo de livro, artigo, apostila etc.) fornecido por um(a) usuário(a).
 
@@ -107,7 +141,7 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
 Texto-fonte:
 """
 ${trimmedSource}
-"""`;
+"""${annotationsBlock}`;
 
   try {
     const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {

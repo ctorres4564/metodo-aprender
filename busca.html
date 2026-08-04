@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Método Aprender">
+<title>Buscar</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .search-box{
+    display:flex; gap:8px; align-items:center;
+  }
+  .search-box input{
+    flex:1; padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size:15px;
+  }
+  .search-box input:focus{ outline:none; border-color: var(--accent); }
+  .search-filters{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .search-filter{
+    font-size:12px; padding:5px 12px; border-radius:999px; border:1px solid var(--border);
+    background: var(--panel-2); color: var(--text-dim); cursor:pointer;
+  }
+  .search-filter.active{ background: var(--accent); color:#0c1a11; border-color:transparent; font-weight:700; }
+  .search-status{ font-size:12px; color: var(--text-dim); margin-top:10px; }
+  .search-results{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+  .search-result{
+    display:block; padding:12px 14px; border-radius:12px; background: var(--panel-2);
+    border:1px solid var(--border); text-decoration:none; color: var(--text);
+  }
+  .search-result:hover{ border-color: var(--accent); }
+  .search-result-head{ display:flex; gap:8px; align-items:baseline; margin-bottom:4px; flex-wrap:wrap; }
+  .search-result-type{ font-size:10.5px; font-weight:700; color: var(--accent-3); text-transform:uppercase; letter-spacing:.02em; }
+  .search-result-title{ font-size:13.5px; font-weight:600; }
+  .search-result-snippet{ font-size:12.5px; color: var(--text-dim); line-height:1.5; }
+  .search-result-snippet mark{ background: rgba(244,185,66,0.35); color: var(--text); border-radius:3px; padding:0 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <div class="logo">🔎</div>
+        <div>
+          <h1>Buscar</h1>
+          <p>Procure em páginas de livros, destaques, anotações e conceitos dos seus módulos</p>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Digite pelo menos 2 letras para buscar..." autocomplete="off" disabled>
+      </div>
+      <div class="search-filters">
+        <button class="search-filter active" data-filter="all">Tudo</button>
+        <button class="search-filter" data-filter="modules">🧠 Conceitos</button>
+        <button class="search-filter" data-filter="pages">📄 Páginas</button>
+        <button class="search-filter" data-filter="highlights">🖍️ Destaques</button>
+        <button class="search-filter" data-filter="notes">📝 Anotações</button>
+      </div>
+      <p class="search-status" id="search-status">Preparando índice de busca...</p>
+      <p class="search-status" id="search-hint" style="display:none;">Digite algo acima para buscar em toda a sua biblioteca.</p>
+      <p class="search-status" id="search-empty" style="display:none;"></p>
+      <div class="search-results" id="search-results"></div>
+    </div>
+
+    <footer class="credit">
+      A busca roda no seu navegador, sobre o conteúdo já salvo na sua conta — nada é enviado a terceiros.
+    </footer>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="assets/api-client.js"></script>
+<script src="assets/pwa.js"></script>
+<script>
+function escapeHtml(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+let materials = [];
+let userModules = [];
+let pagesByMaterial = {};
+let highlightsByMaterial = {};
+let notesByMaterial = {};
+let currentFilter = "all";
+let indexReady = false;
+
+// Extrai um trecho de contexto ao redor da primeira ocorrência de "qLower"
+// dentro de "text", com a parte encontrada destacada em <mark>. Feito em
+// cima do texto original (não já escapado) — a escapagem acontece aqui
+// mesmo, nos três pedaços (antes/match/depois), pra nunca injetar HTML.
+function makeSnippet(text, qLower, radius){
+  radius = radius || 70;
+  const str = String(text || "");
+  const idx = str.toLowerCase().indexOf(qLower);
+  if(idx === -1){
+    const cut = str.slice(0, radius * 2);
+    return escapeHtml(cut) + (str.length > cut.length ? "…" : "");
+  }
+  const start = Math.max(0, idx - radius);
+  const end = Math.min(str.length, idx + qLower.length + radius);
+  const before = escapeHtml(str.slice(start, idx));
+  const match = escapeHtml(str.slice(idx, idx + qLower.length));
+  const after = escapeHtml(str.slice(idx + qLower.length, end));
+  return (start > 0 ? "…" : "") + before + `<mark>${match}</mark>` + after + (end < str.length ? "…" : "");
+}
+
+// Constrói o índice em memória: busca, pra cada material pronto, suas
+// páginas (texto extraído), destaques e anotações — tudo em paralelo, uma
+// vez só por carregamento da página. Uma falha em UM material não impede
+// os outros de serem indexados (fica sem resultado só pra aquele).
+async function buildSearchIndex(){
+  const statusEl = document.getElementById("search-status");
+  materials = (await window.AppDB.listMaterials()).filter(m => m.status === "ready");
+  userModules = await window.AppDB.listUserModules();
+
+  let done = 0;
+  await Promise.all(materials.map(async (m)=>{
+    try{
+      const [pages, hs, ns] = await Promise.all([
+        window.AppDB.readMaterialPages(m.id),
+        window.AppDB.listHighlights(m.id),
+        window.AppDB.listNotes(m.id)
+      ]);
+      pagesByMaterial[m.id] = pages;
+      highlightsByMaterial[m.id] = hs;
+      notesByMaterial[m.id] = ns;
+    }catch(e){
+      console.warn(`Falha ao indexar material "${m.title}" pra busca:`, e);
+      pagesByMaterial[m.id] = [];
+      highlightsByMaterial[m.id] = [];
+      notesByMaterial[m.id] = [];
+    }
+    done++;
+    statusEl.textContent = `Indexando sua biblioteca... (${done}/${materials.length} materiais)`;
+  }));
+
+  const totalPages = Object.values(pagesByMaterial).reduce((sum, arr) => sum + arr.length, 0);
+  const totalConcepts = userModules.reduce((sum, m) => sum + ((m.concepts && m.concepts.length) || 0), 0);
+  statusEl.style.display = "none";
+  document.getElementById("search-hint").style.display = "block";
+  document.getElementById("search-input").disabled = false;
+  document.getElementById("search-input").placeholder =
+    `Buscar em ${materials.length} material(is), ${totalPages} página(s) e ${totalConcepts} conceito(s)...`;
+  indexReady = true;
+}
+
+function moduleTitleOf(m){
+  return (m.config && m.config.appTitle) || m.id;
+}
+
+function runSearch(qRaw){
+  const q = (qRaw || "").trim();
+  const resultsEl = document.getElementById("search-results");
+  const emptyEl = document.getElementById("search-empty");
+  const hintEl = document.getElementById("search-hint");
+
+  if(q.length < 2){
+    resultsEl.innerHTML = "";
+    emptyEl.style.display = "none";
+    hintEl.style.display = "block";
+    return;
+  }
+  hintEl.style.display = "none";
+
+  const qLower = q.toLowerCase();
+  let results = [];
+
+  if(currentFilter === "all" || currentFilter === "modules"){
+    userModules.forEach(m=>{
+      const modTitle = moduleTitleOf(m);
+      (m.concepts || []).forEach(c=>{
+        const hay = `${c.title || ""} ${c.text || ""} ${c.tag || ""} ${c.q || ""}`.toLowerCase();
+        if(hay.includes(qLower)){
+          const snippetSource = (c.text && c.text.toLowerCase().includes(qLower)) ? c.text : (c.title || "");
+          results.push({
+            icon: "🧠", type: "conceito",
+            title: `${modTitle} · ${c.title || "Conceito"}`,
+            snippet: makeSnippet(snippetSource, qLower),
+            url: `app.html?m=${encodeURIComponent(m.id)}&src=user`
+          });
+        }
+      });
+    });
+  }
+
+  if(currentFilter === "all" || currentFilter === "pages"){
+    materials.forEach(mat=>{
+      (pagesByMaterial[mat.id] || []).forEach(p=>{
+        if(p.text && p.text.toLowerCase().includes(qLower)){
+          results.push({
+            icon: "📄", type: "página",
+            title: `${mat.title || "Material"} · pág. ${p.pageNumber}`,
+            snippet: makeSnippet(p.text, qLower),
+            url: `leitor.html?material=${encodeURIComponent(mat.id)}&page=${encodeURIComponent(p.pageNumber)}`
+          });
+        }
+      });
+    });
+  }
+
+  if(currentFilter === "all" || currentFilter === "highlights"){
+    materials.forEach(mat=>{
+      (highlightsByMaterial[mat.id] || []).forEach(h=>{
+        if(h.text && h.text.toLowerCase().includes(qLower)){
+          results.push({
+            icon: "🖍️", type: "destaque",
+            title: `${mat.title || "Material"} · pág. ${h.pageNumber}`,
+            snippet: makeSnippet(h.text, qLower),
+            url: `leitor.html?material=${encodeURIComponent(mat.id)}&page=${encodeURIComponent(h.pageNumber)}`
+          });
+        }
+      });
+    });
+  }
+
+  if(currentFilter === "all" || currentFilter === "notes"){
+    materials.forEach(mat=>{
+      (notesByMaterial[mat.id] || []).forEach(n=>{
+        if(n.text && n.text.toLowerCase().includes(qLower)){
+          results.push({
+            icon: "📝", type: "anotação",
+            title: `${mat.title || "Material"} · pág. ${n.pageNumber}`,
+            snippet: makeSnippet(n.text, qLower),
+            url: `leitor.html?material=${encodeURIComponent(mat.id)}&page=${encodeURIComponent(n.pageNumber)}`
+          });
+        }
+      });
+    });
+  }
+
+  // Limite de segurança pra não travar a tela com milhares de resultados
+  // de uma vez (ex.: buscar uma palavra muito comum num livro grande).
+  const truncated = results.length > 150;
+  results = results.slice(0, 150);
+
+  if(results.length === 0){
+    resultsEl.innerHTML = "";
+    emptyEl.textContent = `Nada encontrado para "${q}".`;
+    emptyEl.style.display = "block";
+    return;
+  }
+  emptyEl.style.display = "none";
+  resultsEl.innerHTML = results.map(r => `
+    <a class="search-result" href="${r.url}" target="_blank" rel="noopener">
+      <div class="search-result-head">
+        <span class="search-result-type">${r.icon} ${r.type}</span>
+        <span class="search-result-title">${escapeHtml(r.title)}</span>
+      </div>
+      <div class="search-result-snippet">${r.snippet}</div>
+    </a>
+  `).join("") + (truncated ? `<p class="search-status">Mostrando os 150 primeiros resultados. Refine a busca pra ver menos itens.</p>` : "");
+}
+
+let searchDebounceTimer = null;
+document.getElementById("search-input").addEventListener("input", (ev)=>{
+  clearTimeout(searchDebounceTimer);
+  const val = ev.target.value;
+  searchDebounceTimer = setTimeout(()=> runSearch(val), 250);
+});
+
+document.querySelectorAll(".search-filter").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".search-filter").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.filter;
+    if(indexReady) runSearch(document.getElementById("search-input").value);
+  });
+});
+
+initAuthGate(()=>{
+  bindLogoutButton();
+  buildSearchIndex().catch(e=>{
+    console.error(e);
+    document.getElementById("search-status").textContent = "Não foi possível preparar a busca agora. Recarregue a página.";
+  });
+});
+</script>
+</body>
+</html>

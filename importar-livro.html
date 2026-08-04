@@ -262,6 +262,29 @@ function extractExcerpt(pages, pageNum, maxLen){
   return cut.trim() + "…";
 }
 
+// Etapa 4 — anotações como contexto pra IA: busca os destaques e
+// anotações (leitor de PDF) que caem dentro da faixa de páginas [startPage,
+// endPage] da seção sendo gerada, no formato que api/gerar-modulo.js
+// espera. Nunca lança erro pra fora — se falhar (rede, permissão etc.), a
+// geração continua normalmente, só sem esse contexto extra.
+async function collectAnnotationsForRange(materialId, startPage, endPage){
+  if(!materialId || startPage == null || endPage == null) return [];
+  if(!window.AppDB || !window.AppDB.listHighlights || !window.AppDB.listNotes) return [];
+  try{
+    const [hs, ns] = await Promise.all([
+      window.AppDB.listHighlights(materialId),
+      window.AppDB.listNotes(materialId)
+    ]);
+    const inRange = (p) => typeof p === "number" && p >= startPage && p <= endPage;
+    const fromHighlights = hs.filter(h => inRange(h.pageNumber)).map(h => ({ page: h.pageNumber, kind: "destaque", text: h.text }));
+    const fromNotes = ns.filter(n => inRange(n.pageNumber)).map(n => ({ page: n.pageNumber, kind: "anotação", text: n.text }));
+    return fromHighlights.concat(fromNotes);
+  }catch(e){
+    console.warn("Falha ao carregar destaques/anotações pra contexto da IA (não impede a geração):", e);
+    return [];
+  }
+}
+
 // Etapa 2 — referência de origem por conceito: insere marcadores
 // "[[PAGINA:N]]" nas quebras de página dentro do trecho [startOffset,
 // endOffset), pra que o gerador de IA (api/gerar-modulo.js) consiga dizer
@@ -612,13 +635,21 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
     const sectionText = insertPageMarkers(bookFullText, bookPages, startOffset, endOffset);
     const sectionTitle = locData.title || target;
 
+    // Etapa 4 — anotações como contexto pra IA: se a pessoa já destacou ou
+    // anotou algo nesse trecho do livro (no leitor de PDF), manda isso
+    // junto do texto-fonte pro gerador dar atenção especial a esses pontos.
+    // Só se aplica a material salvo na Biblioteca (currentMaterialId) com
+    // faixa de páginas conhecida — nunca bloqueia a geração se falhar.
+    const annotations = await collectAnnotationsForRange(currentMaterialId, sourcePageStart, sourcePageEnd);
+
     row.querySelector(".title").textContent = `🧠 Gerando módulo sobre "${sectionTitle}"...`;
     const genResp = await authedFetch("/api/gerar-modulo", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         title: (bookTitle ? bookTitle + " — " : "") + sectionTitle,
-        sourceText: sectionText.slice(0, MAX_SOURCE_CHARS)
+        sourceText: sectionText.slice(0, MAX_SOURCE_CHARS),
+        annotations
       })
     });
     const genData = await genResp.json();

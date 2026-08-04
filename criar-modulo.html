@@ -138,8 +138,16 @@
 </script>
 <script>
 let editingId = null;
+let editingOriginalMod = null;
 let conceptCount = 0;
 
+// Preserva, no próprio elemento do card, os campos que o formulário não
+// tem input pra editar (id original do conceito, página/trecho de origem
+// no PDF) — assim, editar só o título/texto de um conceito importado de
+// um livro não quebra o vínculo "voltar ao trecho original" (Etapa 2) nem
+// anotações já vinculadas a ele (Etapa 3), que dependem do id continuar o
+// mesmo entre uma edição e outra. Concepts novos (criados do zero aqui)
+// simplesmente não têm esses dados pra preservar.
 function conceptTemplate(idx, data){
   data = data || {};
   const opts = data.options || ["", "", "", ""];
@@ -147,6 +155,9 @@ function conceptTemplate(idx, data){
   const wrap = document.createElement("div");
   wrap.className = "concept-editor";
   wrap.dataset.idx = idx;
+  if(data.id) wrap.dataset.origId = data.id;
+  if(data.sourcePage != null) wrap.dataset.sourcePage = String(data.sourcePage);
+  if(data.sourceExcerpt) wrap.dataset.sourceExcerpt = data.sourceExcerpt;
   wrap.innerHTML = `
     <span class="num-badge">Conceito ${idx + 1}</span>
     <button class="remove-concept" type="button">🗑️ Remover</button>
@@ -276,11 +287,21 @@ function collectConcepts(){
       errors.push(`Conceito ${i+1}: preencha todos os campos (título, explicação, pergunta e as 4 alternativas) e marque a correta.`);
       return;
     }
-    concepts.push({
-      id: slugify(title) + "-" + i,
+    // Mantém o id original (e a página/trecho de origem, se houver) quando
+    // esse card veio de um conceito já existente — ver comentário em
+    // conceptTemplate(). Só gera um id novo, a partir do título, pra
+    // conceitos realmente novos (sem dataset.origId).
+    const origId = card.dataset.origId || null;
+    const sourcePage = card.dataset.sourcePage ? parseInt(card.dataset.sourcePage, 10) : null;
+    const sourceExcerpt = card.dataset.sourceExcerpt || null;
+    const concept = {
+      id: origId || (slugify(title) + "-" + i),
       tag: tag || "Geral",
       title, text, q, options, correct
-    });
+    };
+    if(sourcePage != null) concept.sourcePage = sourcePage;
+    if(sourceExcerpt) concept.sourceExcerpt = sourceExcerpt;
+    concepts.push(concept);
   });
   return { concepts, errors };
 }
@@ -401,6 +422,7 @@ async function loadForEdit(id){
   const mod = await window.AppDB.getUserModule(id);
   if(!mod) return;
   editingId = id;
+  editingOriginalMod = mod;
   document.getElementById("page-title").textContent = "Editar módulo";
   document.getElementById("mod-title").value = mod.config.appTitle || "";
   document.getElementById("mod-subtitle").value = mod.config.appSubtitle || "";
@@ -447,6 +469,18 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
     },
     concepts
   };
+  // saveUserModule grava o documento inteiro (sem merge) — sem isto, editar
+  // qualquer módulo importado de um livro apagaria pra sempre o vínculo com
+  // o material de origem (sourceMaterialId etc.), quebrando "voltar ao
+  // trecho original" (Etapa 2), a busca por esse módulo (Etapa 4a) e
+  // qualquer anotação já vinculada a ele (Etapa 3).
+  if(editingId && editingOriginalMod){
+    if(editingOriginalMod.sourceMaterialId) moduleData.sourceMaterialId = editingOriginalMod.sourceMaterialId;
+    if(editingOriginalMod.sourceMaterialTitle) moduleData.sourceMaterialTitle = editingOriginalMod.sourceMaterialTitle;
+    if(editingOriginalMod.sourcePageStart != null) moduleData.sourcePageStart = editingOriginalMod.sourcePageStart;
+    if(editingOriginalMod.sourcePageEnd != null) moduleData.sourcePageEnd = editingOriginalMod.sourcePageEnd;
+    if(editingOriginalMod.generatedAt != null) moduleData.generatedAt = editingOriginalMod.generatedAt;
+  }
 
   const btn = document.getElementById("save-module-btn");
   btn.disabled = true;
