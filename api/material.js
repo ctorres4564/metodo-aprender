@@ -38,10 +38,15 @@
      Retorna: { ok: true }
    ===================================================================== */
 
-import { verifyUserFromRequest } from "./_lib/usage.js";
+import { verifyUserFromRequest, getUserPlan } from "./_lib/usage.js";
 import { adminDb, adminStorage } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { MATERIAL_LIMITS } from "./_lib/materialLimits.js";
+
+// Materiais que ainda contam pra cota (exclui "failed" — upload que não deu
+// certo não deveria ocupar vaga pra sempre — e "deleting", que já está a
+// caminho de sumir).
+const ACTIVE_MATERIAL_STATUSES = ["uploading", "processing", "ready"];
 
 const SCHEMA_VERSION = 1;
 const ALLOWED_STATUSES = ["processing", "ready", "failed"];
@@ -62,6 +67,27 @@ async function handleCreate(req, res, user) {
   if (sourceType === "pdf" && typeof fileSize === "number" && fileSize > MATERIAL_LIMITS.maxPdfSizeBytes) {
     res.status(400).json({ error: `Arquivo maior que o limite permitido (${Math.round(MATERIAL_LIMITS.maxPdfSizeBytes / 1024 / 1024)} MB).` });
     return;
+  }
+
+  // Bloqueador de monetização: limite de materiais na Biblioteca por plano
+  // (antes disso, free e premium tinham o mesmo limite — nenhum — de PDFs
+  // guardados, cada um podendo chegar a 50 MB). Busca só por ownerId (sem
+  // combinar com outro where na mesma consulta) de propósito — evita
+  // depender de um índice composto no Firestore, mesmo padrão já usado no
+  // resto deste projeto; o filtro por status é feito aqui em memória.
+  try {
+    const plan = await getUserPlan(user.uid);
+    const maxMaterials = MATERIAL_LIMITS.maxMaterialsPerPlan[plan] || MATERIAL_LIMITS.maxMaterialsPerPlan.free;
+    const existingSnap = await adminDb().collection("materials").where("ownerId", "==", user.uid).get();
+    const activeCount = existingSnap.docs.filter(d => ACTIVE_MATERIAL_STATUSES.includes(d.data().status)).length;
+    if (activeCount >= maxMaterials) {
+      res.status(429).json({
+        error: `Limite de materiais na Biblioteca atingido (${activeCount}/${maxMaterials} no plano ${plan}). Exclua um material existente ou assine o Premium para aumentar o limite.`
+      });
+      return;
+    }
+  } catch (e) {
+    console.error("Falha ao checar limite de materiais (permitindo a criação, pra não travar o app por causa disso):", e.message);
   }
 
   try {

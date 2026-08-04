@@ -23,6 +23,7 @@ import {
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
@@ -63,6 +64,15 @@ window.AppAuth = {
   signInWithGoogle: () => signInWithPopup(auth, new GoogleAuthProvider()),
   signOutUser: () => signOut(auth),
   resetPassword: (email) => sendPasswordResetEmail(auth, email),
+  // E-mail de verificação (bloqueador de monetização — sem isso, contas
+  // descartáveis conseguem gerações de IA "de graça" pra sempre). Chamado
+  // uma vez automaticamente no cadastro (auth-ui.js) e, manualmente, pelo
+  // botão "Reenviar e-mail" do banner de aviso.
+  sendVerificationEmail: () => sendEmailVerification(auth.currentUser),
+  // Recarrega o usuário atual do servidor do Firebase (o token em memória
+  // não atualiza sozinho quando a pessoa clica no link do e-mail em outra
+  // aba) — usado pelo botão "Já verifiquei" do banner.
+  reloadCurrentUser: async () => { await auth.currentUser.reload(); return auth.currentUser; },
   onChange: (cb) => onAuthStateChanged(auth, cb),
   currentUser: () => auth.currentUser
 };

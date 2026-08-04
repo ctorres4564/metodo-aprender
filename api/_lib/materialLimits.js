@@ -12,5 +12,17 @@ export const MATERIAL_LIMITS = {
   maxOcrPages: 80,
   maxTextCharsPerPage: 6000,           // acima disso, a página é dividida em partes (pageId "NNNNNN-PPP")
   maxPagesPerGeneration: 100,          // limite de páginas buscadas do Firestore por pedido de módulo
-  maxSourceCharsPerGeneration: 14000   // mesmo valor usado em api/gerar-modulo.js (MAX_SOURCE_CHARS)
+  maxSourceCharsPerGeneration: 14000,  // mesmo valor usado em api/gerar-modulo.js (MAX_SOURCE_CHARS)
+
+  // Bloqueador de monetização: sem isso, uma conta free podia guardar
+  // tantos PDFs de até 50 MB quanto quisesse na Biblioteca — o mesmo
+  // limite por arquivo do premium, sem nenhum teto no total. Limite por
+  // Nº DE MATERIAIS (não por bytes) porque é mais simples de explicar e
+  // de checar (uma contagem, sem precisar somar tamanho de arquivo +
+  // texto extraído de cada material a cada checagem). Valores por
+  // estimativa — vale revisar depois de observar uso real.
+  maxMaterialsPerPlan: {
+    free: 3,
+    premium: 30
+  }
 };

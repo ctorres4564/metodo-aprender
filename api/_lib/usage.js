@@ -41,7 +41,9 @@ export async function verifyUserFromRequest(req) {
   }
 }
 
-async function getUserPlan(uid) {
+// Exportado porque também é usado em api/material.js, pra checar o limite
+// de materiais na Biblioteca por plano (mesmo princípio do limite de IA).
+export async function getUserPlan(uid) {
   try {
     const snap = await adminDb().collection("users").doc(uid).get();
     if (snap.exists && snap.data().plan) return snap.data().plan;
@@ -53,8 +55,23 @@ async function getUserPlan(uid) {
 
 // Verifica se o usuário ainda tem cota disponível no mês e, se tiver,
 // já consome 1 unidade (operação atômica via transação do Firestore).
-// Retorna { allowed, current, limit, plan }.
-export async function checkAndConsumeUsage(uid) {
+// Recebe o usuário decodificado (não só o uid) porque também bloqueia
+// e-mail não verificado aqui — ver comentário abaixo.
+// Retorna { allowed, current, limit, plan, reason? }.
+export async function checkAndConsumeUsage(user) {
+  const uid = user.uid;
+
+  // Bloqueio de e-mail não verificado: sem isso, qualquer pessoa pode criar
+  // contas descartáveis pra sempre ter uma cota mensal de IA "nova", sem
+  // nunca pagar. `email_verified` já vem no token decodificado pelo
+  // Firebase (claim padrão) — não precisa de leitura extra no Firestore.
+  // Contas que já existiam antes desta checagem existir também caem aqui
+  // até a pessoa verificar o e-mail (ver botão "reenviar e-mail de
+  // verificação" no app).
+  if (user.email_verified === false) {
+    return { allowed: false, current: 0, limit: 0, plan: null, reason: "email_not_verified" };
+  }
+
   const plan = await getUserPlan(uid);
   const limit = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
   const db = adminDb();
@@ -83,11 +100,18 @@ export async function requireUsageQuota(req, res) {
     return null;
   }
 
-  const usage = await checkAndConsumeUsage(user.uid);
+  const usage = await checkAndConsumeUsage(user);
   if (!usage.allowed) {
-    res.status(429).json({
-      error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
-    });
+    if (usage.reason === "email_not_verified") {
+      res.status(403).json({
+        error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
+        code: "email_not_verified"
+      });
+    } else {
+      res.status(429).json({
+        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+      });
+    }
     return null;
   }
 

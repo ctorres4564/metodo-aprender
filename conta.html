@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Método Aprender">
+<title>Minha Conta</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .danger-zone{
+    border:1px solid rgba(226,104,95,0.4); border-radius:14px; padding:16px; margin-top:10px;
+    background: rgba(226,104,95,0.06);
+  }
+  .danger-zone h3{ margin:0 0 6px; font-size:14.5px; color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="auth-gate"></div>
+
+  <div id="app-root" style="display:none;">
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <div class="logo">👤</div>
+        <div>
+          <h1>Minha Conta</h1>
+          <p>Dados da conta e exclusão de dados</p>
+        </div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="user-email"></span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2 class="section-title" style="margin:0 0 6px;">📋 Dados da conta</h2>
+      <p class="lead" style="margin-top:-2px;">E-mail: <strong id="account-email"></strong></p>
+      <p class="lead">
+        Veja o que coletamos e como usamos seus dados na
+        <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>
+        e nos <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a>.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="danger-zone">
+        <h3>⚠️ Excluir minha conta</h3>
+        <p class="lead" style="margin-top:-2px;">
+          Isso apaga permanentemente: seu perfil, progresso de estudo, módulos criados/gerados, materiais da
+          Biblioteca (PDFs e textos), destaques e anotações, e sua assinatura (se houver) é cancelada. Essa ação
+          <strong>não pode ser desfeita</strong>.
+        </p>
+        <p class="lead">Para confirmar, digite seu e-mail (<code id="confirm-email-hint"></code>) abaixo:</p>
+        <input type="email" id="delete-confirm-input" class="auth-input" placeholder="Digite seu e-mail para confirmar">
+        <div id="delete-feedback"></div>
+        <button class="btn" id="delete-account-btn" style="margin-top:10px; background:var(--danger); border-color:var(--danger);" disabled>
+          🗑️ Excluir minha conta permanentemente
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /#app-root -->
+</div>
+
+<script type="module" src="assets/firebase-init.js"></script>
+<script src="assets/auth-ui.js"></script>
+<script src="assets/api-client.js"></script>
+<script src="assets/pwa.js"></script>
+<script>
+let currentEmail = "";
+
+function checkConfirmInput(){
+  const input = document.getElementById("delete-confirm-input").value.trim().toLowerCase();
+  document.getElementById("delete-account-btn").disabled = (input !== currentEmail.toLowerCase() || !currentEmail);
+}
+
+document.getElementById("delete-confirm-input").addEventListener("input", checkConfirmInput);
+
+document.getElementById("delete-account-btn").addEventListener("click", async ()=>{
+  const fb = document.getElementById("delete-feedback");
+  if(!confirm("Tem certeza? Isso apaga TODOS os seus dados permanentemente e não pode ser desfeito.")) return;
+
+  const btn = document.getElementById("delete-account-btn");
+  btn.disabled = true;
+  btn.textContent = "Excluindo...";
+  fb.innerHTML = "";
+
+  try{
+    const resp = await authedFetch("/api/account", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "delete" })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || "Não foi possível excluir sua conta agora.");
+
+    fb.innerHTML = `<div class="feedback ok">Conta excluída. Redirecionando...</div>`;
+    if(window.AppAuth && window.AppAuth.signOutUser){
+      try{ await window.AppAuth.signOutUser(); }catch(e){ /* a conta já não existe mais de qualquer forma */ }
+    }
+    setTimeout(()=>{ window.location.href = "index.html"; }, 1500);
+  }catch(e){
+    console.error(e);
+    fb.innerHTML = `<div class="feedback bad">${e.message || "Não foi possível excluir sua conta agora. Tente novamente."}</div>`;
+    btn.disabled = false;
+    btn.textContent = "🗑️ Excluir minha conta permanentemente";
+  }
+});
+
+initAuthGate((user)=>{
+  bindLogoutButton();
+  currentEmail = user.email || "";
+  document.getElementById("account-email").textContent = currentEmail || "(sem e-mail, login via provedor externo)";
+  document.getElementById("confirm-email-hint").textContent = currentEmail;
+});
+</script>
+</body>
+</html>

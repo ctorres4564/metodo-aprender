@@ -59,6 +59,12 @@ function initAuthGate(onReady){
             <a href="#" id="auth-go-login">Já tenho conta, entrar</a>
           `}
         </div>
+        ${mode === "signup" ? `
+          <p style="margin-top:14px; text-align:center; font-size:11px; color:var(--text-dim);">
+            Ao criar uma conta, você concorda com os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a>
+            e a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.
+          </p>
+        ` : ""}
       </div>
     `;
 
@@ -94,6 +100,11 @@ function initAuthGate(onReady){
           await window.AppAuth.signIn(email, password);
         } else if(mode === "signup"){
           await window.AppAuth.signUp(email, password);
+          // Dispara o e-mail de verificação uma vez, na hora do cadastro.
+          // Não bloqueia o cadastro se falhar — a pessoa ainda pode pedir
+          // reenvio depois, pelo banner de aviso (ver renderVerifyBanner).
+          try{ await window.AppAuth.sendVerificationEmail(); }
+          catch(e){ console.warn("Falha ao enviar e-mail de verificação:", e); }
         } else if(mode === "reset"){
           await window.AppAuth.resetPassword(email);
           msgBox.innerHTML = `<div class="feedback ok" style="margin-top:10px;">E-mail de recuperação enviado! Confira sua caixa de entrada (e o spam).</div>`;
@@ -131,14 +142,68 @@ function initAuthGate(onReady){
 
   showLoading("Carregando...");
 
+  // Aviso de e-mail não verificado (bloqueador de monetização): não trava o
+  // uso do app (dá pra continuar estudando/anotando normalmente), mas o
+  // servidor já recusa gerações de IA pra quem não confirmou o e-mail (ver
+  // api/_lib/usage.js) — este banner só deixa isso visível e dá um jeito
+  // fácil de reenviar/atualizar sem precisar sair e entrar de novo.
+  function renderVerifyBanner(user){
+    const existing = document.getElementById("verify-email-banner");
+    if(existing) existing.remove();
+    // Login via Google já chega com e-mail verificado pelo próprio Google.
+    if(!user || user.emailVerified) return;
+
+    const banner = document.createElement("div");
+    banner.id = "verify-email-banner";
+    banner.className = "feedback bad";
+    banner.style.cssText = "margin:14px auto 0; max-width:960px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;";
+    banner.innerHTML = `
+      <span>📧 Confirme seu e-mail (${(user.email || "").replace(/</g,"&lt;")}) para poder gerar conteúdo com IA. Verifique sua caixa de entrada (e o spam).</span>
+      <span style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn ghost" id="verify-resend-btn" style="font-size:12px;">Reenviar e-mail</button>
+        <button class="btn ghost" id="verify-refresh-btn" style="font-size:12px;">Já verifiquei</button>
+      </span>
+    `;
+    document.body.insertBefore(banner, document.body.firstChild);
+
+    document.getElementById("verify-resend-btn").addEventListener("click", async ()=>{
+      const btn = document.getElementById("verify-resend-btn");
+      btn.disabled = true; btn.textContent = "Enviando...";
+      try{
+        await window.AppAuth.sendVerificationEmail();
+        btn.textContent = "Enviado!";
+      }catch(e){
+        console.error(e);
+        btn.disabled = false;
+        btn.textContent = "Reenviar e-mail";
+        alert("Não foi possível reenviar agora (se você acabou de pedir, aguarde alguns minutos e tente de novo).");
+      }
+    });
+    document.getElementById("verify-refresh-btn").addEventListener("click", async ()=>{
+      const btn = document.getElementById("verify-refresh-btn");
+      btn.disabled = true; btn.textContent = "Verificando...";
+      try{
+        const refreshed = await window.AppAuth.reloadCurrentUser();
+        renderVerifyBanner(refreshed);
+      }catch(e){
+        console.error(e);
+        btn.disabled = false;
+        btn.textContent = "Já verifiquei";
+      }
+    });
+  }
+
   function start(){
     window.AppAuth.onChange((user)=>{
       if(user){
         showApp();
         const emailEl = document.getElementById("user-email");
         if(emailEl) emailEl.textContent = "👤 " + (user.displayName || user.email || "");
+        renderVerifyBanner(user);
         onReady(user);
       } else {
+        const existingBanner = document.getElementById("verify-email-banner");
+        if(existingBanner) existingBanner.remove();
         renderForm("login");
       }
     });

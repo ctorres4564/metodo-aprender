@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1c2e22">
+<link rel="icon" href="assets/icons/icon-192.png">
+<title>Política de Privacidade — Método Aprender</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .legal{ max-width:760px; margin:0 auto; padding:24px 0 60px; }
+  .legal h1{ font-size:21px; margin-bottom:4px; }
+  .legal .updated{ font-size:12px; color:var(--text-dim); margin-bottom:24px; }
+  .legal h2{ font-size:15px; margin:26px 0 8px; color:var(--accent-2); }
+  .legal p, .legal li{ font-size:13.5px; line-height:1.65; color:var(--text); }
+  .legal ul{ padding-left:20px; margin:8px 0; }
+  .legal li{ margin-bottom:6px; }
+  .legal a{ color:var(--accent-3); }
+  .legal .back-link{ display:inline-block; margin-bottom:18px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="legal">
+    <a class="back-link" href="index.html">← Voltar ao Método Aprender</a>
+    <h1>Política de Privacidade</h1>
+    <p class="updated">Última atualização: agosto de 2026</p>
+
+    <p>Esta política explica quais dados o Método Aprender coleta, para que usa, com quem compartilha e quais direitos você tem sobre eles. Escrevemos de forma direta, descrevendo exatamente o que o sistema faz — não um texto genérico.</p>
+
+    <h2>1. Quem somos</h2>
+    <p>O Método Aprender é uma plataforma de estudo com repetição espaçada, gamificação e geração de conteúdo por inteligência artificial. Para dúvidas sobre esta política ou sobre seus dados, entre em contato pelo e-mail: <strong>[e-mail de contato a definir]</strong>.</p>
+
+    <h2>2. Quais dados coletamos</h2>
+    <ul>
+      <li><strong>Dados de cadastro:</strong> e-mail e senha (a senha nunca é vista nem armazenada por nós — é tratada diretamente pelo Firebase Authentication, do Google, de forma criptografada). Se você entrar com Google, recebemos também o nome e a foto de perfil associados à sua conta Google.</li>
+      <li><strong>Conteúdo que você envia:</strong> PDFs e textos que você importa, os módulos de estudo que cria ou gera por IA, destaques e anotações feitos no leitor de PDF.</li>
+      <li><strong>Dados de uso e progresso:</strong> pontuação, nível, sequência de dias de estudo, histórico de revisões, respostas dadas, e quantas gerações de IA você já usou no mês.</li>
+      <li><strong>Dados de pagamento (apenas para assinantes):</strong> não armazenamos número de cartão nem dados sensíveis de pagamento — isso é processado inteiramente pela Stripe. Guardamos apenas o status da sua assinatura (ativa/cancelada) e um identificador de cliente da Stripe, para permitir o portal de gerenciamento de assinatura.</li>
+      <li><strong>Dados técnicos básicos:</strong> os provedores de hospedagem (Vercel) e banco de dados (Firebase/Google Cloud) registram automaticamente informações técnicas de acesso (como endereço IP e horário de requisições) como parte normal da operação de qualquer serviço web — não usamos isso para rastreamento ou publicidade.</li>
+    </ul>
+    <p>Não usamos cookies de rastreamento nem de publicidade. O navegador guarda localmente (via IndexedDB/localStorage) apenas o necessário para manter você conectado(a) e algumas preferências de uso.</p>
+
+    <h2>3. Para que usamos esses dados</h2>
+    <ul>
+      <li>Criar e manter sua conta, autenticar seu login e manter seu progresso sincronizado entre dispositivos.</li>
+      <li>Gerar conceitos de estudo, resumos, analogias e avaliações por IA a partir do conteúdo que você envia ou escreve.</li>
+      <li>Processar sua assinatura, quando aplicável, e liberar o limite de uso do plano contratado.</li>
+      <li>Enviar o lembrete diário de revisão por e-mail, se você ativar essa opção.</li>
+      <li>Diagnosticar problemas técnicos e manter a segurança do serviço.</li>
+    </ul>
+    <p>Não vendemos seus dados, não usamos seu conteúdo para treinar modelos de IA de terceiros, e não compartilhamos seus dados com anunciantes.</p>
+
+    <h2>4. Com quem seus dados são compartilhados</h2>
+    <p>Usamos os seguintes prestadores de serviço para operar o Método Aprender — cada um recebe apenas o dado estritamente necessário para a função que presta:</p>
+    <ul>
+      <li><strong>Firebase / Google Cloud:</strong> autenticação de conta, banco de dados (Firestore) e armazenamento dos arquivos que você envia (Storage).</li>
+      <li><strong>Vercel:</strong> hospedagem do site e das funções de servidor.</li>
+      <li><strong>OpenRouter</strong> (e os modelos de IA de terceiros acessados por ele): recebe o texto que você envia ou os trechos do seu material para gerar conceitos, resumos, analogias e avaliações. Não enviamos seu e-mail nem dados de pagamento a esse provedor — apenas o conteúdo textual necessário para a geração pedida.</li>
+      <li><strong>Stripe:</strong> processamento de pagamento da assinatura — seus dados de cartão vão direto para a Stripe, nunca passam pelo nosso servidor.</li>
+      <li><strong>Resend:</strong> envio do e-mail de lembrete diário, para quem ativa essa opção.</li>
+    </ul>
+
+    <h2>5. Onde seus dados ficam armazenados</h2>
+    <p>Seus dados são armazenados em servidores do Google Cloud/Firebase e da Vercel, que podem estar localizados fora do Brasil. Ao usar o serviço, você concorda com essa transferência internacional, feita para permitir o funcionamento do produto.</p>
+
+    <h2>6. Por quanto tempo guardamos seus dados</h2>
+    <p>Enquanto sua conta existir. Se você excluir um material ou módulo individualmente, ele é removido permanentemente. Se você excluir sua conta (disponível na tela "Minha Conta"), todos os seus dados — perfil, progresso, materiais, módulos, destaques e anotações — são apagados permanentemente do Firestore e do Storage, e sua conta é removida do sistema de autenticação. Essa ação não pode ser desfeita.</p>
+
+    <h2>7. Seus direitos (Lei Geral de Proteção de Dados — LGPD)</h2>
+    <p>Você tem direito a, a qualquer momento:</p>
+    <ul>
+      <li>Confirmar se tratamos dados seus, e acessar quais são.</li>
+      <li>Corrigir dados incompletos, inexatos ou desatualizados.</li>
+      <li>Solicitar a eliminação dos dados tratados com seu consentimento (você mesmo(a) pode fazer isso pela função "Excluir minha conta", ou pedindo por e-mail).</li>
+      <li>Solicitar a portabilidade dos seus dados a outro fornecedor.</li>
+      <li>Revogar o consentimento dado, quando aplicável.</li>
+      <li>Ser informado(a) sobre com quem compartilhamos seus dados (ver seção 4).</li>
+    </ul>
+    <p>Para exercer qualquer um desses direitos, use a tela "Minha Conta" dentro do app ou entre em contato pelo e-mail informado na seção 1.</p>
+
+    <h2>8. Segurança</h2>
+    <p>Seus dados são isolados por conta: as regras de acesso do banco de dados garantem que cada pessoa só consegue ler ou alterar os próprios dados — nunca os de outra pessoa. Toda comunicação com o app é feita por HTTPS (conexão criptografada).</p>
+
+    <h2>9. Menores de idade</h2>
+    <p>O serviço não é direcionado a menores de 18 anos sem a supervisão e o consentimento de um responsável legal. Se tomarmos conhecimento de que uma conta foi criada por uma criança sem esse consentimento, tomaremos medidas razoáveis para excluir os dados correspondentes.</p>
+
+    <h2>10. Mudanças nesta política</h2>
+    <p>Podemos atualizar esta política eventualmente, por exemplo ao lançar um novo recurso que trate dados de forma diferente. A data no topo desta página sempre indica a versão mais recente.</p>
+  </div>
+</div>
+</body>
+</html>

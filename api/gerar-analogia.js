@@ -39,11 +39,18 @@ export default async function handler(req, res) {
     return;
   }
 
-  const usage = await checkAndConsumeUsage(user.uid);
+  const usage = await checkAndConsumeUsage(user);
   if (!usage.allowed) {
-    res.status(429).json({
-      error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
-    });
+    if (usage.reason === "email_not_verified") {
+      res.status(403).json({
+        error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
+        code: "email_not_verified"
+      });
+    } else {
+      res.status(429).json({
+        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+      });
+    }
     return;
   }
 
