@@ -22,7 +22,7 @@
    ===================================================================== */
 
 import { getStripe } from "./_lib/stripe.js";
-import { adminDb } from "./_lib/firebaseAdmin.js";
+import { adminDb, adminAuth } from "./_lib/firebaseAdmin.js";
 
 export const config = {
   api: { bodyParser: false }
@@ -46,16 +46,6 @@ async function buffer(readable) {
 // antes, a conta "ressuscitava" com só os campos daquele evento (plan,
 // stripeSubscriptionStatus), sem o resto do perfil, e sem que a pessoa
 // tenha pedido isso.
-//
-// "checkout.session.completed" é diferente E NÃO usa esta guarda (ver
-// createUserFields abaixo): esse evento só existe porque uma pessoa está,
-// nesse exato momento, terminando um checkout ativo no navegador — é o
-// próprio momento legítimo de primeira criação do documento users/{uid}
-// (que não é criado em nenhum outro lugar antes da primeira assinatura;
-// ver assets/firebase-init.js saveUserProfile, só chamado ao mexer no
-// toggle de lembretes). Bloquear esse evento quebraria a ativação do
-// plano Premium para qualquer pessoa que assine sem nunca ter mexido
-// nesse toggle.
 async function setUserFields(uid, fields) {
   if (!uid) {
     console.error("Evento da Stripe sem uid em metadata — ignorado.");
@@ -70,12 +60,59 @@ async function setUserFields(uid, fields) {
   await ref.set(fields, { merge: true });
 }
 
-async function createUserFields(uid, fields) {
-  if (!uid) {
-    console.error("Evento da Stripe sem uid em metadata — ignorado.");
+// SEGURANÇA/FINANCEIRO (V1-A): "checkout.session.completed" é o único
+// evento que CRIA o documento users/{uid} — é o momento legítimo de
+// primeira gravação do stripeCustomerId, logo após a pessoa concluir o
+// pagamento no navegador. Mas uma sessão de checkout fica válida por ~24h:
+// sem guarda, alguém podia abrir o checkout, EXCLUIR A CONTA em outra aba
+// (não havia assinatura pra cancelar ainda) e só então concluir o
+// pagamento — este evento recriava o documento e ativava uma assinatura
+// cobrando mensalmente de uma conta que não existe mais e não tem como
+// fazer login pra cancelar.
+//
+// A guarda abaixo só honra o evento se as DUAS coisas forem verdade:
+//   1. o usuário ainda existe no Firebase Authentication (a exclusão de
+//      conta remove o Auth por último — conta excluída => sem Auth);
+//   2. o documento users/{uid} existe — api/criar-checkout.js passou a
+//      criar esse documento ao INICIAR o checkout (lock anti-corrida),
+//      então toda sessão legítima já tem doc quando completa; um doc
+//      ausente significa conta excluída no meio do caminho.
+// Se a guarda falhar: cancela imediatamente a assinatura que a sessão
+// acabou de criar, registra o evento nos logs e segue pro 200 — responder
+// erro aqui faria a Stripe reenviar o evento pra sempre, sem utilidade.
+async function handleCheckoutCompleted(session) {
+  const uid = session.client_reference_id || (session.metadata && session.metadata.uid);
+  if (!uid || !session.customer) return;
+
+  let authUserExists = true;
+  try {
+    await adminAuth().getUser(uid);
+  } catch (e) {
+    if (e && e.code === "auth/user-not-found") {
+      authUserExists = false;
+    } else {
+      throw e; // erro transitório do Auth — sobe pro catch do handler, que responde 500 e a Stripe reenvia.
+    }
+  }
+
+  const ref = adminDb().collection("users").doc(uid);
+  const snap = await ref.get();
+
+  if (!authUserExists || !snap.exists) {
+    console.warn(`checkout.session.completed para conta excluída/inexistente (uid=${uid}) — documento não recriado; cancelando a assinatura criada pela sessão.`);
+    if (session.subscription) {
+      try {
+        await getStripe().subscriptions.cancel(session.subscription);
+        console.warn(`Assinatura órfã ${session.subscription} cancelada (uid=${uid}).`);
+      } catch (e) {
+        console.error(`Falha ao cancelar assinatura órfã ${session.subscription} (uid=${uid}) — exige ação manual no painel da Stripe:`, e.message);
+      }
+    }
     return;
   }
-  await adminDb().collection("users").doc(uid).set(fields, { merge: true });
+
+  // Usuário ativo: gravação normal (primeira assinatura ou reativação).
+  await ref.set({ stripeCustomerId: session.customer }, { merge: true });
 }
 
 const ACTIVE_STATUSES = ["trialing", "active"];
@@ -109,12 +146,10 @@ export default async function handler(req, res) {
     switch (event.type) {
       // Checkout concluído: grava o customerId da Stripe no perfil da pessoa,
       // pra poder abrir o Billing Portal depois (api/stripe-portal.js).
+      // Só honrado se a conta ainda existir (Auth + documento) — ver
+      // handleCheckoutCompleted.
       case "checkout.session.completed": {
-        const session = event.data.object;
-        const uid = session.client_reference_id || (session.metadata && session.metadata.uid);
-        if (uid && session.customer) {
-          await createUserFields(uid, { stripeCustomerId: session.customer });
-        }
+        await handleCheckoutCompleted(event.data.object);
         break;
       }
 

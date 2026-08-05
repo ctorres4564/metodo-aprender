@@ -143,7 +143,7 @@ Essa abordagem (uma chamada de IA pequena por módulo pedido) é bem mais rápid
 
 Como o conteúdo é gerado e salvo automaticamente (sem revisão de cada conceito antes de salvar), a recomendação é sempre revisar/editar os módulos gerados depois, pelo botão "✏️ Editar" no catálogo.
 
-**Sobre custo:** cada importação gasta 1 chamada de IA para detectar a estrutura do documento, mais 1 chamada por divisão selecionada para gerar os conceitos. Um livro com 10 capítulos selecionados = ~11 chamadas no total. Por isso a etapa de seleção existe — para a pessoa escolher só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
+**Sobre custo:** cada seção pedida gasta 2 chamadas de IA: 1 para localizar a seção dentro do livro (`api/localizar-secao.js`) e 1 para gerar os conceitos dela (`api/gerar-modulo.js`). Um livro com 10 seções pedidas = ~20 chamadas no total — não existe uma chamada única que mapeie o livro inteiro de uma vez (esse fluxo, que existia numa versão anterior, foi removido por nunca ter chegado a ser usado por nenhuma tela do app). Por isso a etapa de descrever cada seção existe — para a pessoa pedir só as divisões que realmente quer, antes de gastar créditos gerando conceitos.
 
 ### Biblioteca de materiais (PDFs e textos ficam salvos)
 

@@ -6,11 +6,10 @@
    1. Só quem tem conta (login válido) consegue gastar créditos de IA.
    2. Cada pessoa tem um limite mensal de gerações, por plano.
 
-   Ainda não existe cobrança de verdade (isso é a Fase 2) — por enquanto
-   todo mundo cai no plano "free", mas a estrutura já fica pronta: quando
-   houver um plano pago, basta gravar plan:"premium" no documento
-   users/{uid} (o que o webhook do Stripe vai fazer) que o limite maior
-   passa a valer automaticamente, sem mudar mais nada aqui.
+   A cobrança real (Fase 2) já está em produção via Stripe: o campo "plan"
+   em users/{uid} é mantido automaticamente pelo webhook (api/stripe-
+   webhook.js) conforme o status da assinatura — este arquivo só lê esse
+   campo (getUserPlan) para decidir o limite mensal, nunca escreve nele.
    ===================================================================== */
 import { adminAuth, adminDb } from "./firebaseAdmin.js";
 
@@ -117,9 +116,15 @@ export async function refundUsage(uid) {
   }
 }
 
-// Atalho usado no início de cada handler de IA: garante login + cota,
-// e já escreve a resposta de erro (401/429) se algo bloquear. Retorna o
-// uid se estiver tudo certo, ou null se já respondeu com erro.
+// Chamado no início dos 5 endpoints de IA (avaliar-explicacao, gerar-
+// analogia, gerar-modulo, localizar-secao, regenerar-conceito — ver V3-C):
+// garante login + cota numa única chamada, e já escreve a resposta de erro
+// (401/403/429) se algo bloquear. Retorna o uid se estiver tudo certo, ou
+// null se já respondeu com erro (o chamador só precisa checar `if (!uid)
+// return;`). Antes desta adoção, cada endpoint duplicava esse bloco quase
+// palavra por palavra, chamando verifyUserFromRequest + checkAndConsumeUsage
+// separadamente — essa duplicação era o próprio helper, só que sem nunca
+// ser usado.
 export async function requireUsageQuota(req, res) {
   const user = await verifyUserFromRequest(req);
   if (!user) {

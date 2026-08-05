@@ -15,7 +15,7 @@
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
 
-import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -23,12 +23,6 @@ const DEFAULT_MODEL = "openai/gpt-4o-mini";
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
-    return;
-  }
-
-  const user = await verifyUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return;
   }
 
@@ -45,20 +39,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const usage = await checkAndConsumeUsage(user);
-  if (!usage.allowed) {
-    if (usage.reason === "email_not_verified") {
-      res.status(403).json({
-        error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
-        code: "email_not_verified"
-      });
-    } else {
-      res.status(429).json({
-        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
-      });
-    }
-    return;
-  }
+  // V3-C: ver comentário equivalente em api/avaliar-explicacao.js.
+  const uid = await requireUsageQuota(req, res);
+  if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   const cleanInstruction = typeof instruction === "string" ? instruction.trim().slice(0, 300) : "";
@@ -109,7 +92,7 @@ Ficha atual:
 
     const c = parsed.concept;
     if (!c || !c.title || !c.text || !c.q || !Array.isArray(c.options) || c.options.length !== 4 || typeof c.correct !== "number") {
-      await refundUsage(user.uid);
+      await refundUsage(uid);
       res.status(502).json({ error: "A IA não devolveu um conceito válido. Tente novamente." });
       return;
     }
@@ -125,7 +108,7 @@ Ficha atual:
 
     res.status(200).json({ concept: cleanConcept });
   } catch (e) {
-    await refundUsage(user.uid);
+    await refundUsage(uid);
     if (e && e.code) {
       res.status(statusForOpenRouterError(e)).json({ error: e.message });
       return;

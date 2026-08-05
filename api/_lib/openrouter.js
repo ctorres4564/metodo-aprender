@@ -30,60 +30,92 @@ import { extractJson } from "./parseJson.js";
 // responder ao cliente antes de a própria Vercel matar a execução.
 const OPENROUTER_TIMEOUT_MS = 50000;
 
+// Normaliza qualquer erro lançado durante a operação (fetch OU leitura do
+// corpo): AbortError vira "timeout" em qualquer fase; erros que já têm
+// ".code" (http/parse, definidos abaixo) passam intactos; o resto é rede.
+function normalizeOpenRouterError(e) {
+  if (e && e.code) return e;
+  if (e && e.name === "AbortError") {
+    const err = new Error("Tempo limite ao consultar a IA. Tente novamente.");
+    err.code = "timeout";
+    return err;
+  }
+  const err = new Error("Falha de rede ao consultar a IA. Tente novamente.");
+  err.code = "network";
+  return err;
+}
+
 export async function callOpenRouter({ apiKey, model, messages, maxTokens, referer, title }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);
 
-  let orRes;
+  // O timer só é limpo no finally, DEPOIS de fetch + leitura do corpo +
+  // parse — antes desta correção (V3-A) o clearTimeout acontecia assim que
+  // os headers chegavam, e uma resposta "slow-drip" (corpo pingando bytes
+  // sem fechar) pendurava a função até a Vercel matar a execução: sem
+  // resposta ao cliente e sem estorno da cota já consumida. Com o signal
+  // ativo até o fim, o abort também interrompe orRes.text()/orRes.json().
   try {
-    orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        "authorization": `Bearer ${apiKey}`,
-        // Cabeçalhos recomendados (não obrigatórios) pela OpenRouter para identificar o app:
-        "HTTP-Referer": referer || process.env.APP_URL || "https://metodo-aprender.vercel.app",
-        "X-Title": title || "Metodo Aprender"
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        reasoning: { effort: "low", exclude: true },
-        messages,
-        response_format: { type: "json_object" }
-      })
-    });
+    let orRes;
+    try {
+      orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${apiKey}`,
+          // Cabeçalhos recomendados (não obrigatórios) pela OpenRouter para identificar o app:
+          "HTTP-Referer": referer || process.env.APP_URL || "https://metodo-aprender.vercel.app",
+          "X-Title": title || "Metodo Aprender"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          reasoning: { effort: "low", exclude: true },
+          messages,
+          response_format: { type: "json_object" }
+        })
+      });
+    } catch (e) {
+      throw normalizeOpenRouterError(e); // timeout | network
+    }
+
+    if (!orRes.ok) {
+      const errText = await orRes.text().catch(() => "");
+      console.error("Erro OpenRouter:", orRes.status, errText);
+      const err = new Error("Falha ao consultar a IA.");
+      err.code = "http";
+      throw err;
+    }
+
+    // Leitura do corpo e parse do envelope — ainda sob o timer. Um corpo
+    // truncado/inválido aqui cai no catch externo com code "parse" ou
+    // "network", e o endpoint estorna a cota como em qualquer outra falha.
+    let data;
+    try {
+      data = await orRes.json();
+    } catch (e) {
+      if (e && e.name === "AbortError") throw normalizeOpenRouterError(e);
+      console.error("Corpo da resposta da OpenRouter inválido ou incompleto:", e.message);
+      const err = new Error("Resposta da IA em formato inesperado.");
+      err.code = "parse";
+      throw err;
+    }
+
+    const rawText = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+
+    try {
+      return extractJson(rawText);
+    } catch (parseErr) {
+      console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
+      const err = new Error("Resposta da IA em formato inesperado.");
+      err.code = "parse";
+      throw err;
+    }
   } catch (e) {
-    const err = new Error(
-      e.name === "AbortError"
-        ? "Tempo limite ao consultar a IA. Tente novamente."
-        : "Falha de rede ao consultar a IA. Tente novamente."
-    );
-    err.code = e.name === "AbortError" ? "timeout" : "network";
-    throw err;
+    throw normalizeOpenRouterError(e);
   } finally {
     clearTimeout(timer);
-  }
-
-  if (!orRes.ok) {
-    const errText = await orRes.text().catch(() => "");
-    console.error("Erro OpenRouter:", orRes.status, errText);
-    const err = new Error("Falha ao consultar a IA.");
-    err.code = "http";
-    throw err;
-  }
-
-  const data = await orRes.json();
-  const rawText = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-
-  try {
-    return extractJson(rawText);
-  } catch (parseErr) {
-    console.error("Falha ao parsear JSON do modelo. Texto bruto:", rawText);
-    const err = new Error("Resposta da IA em formato inesperado.");
-    err.code = "parse";
-    throw err;
   }
 }
 

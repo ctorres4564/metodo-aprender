@@ -15,7 +15,7 @@
      um modelo padrão razoável para esta tarefa.
    ===================================================================== */
 
-import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -23,12 +23,6 @@ const DEFAULT_MODEL = "openai/gpt-4o-mini";
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
-    return;
-  }
-
-  const user = await verifyUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return;
   }
 
@@ -49,20 +43,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  const usage = await checkAndConsumeUsage(user);
-  if (!usage.allowed) {
-    if (usage.reason === "email_not_verified") {
-      res.status(403).json({
-        error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
-        code: "email_not_verified"
-      });
-    } else {
-      res.status(429).json({
-        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
-      });
-    }
-    return;
-  }
+  // V3-C: requireUsageQuota concentra login (401) + cota (403/429) numa
+  // única chamada — antes esse bloco (checar login, depois checar/consumir
+  // cota) era copiado quase idêntico nos 5 endpoints de IA. Fica DEPOIS da
+  // validação do corpo e da checagem de OPENROUTER_API_KEY de propósito:
+  // requisição malformada ou servidor mal configurado não deve consumir
+  // 1 unidade da cota de ninguém.
+  const uid = await requireUsageQuota(req, res);
+  if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
@@ -145,10 +133,10 @@ ${studentText}
   } catch (e) {
     // A1-03: qualquer falha aqui (timeout/rede/HTTP/parse na OpenRouter, ou
     // um erro inesperado na validação abaixo) acontece DEPOIS de já ter
-    // consumido 1 unidade da cota mensal (checkAndConsumeUsage, acima) e
+    // consumido 1 unidade da cota mensal (requireUsageQuota, acima) e
     // ANTES de qualquer resposta válida ter chegado à pessoa — por isso
     // sempre estorna, independente da causa.
-    await refundUsage(user.uid);
+    await refundUsage(uid);
     if (e && e.code) {
       res.status(statusForOpenRouterError(e)).json({ error: e.message });
       return;

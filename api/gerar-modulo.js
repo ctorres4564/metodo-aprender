@@ -31,7 +31,7 @@
    (OPENROUTER_API_KEY obrigatória, OPENROUTER_MODEL opcional).
    ===================================================================== */
 
-import { verifyUserFromRequest, checkAndConsumeUsage, refundUsage } from "./_lib/usage.js";
+import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -68,12 +68,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  const user = await verifyUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
-    return;
-  }
-
   const { title, sourceText, annotations } = req.body || {};
 
   if (!sourceText || typeof sourceText !== "string" || sourceText.trim().length < 200) {
@@ -87,20 +81,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const usage = await checkAndConsumeUsage(user);
-  if (!usage.allowed) {
-    if (usage.reason === "email_not_verified") {
-      res.status(403).json({
-        error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
-        code: "email_not_verified"
-      });
-    } else {
-      res.status(429).json({
-        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
-      });
-    }
-    return;
-  }
+  // V3-C: ver comentário equivalente em api/avaliar-explicacao.js.
+  const uid = await requireUsageQuota(req, res);
+  if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   const trimmedSource = sourceText.slice(0, MAX_SOURCE_CHARS);
@@ -182,7 +165,7 @@ ${trimmedSource}
 
     res.status(200).json({ resumo, concepts: cleanConcepts });
   } catch (e) {
-    await refundUsage(user.uid);
+    await refundUsage(uid);
     if (e && e.code) {
       res.status(statusForOpenRouterError(e)).json({ error: e.message });
       return;

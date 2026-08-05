@@ -57,18 +57,64 @@ async function deleteMaterialSubcollections(materialRef) {
 // Roda ANTES de qualquer exclusão de dados: se falhar, é melhor abortar
 // cedo (a pessoa ainda loga e tenta de novo) do que apagar tudo e deixar
 // uma cobrança órfã rodando pra sempre.
+//
+// Os customers são localizados por DUAS fontes (V1-B): o stripeCustomerId
+// gravado em users/{uid} E uma busca por e-mail na Stripe — essa segunda
+// cobre o caso em que o evento checkout.session.completed se perdeu e o
+// campo nunca foi gravado no documento (assinatura órfã continuaria
+// cobrando sem essa busca).
 const CANCELABLE_SUBSCRIPTION_STATUSES = ["trialing", "active", "past_due", "unpaid", "incomplete"];
 
-async function cancelStripeSubscriptions(uid) {
+async function findStripeCustomerIds(uid, email) {
+  const ids = new Set();
   const userSnap = await adminDb().collection("users").doc(uid).get();
-  const customerId = userSnap.exists ? userSnap.data().stripeCustomerId : null;
-  if (!customerId) return; // pessoa nunca assinou — nada a cancelar.
+  const fromDoc = userSnap.exists ? userSnap.data().stripeCustomerId : null;
+  if (fromDoc) ids.add(fromDoc);
+
+  if (email) {
+    const stripe = getStripe();
+    const customers = await stripe.customers.list({ email, limit: 100 });
+    for (const c of customers.data) ids.add(c.id);
+  }
+  return [...ids];
+}
+
+// Melhor esforço (V1-A): sessões de checkout ABERTAS ficam válidas por
+// ~24h — se a pessoa exclui a conta com uma sessão aberta numa aba e
+// conclui o pagamento depois, uma assinatura nova nasceria pra uma conta
+// morta (a segunda linha de defesa é a guarda em stripe-webhook.js).
+// Sessões criadas com customer_email (sem customer vinculado ainda) não
+// aparecem nessa listagem — por isso o webhook mantém a guarda própria.
+// Falhas aqui NÃO abortam a exclusão: no pior caso o webhook cancela a
+// assinatura órfã quando o checkout completar.
+async function expireOpenCheckoutSessions(stripe, customerId) {
+  try {
+    const sessions = await stripe.checkout.sessions.list({ customer: customerId, limit: 100 });
+    for (const s of sessions.data) {
+      if (s.status !== "open") continue;
+      try {
+        await stripe.checkout.sessions.expire(s.id);
+      } catch (e) {
+        console.error(`Falha ao expirar sessão de checkout ${s.id} (seguindo em frente):`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error(`Falha ao listar sessões de checkout abertas do customer ${customerId} (seguindo em frente):`, e.message);
+  }
+}
+
+async function cancelStripeSubscriptions(uid, email) {
+  const customerIds = await findStripeCustomerIds(uid, email);
+  if (customerIds.length === 0) return; // pessoa nunca assinou — nada a cancelar.
 
   const stripe = getStripe();
-  const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
-  for (const sub of subs.data) {
-    if (!CANCELABLE_SUBSCRIPTION_STATUSES.includes(sub.status)) continue;
-    await stripe.subscriptions.cancel(sub.id);
+  for (const customerId of customerIds) {
+    await expireOpenCheckoutSessions(stripe, customerId);
+    const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+    for (const sub of subs.data) {
+      if (!CANCELABLE_SUBSCRIPTION_STATUSES.includes(sub.status)) continue;
+      await stripe.subscriptions.cancel(sub.id);
+    }
   }
 }
 
@@ -94,7 +140,7 @@ async function handleDeleteAccount(req, res, user) {
     //    o catch abaixo aborta a exclusão inteira — a pessoa ainda consegue
     //    logar e tentar de novo, em vez de ficar com dados apagados e uma
     //    cobrança que ninguém mais consegue cancelar.
-    await cancelStripeSubscriptions(uid);
+    await cancelStripeSubscriptions(uid, user.email);
 
     // 1. Materiais: Storage (PDF original) + subcoleções (pages/highlights/
     //    notes) + o documento do material em si.
