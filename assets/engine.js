@@ -322,6 +322,13 @@ function bindTabs(){
   });
 }
 function switchTab(name){
+  // T2: sair da tela de estudo (aprender/revisar/quiz/explicar) pra
+  // qualquer outra aba é um bom momento pra garantir que o progresso
+  // recente já foi pro Firestore, sem esperar o debounce normal. Não
+  // trava a troca de aba — dispara e segue (o storage.js já lida com
+  // não sobrepor gravações).
+  if(CONFIG && typeof StorageAdapter !== "undefined" && StorageAdapter.flush) StorageAdapter.flush(CONFIG.storageKey).catch(()=>{});
+
   document.querySelectorAll(".tab-content").forEach(el=> el.style.display = "none");
   document.getElementById("tab-"+name).style.display = "block";
   document.querySelectorAll("nav.tabs button").forEach(b=> b.classList.toggle("active", b.dataset.tab===name));
@@ -1104,6 +1111,30 @@ function applyConfigToDOM(){
    PONTO DE ENTRADA — chamado por app.html depois de buscar o JSON
    do módulo (CONFIG + CONCEPTS) em /content.
    ===================================================================== */
+// T2: garante que o progresso pendente (ainda não gravado no Firestore
+// por causa do debounce em storage.js) não se perde em situações onde a
+// pessoa não passa por switchTab — minimizar a aba, trocar de app no
+// celular, fechar a aba, navegar pra outro módulo. "visibilitychange"
+// cobre a imensa maioria dos casos (dispara ao minimizar/trocar de aba/
+// app, e também antes da navegação sair da página, na prática, na
+// maioria dos navegadores); "pagehide" é a rede de segurança adicional
+// pro caso de navegação/fechamento que "visibilitychange" não pegar —
+// de propósito NÃO depende só de "beforeunload" (que não é confiável em
+// mobile e é cada vez mais restrito por navegadores modernos).
+let flushListenersBound = false;
+function bindStateFlushListeners(){
+  if(flushListenersBound) return;
+  flushListenersBound = true;
+  const flushNow = ()=>{
+    if(!CONFIG || typeof StorageAdapter === "undefined" || !StorageAdapter.flush) return;
+    StorageAdapter.flush(CONFIG.storageKey).catch(()=>{});
+  };
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden) flushNow();
+  });
+  window.addEventListener("pagehide", flushNow);
+}
+
 async function initApp(config, concepts, sourceMaterialId, moduleId, linkedNotes){
   CONFIG = config;
   CONCEPTS = concepts;
@@ -1112,6 +1143,7 @@ async function initApp(config, concepts, sourceMaterialId, moduleId, linkedNotes
   LINKED_NOTES = Array.isArray(linkedNotes) ? linkedNotes : [];
   STATE = await loadState();
   bindTabs();
+  bindStateFlushListeners();
   applyConfigToDOM();
   renderHeader();
   renderProgress();

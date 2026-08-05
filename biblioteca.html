@@ -28,6 +28,10 @@
   .status-processing, .status-uploading{ background:rgba(230,180,60,0.18); color:#e6c04a; }
   .status-failed{ background:rgba(230,80,80,0.18); color:#ff8888; }
   .status-deleting{ background:rgba(150,150,150,0.18); color:#bbb; }
+  .stuck-warning{
+    font-size:12px; color:#ff8888; background:rgba(230,80,80,0.10);
+    border:1px solid rgba(230,80,80,0.25); border-radius:8px; padding:6px 10px;
+  }
   .material-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:2px; }
   .material-actions .btn{ font-size:12px; }
   .materials-grid{
@@ -95,6 +99,22 @@ const STATUS_LABELS = {
   deleting: "Excluindo..."
 };
 
+// T4 (materiais "zumbis"): extração/OCR acontece no navegador de quem
+// importou — se a aba fechar, a conexão cair, ou algo travar no meio do
+// caminho, o material fica preso em "uploading"/"processing" pra sempre,
+// porque não existe nenhum processo do lado do servidor pra terminar ou
+// perceber isso sozinho. 30 minutos é uma folga generosa (mesmo livros
+// grandes com OCR normalmente terminam em poucos minutos) pra separar
+// "só está demorando" de "claramente travado", sem criar falsos positivos.
+const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
+
+function isStuck(m){
+  if(m.status !== "uploading" && m.status !== "processing") return false;
+  const since = m.updatedAt || m.createdAt || 0;
+  if(!since) return false;
+  return (Date.now() - since) > STUCK_THRESHOLD_MS;
+}
+
 function formatDate(ts){
   if(!ts) return "";
   try{
@@ -144,6 +164,7 @@ async function loadMaterials(){
       const moduleInfo = m.generatedModuleCount
         ? `${m.generatedModuleCount} módulo${m.generatedModuleCount === 1 ? "" : "s"} gerado${m.generatedModuleCount === 1 ? "" : "s"}`
         : "Nenhum módulo gerado ainda";
+      const stuck = isStuck(m);
 
       card.innerHTML = `
         <div class="top">
@@ -155,13 +176,63 @@ async function loadMaterials(){
         <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
         ${m.lastOpenedAt ? `<div class="meta-line">Última leitura: ${formatDate(m.lastOpenedAt)}${m.lastPageRead ? ` · pág. ${m.lastPageRead}` : ""}</div>` : ""}
         ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${m.processingError.replace(/</g,"&lt;")}</div>` : ""}
+        ${stuck ? `<div class="stuck-warning">⚠️ Isso está demorando muito mais que o normal — pode ter travado (aba fechada ou conexão perdida durante o envio).</div>` : ""}
         <div class="material-actions">
           ${m.status === "ready" ? `<a class="btn secondary" style="text-decoration:none;" href="importar-livro.html?material=${encodeURIComponent(m.id)}">📖 Usar</a>` : ""}
           ${m.status === "ready" && m.sourceType === "pdf" ? `<a class="btn secondary" style="text-decoration:none;" href="leitor.html?material=${encodeURIComponent(m.id)}${m.lastPageRead ? "&page=" + encodeURIComponent(m.lastPageRead) : ""}">📄 ${m.lastPageRead ? "Continuar leitura" : "Abrir PDF"}</a>` : ""}
+          ${stuck ? `<button class="btn secondary retry-material" data-id="${m.id}" title="Reconsulta o status atual deste material agora — não retoma upload, extração ou OCR." aria-label="Verificar novamente o status deste material">🔄 Verificar novamente</button>` : ""}
+          ${stuck ? `<button class="btn ghost mark-failed-material" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">❌ Marcar como falhou</button>` : ""}
           <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
         </div>
       `;
       grid.appendChild(card);
+    });
+
+    // "Verificar novamente" NÃO reprocessa nada no servidor — a extração
+    // do PDF/OCR acontece só no navegador de quem importou, então não há
+    // como o servidor "retomar" um upload/extração/OCR interrompido. O
+    // que este botão faz é reconsultar o status atual agora (ex.: se o
+    // processamento na verdade já tinha terminado, ou terminou entre
+    // esta checagem e a anterior, o aviso de "travado" some sozinho). Se
+    // continuar preso, a pessoa ainda tem as opções de marcar como
+    // falhou ou excluir.
+    grid.querySelectorAll(".retry-material").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        fb.innerHTML = "";
+        loadMaterials();
+      });
+    });
+
+    // Reaproveita a action "updateStatus" que já existe em api/material.js
+    // (mesma usada pelo fluxo normal de processamento) — nenhuma API nova.
+    grid.querySelectorAll(".mark-failed-material").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        const id = btn.dataset.id;
+        const title = btn.dataset.title;
+        if(!confirm(`Marcar "${title}" como falhou? Isso libera uma vaga na sua Biblioteca (materiais com falha não contam pro limite do plano) e permite excluir ou reenviar depois.`)) return;
+        btn.disabled = true;
+        btn.textContent = "Marcando...";
+        try{
+          const resp = await authedFetch("/api/material", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              action: "updateStatus",
+              materialId: id,
+              status: "failed",
+              processingError: "Marcado manualmente como falhou após ficar muito tempo travado em processamento."
+            })
+          });
+          const data = await resp.json().catch(()=>({}));
+          if(!resp.ok) throw new Error(data.error || "Falha ao atualizar o material.");
+          loadMaterials();
+        }catch(e){
+          console.error(e);
+          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${e.message || "Não foi possível atualizar agora. Tente novamente."}</div>`;
+          btn.disabled = false;
+          btn.textContent = "❌ Marcar como falhou";
+        }
+      });
     });
 
     grid.querySelectorAll(".delete-material").forEach(btn=>{
