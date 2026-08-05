@@ -202,6 +202,13 @@ async function renderPage(num){
   const container = document.getElementById("pdf-page-container");
   container.style.width = viewport.width + "px";
   container.style.height = viewport.height + "px";
+  // SEC-TEXTLAYER-01 (ver styles.css): PDF.js 6.x dimensiona o #text-layer
+  // sozinho a partir de --total-scale-factor (derivado de --scale-factor,
+  // ver .pdf-page-container em styles.css) — sem manter esta variável em
+  // dia com o scale atual, a largura calculada não bate com a do
+  // viewport, e a camada de texto pode ficar com width:0 (nada
+  // selecionável) ou desalinhada do canvas.
+  container.style.setProperty("--scale-factor", currentScale);
 
   const canvas = document.getElementById("pdf-canvas");
   canvas.width = viewport.width;
