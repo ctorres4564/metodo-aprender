@@ -59,6 +59,10 @@
         </div>
       </div>
 
+      <div class="reader-notice" id="no-text-notice" style="display:none;">
+        ℹ️ Este PDF parece ser uma imagem (sem texto selecionável) nesta página. A marcação de texto não estará disponível aqui.
+      </div>
+
       <div class="reader-main">
         <div class="pdf-viewer" id="pdf-viewer">
           <div class="pdf-page-container" id="pdf-page-container">
@@ -217,6 +221,29 @@ async function renderPage(num){
   });
   await textLayer.render();
 
+  // Garante que o navegador já aplicou o layout antes de checar se algum
+  // <span> foi de fato criado — proteção contra uma corrida rara de
+  // render (não é o mesmo caso de didBoot, que evita ferver o boot
+  // inteiro da página; aqui é só o render da TextLayer de UMA página que
+  // pode falhar silenciosamente e deixar a camada vazia).
+  await new Promise(r => requestAnimationFrame(r));
+  if (textContent.items.length > 0 && textLayerDiv.querySelectorAll("span").length === 0) {
+    console.warn("[leitor] TextLayer renderizou sem spans. Tentando novamente...");
+    textLayerDiv.innerHTML = "";
+    const retryLayer = new pdfjsLib.TextLayer({
+      textContentSource: textContent,
+      container: textLayerDiv,
+      viewport
+    });
+    await retryLayer.render();
+  }
+
+  // PDF sem texto real embutido (página escaneada como imagem, sem OCR
+  // aplicado) — getTextContent() retorna poucos ou nenhum item nesse
+  // caso. Sem este aviso, a marcação de texto simplesmente não faz nada,
+  // sem explicar o motivo.
+  updateNoTextNotice(textContent.items.length < 5);
+
   renderHighlightsForPage(num, viewport);
   updatePageIndicator();
   hideSelectionMenu();
@@ -245,6 +272,11 @@ function scheduleRecordRead(){
       body: JSON.stringify({ action: "recordRead", materialId, page: currentPage })
     }).catch(e => console.warn("Falha ao registrar leitura (não afeta a leitura em si):", e));
   }, 2500);
+}
+
+function updateNoTextNotice(show){
+  const el = document.getElementById("no-text-notice");
+  if (el) el.style.display = show ? "block" : "none";
 }
 
 function updatePageIndicator(){
@@ -424,10 +456,12 @@ function renderHighlightsForPage(pageNum, viewport){
       div.style.background = COLOR_HEX[h.color] || COLOR_HEX.yellow;
       div.dataset.highlightId = h.id;
       div.title = "Clique para opções deste destaque";
-      div.addEventListener("click", (ev)=>{
-        ev.stopPropagation();
-        openHighlightMenu(h.id, div);
-      });
+      // Sem listener de clique aqui de propósito: .pdf-highlight agora é
+      // pointer-events:none por padrão (ver styles.css), pra nunca
+      // bloquear a seleção de texto por cima de um destaque — então um
+      // clique aqui nunca chega até este elemento, sempre "atravessa"
+      // pra TextLayer acima. A abertura do menu é feita por coordenada,
+      // no listener de mouseup de #pdf-viewer (ver highlightElementAtPoint).
       layer.appendChild(div);
     });
     if(rects.length && notes.some(n => n.highlightId === h.id)){
@@ -479,20 +513,52 @@ function hideSelectionMenu(){
 }
 function hideHighlightMenu(){
   document.getElementById("highlight-menu").style.display = "none";
+  // Remove "menu-open" de qualquer destaque que estivesse com ele — sem
+  // isso, o destaque ficaria permanentemente pointer-events:auto (ver
+  // styles.css) e voltaria a bloquear a seleção de texto por cima dele.
+  document.querySelectorAll("#highlight-layer .pdf-highlight.menu-open")
+    .forEach(d => d.classList.remove("menu-open"));
   activeHighlightId = null;
 }
 
 function openHighlightMenu(highlightId, el){
   hideSelectionMenu();
   activeHighlightId = highlightId;
+  // Um destaque que cobre mais de uma linha vira vários <div class="pdf-
+  // highlight"> com o mesmo data-highlight-id (um por retângulo) — todos
+  // precisam da classe, não só o que recebeu o clique.
+  document.querySelectorAll(`#highlight-layer .pdf-highlight[data-highlight-id="${highlightId}"]`)
+    .forEach(d => d.classList.add("menu-open"));
   const menu = document.getElementById("highlight-menu");
   positionMenu(menu, el.getBoundingClientRect());
 }
 
-document.getElementById("pdf-viewer").addEventListener("mouseup", ()=>{
+// Encontra o <div class="pdf-highlight"> (se houver) sob o ponto (x, y)
+// em coordenadas de viewport. Necessário porque .pdf-highlight é
+// pointer-events:none por padrão (ver styles.css) — clicar em cima de um
+// destaque não gera um evento de clique nele, sempre atravessa até a
+// TextLayer. Percorre de trás pra frente pra priorizar o retângulo
+// pintado por último em caso de sobreposição.
+function highlightElementAtPoint(x, y){
+  const els = document.querySelectorAll("#highlight-layer .pdf-highlight");
+  for (let i = els.length - 1; i >= 0; i--){
+    const r = els[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return els[i];
+  }
+  return null;
+}
+
+document.getElementById("pdf-viewer").addEventListener("mouseup", (ev)=>{
+  // Pequeno delay de segurança: dá tempo do navegador finalizar a seleção
+  // nativa (window.getSelection()) antes de a gente ler o resultado no
+  // mesmo gesto de mouseup.
   setTimeout(()=>{
     const sel = window.getSelection();
     if(!sel || sel.isCollapsed || !sel.toString().trim()){
+      // Não houve seleção de texto — pode ter sido um clique simples em
+      // cima de um destaque existente (ver highlightElementAtPoint).
+      const hitEl = highlightElementAtPoint(ev.clientX, ev.clientY);
+      if (hitEl) openHighlightMenu(hitEl.dataset.highlightId, hitEl);
       return;
     }
     const range = sel.getRangeAt(0);
@@ -503,8 +569,9 @@ document.getElementById("pdf-viewer").addEventListener("mouseup", ()=>{
     hideHighlightMenu();
     pendingSelectionRange = range;
     pendingSelectionText = sel.toString();
+    if (!pendingSelectionText.trim()) return;
     positionMenu(document.getElementById("selection-menu"), range.getBoundingClientRect());
-  }, 0);
+  }, 15);
 });
 
 document.getElementById("pdf-viewer").addEventListener("mousedown", (ev)=>{
