@@ -310,6 +310,20 @@ function setExpanded(active){
   // o botão "☰ Painel" continua disponível pra trazer ela de volta quando
   // precisar. Ao voltar ao tamanho normal, a sidebar reaparece (esse é o
   // padrão fora do modo expandido).
+  // --- Correção: Garantir que #app-root seja flex durante o modo expandido ---
+  // auth-ui.js/showApp() define appRoot.style.display = "block" (inline style).
+  // Isso quebra a cadeia flex necessária para que a altura da viewport seja
+  // propagada até o .pdf-viewer. Aqui aplicamos display:flex com !important
+  // via JS ao expandir, e removemos o inline override ao recolher (deixando
+  // o display:block de showApp() prevalecer no modo normal).
+  const appRoot = document.getElementById("app-root");
+  if (active) {
+    appRoot.style.setProperty("display", "flex", "important");
+  } else {
+    appRoot.style.removeProperty("display");
+  }
+  // -------------------------------------------------------------------------
+
   document.querySelector(".reader-sidebar").classList.toggle("sidebar-hidden", active);
 
   // Espera o navegador aplicar o novo layout (cabeçalho escondido, leitor
