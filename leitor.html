@@ -584,6 +584,25 @@ document.getElementById("pdf-viewer").addEventListener("mouseup", (ev)=>{
 document.getElementById("pdf-viewer").addEventListener("mousedown", (ev)=>{
   if(ev.target.closest(".selection-menu")) return;
   hideHighlightMenu();
+  // Clicar fora do menu de seleção também cancela uma seleção pendente
+  // (sem isso, não havia jeito de desistir de destacar um trecho já
+  // selecionado a não ser recarregar a página) — só limpa o texto nativo
+  // do navegador se o clique não for o início de uma NOVA seleção dentro
+  // da própria TextLayer (nesse caso o próprio gesto de arrastar já troca
+  // a seleção antiga pela nova).
+  if(!document.getElementById("text-layer").contains(ev.target)){
+    window.getSelection().removeAllRanges();
+  }
+  hideSelectionMenu();
+});
+
+// Esc cancela uma seleção de texto pendente (menu de cor aberto) — além
+// do uso já existente de Esc pra sair do modo expandido (ver setExpanded).
+document.addEventListener("keydown", (ev)=>{
+  if(ev.key === "Escape" && pendingSelectionRange){
+    window.getSelection().removeAllRanges();
+    hideSelectionMenu();
+  }
 });
 
 /* ---- criar destaque (clique numa cor do menu de seleção) ---- */
