@@ -391,8 +391,22 @@ body.reader-expanded .reader-wrap{
   display:flex; flex-direction:column;
 }
 body.reader-expanded header.topbar{ display:none; }
-body.reader-expanded #app-root{ flex:1; min-height:0; }
-body.reader-expanded #reader-shell{ height:100%; }
+/* #app-root tem "display:block" fixado via inline style (definido por
+   auth-ui.js/showApp() — não é algo que este arquivo controla), então
+   nenhuma regra de CSS normal consegue transformá-lo num container flex;
+   sem isso, "height:100%" do #reader-shell logo abaixo fica resolvendo
+   porcentagem contra um bloco comum (display:block) em vez de um item
+   flex já dimensionado, o que é a causa raiz da rolagem quebrada no modo
+   expandido: sem uma altura definida propagada por flex-grow em toda a
+   cadeia, o #reader-shell (e tudo dentro dele, até o .pdf-viewer) cresce
+   do tamanho do conteúdo em vez de ficar limitado à tela — e como
+   .reader-wrap/body ficam com overflow:hidden no modo expandido, o
+   excesso simplesmente fica invisível e inacessível, sem scrollbar em
+   lugar nenhum. O !important aqui é local e inofensivo: só atua dentro
+   de body.reader-expanded, não afeta o modo comum (onde o inline
+   display:block continua valendo normalmente). */
+body.reader-expanded #app-root{ display:flex !important; flex-direction:column; flex:1; min-height:0; }
+body.reader-expanded #reader-shell{ flex:1; min-height:0; }
 body.reader-expanded .reader-toolbar{ flex-shrink:0; }
 body.reader-expanded .reader-main{ flex:1; min-height:0; align-items:stretch; }
 /* min-height:0 é necessário aqui: por padrão, um item flex não encolhe
