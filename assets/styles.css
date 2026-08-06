@@ -315,9 +315,12 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
    tamanho/posição errados, e arrastar o mouse sobre o texto não seleciona
    nada. --min-font-size existe pra contornar um tamanho mínimo de fonte
    que alguns navegadores forçam: o span é desenhado maior que o necessário
-   e depois reduzido de volta via scale(). Não usamos --total-scale-factor
-   (específico do visualizador completo do PDF.js, que não usamos aqui) —
-   nosso viewport.scale já está embutido em --font-height. */
+   e depois reduzido de volta via scale(). O tamanho de cada span usa
+   --font-height (calculado pelo próprio PDF.js por span, já embutindo o
+   scale do viewport) — já o dimensionamento do CONTÊINER da TextLayer em
+   si depende de --total-scale-factor/--scale-round-x/--scale-round-y,
+   definidas em .pdf-page-container (ver comentário SEC-TEXTLAYER-01
+   logo abaixo). */
 .textLayer{
   position:absolute; top:0; left:0; overflow:hidden; line-height:1; transform-origin:0 0; z-index:3;
   pointer-events:auto; user-select:text; cursor:text;
@@ -330,7 +333,15 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
   font-size: calc(var(--font-height) * var(--min-font-size));
   transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(calc(1 / var(--min-font-size)));
 }
-.textLayer ::selection{ background: rgba(111,207,125,0.35); }
+/* SEC-TEXTLAYER-02: opacidade 0.35 (valor anterior) ficava quase
+   imperceptível durante o arraste do mouse sobre o fundo branco da
+   página — a seleção "funcionava" (o texto era mesmo capturado), mas
+   sem feedback visual visível dava a impressão de que nada acontecia ao
+   arrastar, e o destaque criado ao clicar numa cor parecia "aleatório"
+   (na real, era exatamente o trecho arrastado, só que invisível até
+   tarde demais pra perceber/corrigir). Opacidade bem mais alta aqui
+   pra ficar claramente visível durante o arraste. */
+.textLayer ::selection{ background: rgba(46,163,74,0.55); }
 
 .highlight-layer{ position:absolute; top:0; left:0; z-index:2; pointer-events:none; }
 /* pointer-events:none por padrão — sem isso, um destaque existente
