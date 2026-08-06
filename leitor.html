@@ -26,7 +26,7 @@
         <div class="logo">📖</div>
         <div>
           <h1 id="reader-title">Leitor de PDF</h1>
-          <p>Destaques e anotações ficam salvos na sua conta</p>
+          <p>Visualize o PDF completo, com navegação por página e zoom</p>
         </div>
       </div>
       <div class="stats">
@@ -53,80 +53,18 @@
           <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura">↔ Largura</button>
           <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura">↕ Altura</button>
         </div>
-        <div class="toolbar-group">
-          <button class="btn ghost" id="toggle-sidebar-btn" title="Mostrar/ocultar painel lateral">☰ Painel</button>
-          <button class="btn ghost" id="expand-btn" title="Expandir leitor (Esc para sair)">⛶ Expandir</button>
-        </div>
-      </div>
-
-      <div class="reader-notice" id="no-text-notice" style="display:none;">
-        ℹ️ Este PDF parece ser uma imagem (sem texto selecionável) nesta página. A marcação de texto não estará disponível aqui.
       </div>
 
       <div class="reader-main">
         <div class="pdf-viewer" id="pdf-viewer">
           <div class="pdf-page-container" id="pdf-page-container">
             <canvas id="pdf-canvas"></canvas>
-            <div class="highlight-layer" id="highlight-layer"></div>
-            <div class="textLayer" id="text-layer"></div>
-
-            <div class="selection-menu" id="selection-menu" style="display:none;">
-              <button class="swatch" data-color="yellow" style="background:#f4b942;" title="Amarelo"></button>
-              <button class="swatch" data-color="green" style="background:#6fcf7d;" title="Verde"></button>
-              <button class="swatch" data-color="blue" style="background:#4fa3d1;" title="Azul"></button>
-              <button class="swatch" data-color="pink" style="background:#e07fb1;" title="Rosa"></button>
-              <span class="menu-sep"></span>
-              <button class="btn secondary menu-btn" id="add-note-btn">📝 Anotação</button>
-            </div>
-
-            <div class="selection-menu" id="highlight-menu" style="display:none;">
-              <button class="swatch" data-color="yellow" style="background:#f4b942;" title="Amarelo"></button>
-              <button class="swatch" data-color="green" style="background:#6fcf7d;" title="Verde"></button>
-              <button class="swatch" data-color="blue" style="background:#4fa3d1;" title="Azul"></button>
-              <button class="swatch" data-color="pink" style="background:#e07fb1;" title="Rosa"></button>
-              <span class="menu-sep"></span>
-              <button class="btn secondary menu-btn" id="highlight-note-btn">📝 Anotação</button>
-              <button class="btn ghost menu-btn" id="highlight-delete-btn" style="color:var(--danger);">🗑️</button>
-            </div>
           </div>
         </div>
-
-        <aside class="reader-sidebar">
-          <div class="sidebar-tabs">
-            <button class="sidebar-tab active" data-tab="highlights">🖍️ Destaques</button>
-            <button class="sidebar-tab" data-tab="notes">📝 Anotações</button>
-          </div>
-          <div class="sidebar-panel" id="sidebar-highlights"></div>
-          <div class="sidebar-panel" id="sidebar-notes" style="display:none;"></div>
-        </aside>
       </div>
     </div>
 
   </div><!-- /#app-root -->
-</div>
-
-<div class="note-editor-backdrop" id="note-editor-backdrop" style="display:none;">
-  <div class="note-editor">
-    <h3 style="margin:0 0 10px; font-size:15px;" id="note-editor-title">📝 Anotação</h3>
-    <p class="note-editor-excerpt" id="note-editor-excerpt"></p>
-    <textarea id="note-editor-text" class="explain-textarea" rows="5" placeholder="Escreva sua anotação sobre este trecho..."></textarea>
-    <div style="margin-top:10px;">
-      <label style="font-size:11.5px; color:var(--text-dim); display:block; margin-bottom:4px;">Vincular a um módulo/conceito (opcional)</label>
-      <div style="display:flex; gap:6px;">
-        <select id="note-editor-module" class="auth-input" style="flex:1; font-size:12.5px; padding:8px;">
-          <option value="">Nenhum módulo</option>
-        </select>
-        <select id="note-editor-concept" class="auth-input" style="flex:1; font-size:12.5px; padding:8px;" disabled>
-          <option value="">Nenhum conceito</option>
-        </select>
-      </div>
-    </div>
-    <div style="display:flex; gap:8px; margin-top:12px;">
-      <button class="btn" id="note-editor-save" style="flex:1;">Salvar</button>
-      <button class="btn ghost" id="note-editor-cancel">Cancelar</button>
-      <button class="btn ghost" id="note-editor-delete" style="display:none; color:var(--danger);">🗑️ Excluir</button>
-    </div>
-  </div>
 </div>
 
 <script type="module" src="assets/firebase-init.js"></script>
@@ -139,12 +77,16 @@
   window.pdfjsLib = pdfjsLib;
 </script>
 <script>
-const COLOR_HEX = {
-  yellow: "#f4b942",
-  green: "#6fcf7d",
-  blue: "#4fa3d1",
-  pink: "#e07fb1"
-};
+/* =====================================================================
+   LEITOR DE PDF — versão simplificada (só visualização)
+   =====================================================================
+   Destaques, anotações, seleção de texto e o modo Expandir foram
+   removidos de propósito: essa combinação (TextLayer do PDF.js +
+   destaques sobrepostos + tela cheia) se mostrou frágil demais entre
+   diferentes PDFs/navegadores para manter no produto agora. O leitor
+   faz só o essencial, de forma confiável: abre o PDF, navega entre
+   páginas, e ajusta o zoom.
+   ===================================================================== */
 
 let materialId = null;
 let material = null;
@@ -152,21 +94,6 @@ let pdfDoc = null;
 let currentPage = 1;
 let totalPages = 1;
 let currentScale = 1;
-let currentViewport = null;
-let highlights = [];
-let notes = [];
-
-let pendingSelectionRange = null;
-let pendingSelectionText = "";
-let activeHighlightId = null;   // destaque cujo menu está aberto
-let editingNoteId = null;       // nota sendo editada (null = criando nova)
-let editingHighlightId = null;  // destaque ao qual a nota em edição pertence
-
-// Etapa 3 — associar anotação a conceito/módulo: módulos do próprio usuário
-// gerados a partir DESTE material (sourceMaterialId === materialId), pra
-// oferecer no seletor do editor de anotação. Carregado uma vez no boot();
-// se falhar, o seletor simplesmente fica vazio (nunca bloqueia a leitura).
-let candidateModules = [];
 
 function escapeHtml(str){
   return String(str || "").replace(/[&<>"']/g, c => ({
@@ -196,19 +123,11 @@ async function waitForPdfjs(timeoutMs){
 async function renderPage(num){
   const page = await pdfDoc.getPage(num);
   const viewport = page.getViewport({ scale: currentScale });
-  currentViewport = viewport;
   currentPage = num;
 
   const container = document.getElementById("pdf-page-container");
   container.style.width = viewport.width + "px";
   container.style.height = viewport.height + "px";
-  // SEC-TEXTLAYER-01 (ver styles.css): PDF.js 6.x dimensiona o #text-layer
-  // sozinho a partir de --total-scale-factor (derivado de --scale-factor,
-  // ver .pdf-page-container em styles.css) — sem manter esta variável em
-  // dia com o scale atual, a largura calculada não bate com a do
-  // viewport, e a camada de texto pode ficar com width:0 (nada
-  // selecionável) ou desalinhada do canvas.
-  container.style.setProperty("--scale-factor", currentScale);
 
   const canvas = document.getElementById("pdf-canvas");
   canvas.width = viewport.width;
@@ -216,45 +135,7 @@ async function renderPage(num){
   const ctx = canvas.getContext("2d");
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  const textLayerDiv = document.getElementById("text-layer");
-  textLayerDiv.innerHTML = "";
-  textLayerDiv.style.width = viewport.width + "px";
-  textLayerDiv.style.height = viewport.height + "px";
-  const textContent = await page.getTextContent();
-  const textLayer = new pdfjsLib.TextLayer({
-    textContentSource: textContent,
-    container: textLayerDiv,
-    viewport
-  });
-  await textLayer.render();
-
-  // Garante que o navegador já aplicou o layout antes de checar se algum
-  // <span> foi de fato criado — proteção contra uma corrida rara de
-  // render (não é o mesmo caso de didBoot, que evita ferver o boot
-  // inteiro da página; aqui é só o render da TextLayer de UMA página que
-  // pode falhar silenciosamente e deixar a camada vazia).
-  await new Promise(r => requestAnimationFrame(r));
-  if (textContent.items.length > 0 && textLayerDiv.querySelectorAll("span").length === 0) {
-    console.warn("[leitor] TextLayer renderizou sem spans. Tentando novamente...");
-    textLayerDiv.innerHTML = "";
-    const retryLayer = new pdfjsLib.TextLayer({
-      textContentSource: textContent,
-      container: textLayerDiv,
-      viewport
-    });
-    await retryLayer.render();
-  }
-
-  // PDF sem texto real embutido (página escaneada como imagem, sem OCR
-  // aplicado) — getTextContent() retorna poucos ou nenhum item nesse
-  // caso. Sem este aviso, a marcação de texto simplesmente não faz nada,
-  // sem explicar o motivo.
-  updateNoTextNotice(textContent.items.length < 5);
-
-  renderHighlightsForPage(num, viewport);
   updatePageIndicator();
-  hideSelectionMenu();
-  hideHighlightMenu();
   scheduleRecordRead();
 }
 
@@ -281,11 +162,6 @@ function scheduleRecordRead(){
   }, 2500);
 }
 
-function updateNoTextNotice(show){
-  const el = document.getElementById("no-text-notice");
-  if (el) el.style.display = show ? "block" : "none";
-}
-
 function updatePageIndicator(){
   document.getElementById("page-indicator").textContent = `Página ${currentPage} de ${totalPages}`;
   document.getElementById("goto-page-input").value = currentPage;
@@ -295,7 +171,7 @@ function updatePageIndicator(){
 
 async function goToPage(n){
   n = Math.max(1, Math.min(totalPages, Math.round(n)));
-  if(n === currentPage && currentViewport) return;
+  if(n === currentPage) return;
   await renderPage(n);
 }
 
@@ -334,73 +210,6 @@ document.getElementById("fit-height-btn").addEventListener("click", async ()=>{
 });
 
 /* =====================================================================
-   MODO EXPANDIDO
-   ===================================================================== */
-let isExpanded = false;
-
-function setExpanded(active){
-  isExpanded = active;
-  document.body.classList.toggle("reader-expanded", active);
-  const btn = document.getElementById("expand-btn");
-  btn.textContent = active ? "⤢ Recolher" : "⛶ Expandir";
-  btn.title = active ? "Sair da visualização expandida (Esc)" : "Expandir leitor (Esc para sair)";
-
-  // Ao expandir, a sidebar já entra recolhida (o PDF ocupa a tela toda) —
-  // o botão "☰ Painel" continua disponível pra trazer ela de volta quando
-  // precisar. Ao voltar ao tamanho normal, a sidebar reaparece (esse é o
-  // padrão fora do modo expandido).
-  // --- Correção: Garantir que #app-root seja flex durante o modo expandido ---
-  // auth-ui.js/showApp() define appRoot.style.display = "block" (inline style).
-  // Isso quebra a cadeia flex necessária para que a altura da viewport seja
-  // propagada até o .pdf-viewer. Aqui aplicamos display:flex com !important
-  // via JS ao expandir, e removemos o inline override ao recolher (deixando
-  // o display:block de showApp() prevalecer no modo normal).
-  const appRoot = document.getElementById("app-root");
-  if (active) {
-    appRoot.style.setProperty("display", "flex", "important");
-  } else {
-    appRoot.style.removeProperty("display");
-  }
-  // -------------------------------------------------------------------------
-
-  document.querySelector(".reader-sidebar").classList.toggle("sidebar-hidden", active);
-
-  // Espera o navegador aplicar o novo layout (cabeçalho escondido, leitor
-  // em tela cheia) antes de recalcular "Ajustar à largura" — medir a
-  // largura disponível antes disso pegaria o tamanho antigo. Página atual,
-  // destaques e anotações não são tocados; só a escala de zoom muda, tanto
-  // ao expandir quanto ao voltar ao tamanho normal (pra não ficar com o
-  // zoom da tela cheia num visualizador bem menor).
-  requestAnimationFrame(()=>{
-    if(!pdfDoc) return;
-    computeFitWidthScale().then(()=> renderPage(currentPage)).then(()=>{
-      // Empurrão de reflow (SEC-EXPAND-01): reportado que a rolagem
-      // dentro de #pdf-viewer só funciona no modo expandido enquanto o
-      // DevTools está aberto — e volta a travar assim que ele é fechado.
-      // Abrir/fechar o DevTools dispara um "resize" de verdade na janela,
-      // que força o navegador a recalcular a área rolável (overflow:auto)
-      // de #pdf-viewer; sem esse empurrão, a troca de classe CSS sozinha
-      // (body.reader-expanded) às vezes não é suficiente pro Chrome/Edge
-      // atualizar esse cálculo. Disparar um "resize" sintético reproduz o
-      // mesmo efeito sem depender do DevTools.
-      window.dispatchEvent(new Event("resize"));
-    });
-  });
-}
-
-document.getElementById("expand-btn").addEventListener("click", ()=> setExpanded(!isExpanded));
-
-document.getElementById("toggle-sidebar-btn").addEventListener("click", ()=>{
-  document.querySelector(".reader-sidebar").classList.toggle("sidebar-hidden");
-});
-
-document.addEventListener("keydown", (ev)=>{
-  if(ev.key === "Escape" && isExpanded){
-    setExpanded(false);
-  }
-});
-
-/* =====================================================================
    NAVEGAÇÃO
    ===================================================================== */
 document.getElementById("prev-page-btn").addEventListener("click", ()=> goToPage(currentPage - 1));
@@ -427,10 +236,6 @@ document.getElementById("goto-page-input").addEventListener("keydown", (ev)=>{
 let wheelPageChangeCooldown = false;
 document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
   const el = ev.currentTarget;
-  // Se a página inteira já cabe na área visível (nada pra rolar internamente
-  // — comum no modo expandido, onde o visualizador é bem maior), considera
-  // que já está "no topo e no fim" ao mesmo tempo, pra rolar sempre trocar
-  // de página em vez de não fazer nada.
   const scrollable = el.scrollHeight - el.clientHeight > 1;
   const atBottom = !scrollable || Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight;
   const atTop = !scrollable || el.scrollTop <= 0;
@@ -454,456 +259,6 @@ document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
 }, { passive: false });
 
 /* =====================================================================
-   DESTAQUES — renderização visual na página atual
-   ===================================================================== */
-function renderHighlightsForPage(pageNum, viewport){
-  const layer = document.getElementById("highlight-layer");
-  layer.innerHTML = "";
-  layer.style.width = viewport.width + "px";
-  layer.style.height = viewport.height + "px";
-
-  highlights.filter(h => h.pageNumber === pageNum).forEach(h=>{
-    const rects = (h.position && h.position.rects) || [];
-    rects.forEach(r=>{
-      const div = document.createElement("div");
-      div.className = "pdf-highlight";
-      div.style.left = (r.xRatio * viewport.width) + "px";
-      div.style.top = (r.yRatio * viewport.height) + "px";
-      div.style.width = (r.wRatio * viewport.width) + "px";
-      div.style.height = (r.hRatio * viewport.height) + "px";
-      div.style.background = COLOR_HEX[h.color] || COLOR_HEX.yellow;
-      div.dataset.highlightId = h.id;
-      div.title = "Clique para opções deste destaque";
-      // Sem listener de clique aqui de propósito: .pdf-highlight agora é
-      // pointer-events:none por padrão (ver styles.css), pra nunca
-      // bloquear a seleção de texto por cima de um destaque — então um
-      // clique aqui nunca chega até este elemento, sempre "atravessa"
-      // pra TextLayer acima. A abertura do menu é feita por coordenada,
-      // no listener de mouseup de #pdf-viewer (ver highlightElementAtPoint).
-      layer.appendChild(div);
-    });
-    if(rects.length && notes.some(n => n.highlightId === h.id)){
-      const dot = document.createElement("span");
-      dot.className = "note-dot";
-      dot.textContent = "📝";
-      const last = rects[rects.length - 1];
-      dot.style.left = ((last.xRatio + last.wRatio) * viewport.width) + "px";
-      dot.style.top = (last.yRatio * viewport.height) + "px";
-      layer.appendChild(dot);
-    }
-  });
-}
-
-function flashHighlight(highlightId){
-  const el = document.querySelector(`.pdf-highlight[data-highlight-id="${highlightId}"]`);
-  if(!el) return;
-  el.classList.add("flash");
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  setTimeout(()=> el.classList.remove("flash"), 2000);
-}
-
-/* =====================================================================
-   SELEÇÃO DE TEXTO → menu de destacar / anotar
-   ===================================================================== */
-function rangeToRatioRects(range){
-  const containerRect = document.getElementById("pdf-page-container").getBoundingClientRect();
-  return Array.from(range.getClientRects())
-    .filter(r => r.width > 0 && r.height > 0)
-    .map(r => ({
-      xRatio: (r.left - containerRect.left) / currentViewport.width,
-      yRatio: (r.top - containerRect.top) / currentViewport.height,
-      wRatio: r.width / currentViewport.width,
-      hRatio: r.height / currentViewport.height
-    }));
-}
-
-function positionMenu(menuEl, clientRect){
-  const containerRect = document.getElementById("pdf-page-container").getBoundingClientRect();
-  menuEl.style.left = Math.max(0, clientRect.left - containerRect.left) + "px";
-  menuEl.style.top = Math.max(0, clientRect.top - containerRect.top - 44) + "px";
-  menuEl.style.display = "flex";
-}
-
-function hideSelectionMenu(){
-  document.getElementById("selection-menu").style.display = "none";
-  pendingSelectionRange = null;
-  pendingSelectionText = "";
-}
-function hideHighlightMenu(){
-  document.getElementById("highlight-menu").style.display = "none";
-  // Remove "menu-open" de qualquer destaque que estivesse com ele — sem
-  // isso, o destaque ficaria permanentemente pointer-events:auto (ver
-  // styles.css) e voltaria a bloquear a seleção de texto por cima dele.
-  document.querySelectorAll("#highlight-layer .pdf-highlight.menu-open")
-    .forEach(d => d.classList.remove("menu-open"));
-  activeHighlightId = null;
-}
-
-function openHighlightMenu(highlightId, el){
-  hideSelectionMenu();
-  activeHighlightId = highlightId;
-  // Um destaque que cobre mais de uma linha vira vários <div class="pdf-
-  // highlight"> com o mesmo data-highlight-id (um por retângulo) — todos
-  // precisam da classe, não só o que recebeu o clique.
-  document.querySelectorAll(`#highlight-layer .pdf-highlight[data-highlight-id="${highlightId}"]`)
-    .forEach(d => d.classList.add("menu-open"));
-  const menu = document.getElementById("highlight-menu");
-  positionMenu(menu, el.getBoundingClientRect());
-}
-
-// Encontra o <div class="pdf-highlight"> (se houver) sob o ponto (x, y)
-// em coordenadas de viewport. Necessário porque .pdf-highlight é
-// pointer-events:none por padrão (ver styles.css) — clicar em cima de um
-// destaque não gera um evento de clique nele, sempre atravessa até a
-// TextLayer. Percorre de trás pra frente pra priorizar o retângulo
-// pintado por último em caso de sobreposição.
-function highlightElementAtPoint(x, y){
-  const els = document.querySelectorAll("#highlight-layer .pdf-highlight");
-  for (let i = els.length - 1; i >= 0; i--){
-    const r = els[i].getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return els[i];
-  }
-  return null;
-}
-
-document.getElementById("pdf-viewer").addEventListener("mouseup", (ev)=>{
-  // Pequeno delay de segurança: dá tempo do navegador finalizar a seleção
-  // nativa (window.getSelection()) antes de a gente ler o resultado no
-  // mesmo gesto de mouseup.
-  setTimeout(()=>{
-    const sel = window.getSelection();
-    if(!sel || sel.isCollapsed || !sel.toString().trim()){
-      // Não houve seleção de texto — pode ter sido um clique simples em
-      // cima de um destaque existente (ver highlightElementAtPoint).
-      const hitEl = highlightElementAtPoint(ev.clientX, ev.clientY);
-      if (hitEl) openHighlightMenu(hitEl.dataset.highlightId, hitEl);
-      return;
-    }
-    const range = sel.getRangeAt(0);
-    const textLayerDiv = document.getElementById("text-layer");
-    if(!textLayerDiv.contains(range.commonAncestorContainer)){
-      return;
-    }
-    hideHighlightMenu();
-    pendingSelectionRange = range;
-    pendingSelectionText = sel.toString();
-    if (!pendingSelectionText.trim()) return;
-    positionMenu(document.getElementById("selection-menu"), range.getBoundingClientRect());
-  }, 15);
-});
-
-document.getElementById("pdf-viewer").addEventListener("mousedown", (ev)=>{
-  if(ev.target.closest(".selection-menu")) return;
-  hideHighlightMenu();
-  // Clicar fora do menu de seleção também cancela uma seleção pendente
-  // (sem isso, não havia jeito de desistir de destacar um trecho já
-  // selecionado a não ser recarregar a página) — só limpa o texto nativo
-  // do navegador se o clique não for o início de uma NOVA seleção dentro
-  // da própria TextLayer (nesse caso o próprio gesto de arrastar já troca
-  // a seleção antiga pela nova).
-  if(!document.getElementById("text-layer").contains(ev.target)){
-    window.getSelection().removeAllRanges();
-  }
-  hideSelectionMenu();
-});
-
-// Esc cancela uma seleção de texto pendente (menu de cor aberto) — além
-// do uso já existente de Esc pra sair do modo expandido (ver setExpanded).
-document.addEventListener("keydown", (ev)=>{
-  if(ev.key === "Escape" && pendingSelectionRange){
-    window.getSelection().removeAllRanges();
-    hideSelectionMenu();
-  }
-});
-
-/* ---- criar destaque (clique numa cor do menu de seleção) ---- */
-document.querySelectorAll("#selection-menu .swatch").forEach(btn=>{
-  btn.addEventListener("click", async ()=>{
-    if(!pendingSelectionRange) return;
-    const color = btn.dataset.color;
-    const rects = rangeToRatioRects(pendingSelectionRange);
-    const text = pendingSelectionText;
-    hideSelectionMenu();
-    window.getSelection().removeAllRanges();
-    if(rects.length === 0) return;
-    try{
-      const h = await window.AppDB.saveHighlight(materialId, {
-        pageNumber: currentPage,
-        text,
-        color,
-        position: { rects }
-      });
-      highlights.push(h);
-      renderHighlightsForPage(currentPage, currentViewport);
-      renderSidebarHighlights();
-    }catch(e){
-      console.error(e);
-      alert("Não foi possível salvar o destaque agora. Tente novamente.");
-    }
-  });
-});
-
-/* ---- trocar cor de um destaque existente ---- */
-document.querySelectorAll("#highlight-menu .swatch").forEach(btn=>{
-  btn.addEventListener("click", async ()=>{
-    if(!activeHighlightId) return;
-    const color = btn.dataset.color;
-    const id = activeHighlightId;
-    hideHighlightMenu();
-    try{
-      await window.AppDB.updateHighlight(materialId, id, { color });
-      const h = highlights.find(x => x.id === id);
-      if(h) h.color = color;
-      renderHighlightsForPage(currentPage, currentViewport);
-      renderSidebarHighlights();
-    }catch(e){
-      console.error(e);
-      alert("Não foi possível mudar a cor agora. Tente novamente.");
-    }
-  });
-});
-
-/* ---- remover destaque (+ notas vinculadas, em cascata) ---- */
-document.getElementById("highlight-delete-btn").addEventListener("click", async ()=>{
-  if(!activeHighlightId) return;
-  if(!confirm("Remover este destaque? As anotações vinculadas a ele também serão excluídas.")) return;
-  const id = activeHighlightId;
-  hideHighlightMenu();
-  try{
-    await window.AppDB.deleteHighlight(materialId, id);
-    highlights = highlights.filter(h => h.id !== id);
-    notes = notes.filter(n => n.highlightId !== id);
-    renderHighlightsForPage(currentPage, currentViewport);
-    renderSidebarHighlights();
-    renderSidebarNotes();
-  }catch(e){
-    console.error(e);
-    alert("Não foi possível remover o destaque agora. Tente novamente.");
-  }
-});
-
-/* =====================================================================
-   ANOTAÇÕES — editor
-   ===================================================================== */
-// Preenche o <select> de módulos com candidateModules; "concept" e
-// "moduleId" (se informados) pré-selecionam o vínculo de uma nota
-// existente sendo editada.
-//
-// Se o vínculo já salvo apontar pra um módulo/conceito que não está na
-// lista atual (porque candidateModules falhou ao carregar, ou porque o
-// módulo/conceito foi excluído/renomeado depois), NÃO deixamos o <select>
-// cair silenciosamente em "Nenhum módulo" — isso faria o botão Salvar
-// apagar um vínculo válido sem o usuário perceber. Em vez disso injetamos
-// uma opção sintética que preserva o id original até o usuário escolher
-// outra coisa de propósito.
-function populateModuleSelect(preselectModuleId, preselectConceptId){
-  const moduleSel = document.getElementById("note-editor-module");
-  let options = candidateModules.map(m => `<option value="${m.id}">${escapeHtml((m.config && m.config.appTitle) || m.id)}</option>`);
-  if(preselectModuleId && !candidateModules.some(m => m.id === preselectModuleId)){
-    options.unshift(`<option value="${preselectModuleId}">Vínculo atual (indisponível)</option>`);
-  }
-  moduleSel.innerHTML = `<option value="">Nenhum módulo</option>` + options.join("");
-  moduleSel.value = preselectModuleId || "";
-  populateConceptSelect(preselectModuleId, preselectConceptId);
-}
-function populateConceptSelect(moduleId, preselectConceptId){
-  const conceptSel = document.getElementById("note-editor-concept");
-  const mod = candidateModules.find(m => m.id === moduleId);
-  const concepts = (mod && Array.isArray(mod.concepts)) ? mod.concepts : [];
-  let options = concepts.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`);
-  if(preselectConceptId && !concepts.some(c => c.id === preselectConceptId)){
-    options.unshift(`<option value="${preselectConceptId}">Vínculo atual (indisponível)</option>`);
-  }
-  conceptSel.innerHTML = `<option value="">Nenhum conceito</option>` + options.join("");
-  conceptSel.disabled = concepts.length === 0 && !preselectConceptId;
-  conceptSel.value = preselectConceptId || "";
-}
-document.getElementById("note-editor-module").addEventListener("change", (ev)=>{
-  populateConceptSelect(ev.target.value, null);
-});
-
-// Rótulo curto ("Módulo → Conceito") pra exibir na lista lateral de
-// anotações quando a nota está vinculada a um módulo/conceito.
-function linkedConceptLabel(note){
-  if(!note.linkedModuleId) return null;
-  const mod = candidateModules.find(m => m.id === note.linkedModuleId);
-  if(!mod) return null;
-  const modTitle = (mod.config && mod.config.appTitle) || mod.id;
-  if(!note.linkedConceptId) return modTitle;
-  const concept = Array.isArray(mod.concepts) ? mod.concepts.find(c => c.id === note.linkedConceptId) : null;
-  return concept ? `${modTitle} → ${concept.title}` : modTitle;
-}
-
-function openNoteEditor({ highlightId, noteId, excerpt, text, linkedModuleId, linkedConceptId }){
-  editingHighlightId = highlightId;
-  editingNoteId = noteId || null;
-  document.getElementById("note-editor-title").textContent = editingNoteId ? "📝 Editar anotação" : "📝 Nova anotação";
-  document.getElementById("note-editor-excerpt").textContent = excerpt ? `"${excerpt.slice(0, 160)}"` : "";
-  document.getElementById("note-editor-text").value = text || "";
-  populateModuleSelect(linkedModuleId || "", linkedConceptId || "");
-  document.getElementById("note-editor-delete").style.display = editingNoteId ? "inline-block" : "none";
-  document.getElementById("note-editor-backdrop").style.display = "flex";
-  document.getElementById("note-editor-text").focus();
-}
-function closeNoteEditor(){
-  document.getElementById("note-editor-backdrop").style.display = "none";
-  editingNoteId = null;
-  editingHighlightId = null;
-}
-
-/* ---- "Anotação" a partir de uma seleção nova (cria o destaque primeiro) ---- */
-document.getElementById("add-note-btn").addEventListener("click", async ()=>{
-  if(!pendingSelectionRange) return;
-  const rects = rangeToRatioRects(pendingSelectionRange);
-  const text = pendingSelectionText;
-  hideSelectionMenu();
-  window.getSelection().removeAllRanges();
-  if(rects.length === 0) return;
-  try{
-    const h = await window.AppDB.saveHighlight(materialId, {
-      pageNumber: currentPage,
-      text,
-      color: "yellow",
-      position: { rects }
-    });
-    highlights.push(h);
-    renderHighlightsForPage(currentPage, currentViewport);
-    renderSidebarHighlights();
-    openNoteEditor({ highlightId: h.id, excerpt: h.text });
-  }catch(e){
-    console.error(e);
-    alert("Não foi possível criar o destaque para a anotação agora. Tente novamente.");
-  }
-});
-
-/* ---- "Anotação" a partir do menu de um destaque já existente ---- */
-document.getElementById("highlight-note-btn").addEventListener("click", ()=>{
-  if(!activeHighlightId) return;
-  const h = highlights.find(x => x.id === activeHighlightId);
-  const existing = notes.find(n => n.highlightId === activeHighlightId);
-  hideHighlightMenu();
-  openNoteEditor({
-    highlightId: activeHighlightId,
-    noteId: existing ? existing.id : null,
-    excerpt: h ? h.text : "",
-    text: existing ? existing.text : "",
-    linkedModuleId: existing ? existing.linkedModuleId : null,
-    linkedConceptId: existing ? existing.linkedConceptId : null
-  });
-});
-
-document.getElementById("note-editor-cancel").addEventListener("click", closeNoteEditor);
-document.getElementById("note-editor-backdrop").addEventListener("click", (ev)=>{
-  if(ev.target.id === "note-editor-backdrop") closeNoteEditor();
-});
-
-document.getElementById("note-editor-save").addEventListener("click", async ()=>{
-  const text = document.getElementById("note-editor-text").value.trim();
-  if(!text){ alert("Escreva algo antes de salvar."); return; }
-  const linkedModuleId = document.getElementById("note-editor-module").value || null;
-  const linkedConceptId = linkedModuleId ? (document.getElementById("note-editor-concept").value || null) : null;
-  try{
-    if(editingNoteId){
-      await window.AppDB.updateNote(materialId, editingNoteId, { text, linkedModuleId, linkedConceptId });
-      const n = notes.find(x => x.id === editingNoteId);
-      if(n){ n.text = text; n.updatedAt = Date.now(); n.linkedModuleId = linkedModuleId; n.linkedConceptId = linkedConceptId; }
-    } else {
-      const n = await window.AppDB.saveNote(materialId, {
-        highlightId: editingHighlightId,
-        pageNumber: currentPage,
-        text,
-        linkedModuleId,
-        linkedConceptId
-      });
-      notes.push(n);
-    }
-    closeNoteEditor();
-    renderHighlightsForPage(currentPage, currentViewport);
-    renderSidebarNotes();
-  }catch(e){
-    console.error(e);
-    alert("Não foi possível salvar a anotação agora. Tente novamente.");
-  }
-});
-
-document.getElementById("note-editor-delete").addEventListener("click", async ()=>{
-  if(!editingNoteId) return;
-  if(!confirm("Excluir esta anotação?")) return;
-  const id = editingNoteId;
-  try{
-    await window.AppDB.deleteNote(materialId, id);
-    notes = notes.filter(n => n.id !== id);
-    closeNoteEditor();
-    renderHighlightsForPage(currentPage, currentViewport);
-    renderSidebarNotes();
-  }catch(e){
-    console.error(e);
-    alert("Não foi possível excluir a anotação agora. Tente novamente.");
-  }
-});
-
-/* =====================================================================
-   SIDEBAR
-   ===================================================================== */
-document.querySelectorAll(".sidebar-tab").forEach(tab=>{
-  tab.addEventListener("click", ()=>{
-    document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    document.getElementById("sidebar-highlights").style.display = tab.dataset.tab === "highlights" ? "block" : "none";
-    document.getElementById("sidebar-notes").style.display = tab.dataset.tab === "notes" ? "block" : "none";
-  });
-});
-
-function renderSidebarHighlights(){
-  const el = document.getElementById("sidebar-highlights");
-  if(highlights.length === 0){
-    el.innerHTML = `<p class="sidebar-empty">Nenhum destaque ainda. Selecione um trecho no PDF e escolha uma cor.</p>`;
-    return;
-  }
-  const sorted = [...highlights].sort((a, b) => (a.pageNumber - b.pageNumber) || (a.createdAt - b.createdAt));
-  el.innerHTML = sorted.map(h => `
-    <div class="sidebar-item" data-page="${h.pageNumber}">
-      <span class="sidebar-color-dot" style="background:${COLOR_HEX[h.color] || COLOR_HEX.yellow};"></span>
-      <div class="sidebar-item-body">
-        <div class="sidebar-item-text">${escapeHtml(h.text).slice(0, 140)}</div>
-        <div class="sidebar-item-meta">Página ${h.pageNumber}</div>
-      </div>
-    </div>
-  `).join("");
-  el.querySelectorAll(".sidebar-item").forEach(item=>{
-    item.addEventListener("click", ()=> goToPage(parseInt(item.dataset.page, 10)));
-  });
-}
-
-function renderSidebarNotes(){
-  const el = document.getElementById("sidebar-notes");
-  if(notes.length === 0){
-    el.innerHTML = `<p class="sidebar-empty">Nenhuma anotação ainda. Selecione um trecho e clique em "📝 Anotação".</p>`;
-    return;
-  }
-  const sorted = [...notes].sort((a, b) => (a.pageNumber - b.pageNumber) || (a.createdAt - b.createdAt));
-  el.innerHTML = sorted.map(n=>{
-    const h = highlights.find(x => x.id === n.highlightId);
-    const linkLabel = linkedConceptLabel(n);
-    return `
-      <div class="sidebar-item" data-page="${n.pageNumber}" data-highlight-id="${n.highlightId}">
-        <div class="sidebar-item-body">
-          <div class="sidebar-item-excerpt">${h ? '"' + escapeHtml(h.text).slice(0, 90) + '"' : ""}</div>
-          <div class="sidebar-item-text">${escapeHtml(n.text).slice(0, 160)}</div>
-          <div class="sidebar-item-meta">Página ${n.pageNumber}${linkLabel ? ` · 🔗 ${escapeHtml(linkLabel)}` : ""}</div>
-        </div>
-      </div>
-    `;
-  }).join("");
-  el.querySelectorAll(".sidebar-item").forEach(item=>{
-    item.addEventListener("click", async ()=>{
-      await goToPage(parseInt(item.dataset.page, 10));
-      flashHighlight(item.dataset.highlightId);
-    });
-  });
-}
-
-/* =====================================================================
    BOOT
    ===================================================================== */
 // window.AppAuth.onChange() (initAuthGate) pode disparar mais de uma vez
@@ -911,9 +266,7 @@ function renderSidebarNotes(){
 // depois de novo após o Firebase revalidar a sessão) — sem essa proteção,
 // boot() rodava duas vezes em paralelo, e as duas chamadas a
 // page.render() disputavam o mesmo <canvas>, uma delas lançando "Cannot
-// use the same canvas during multiple render() operations" e deixando a
-// TextLayer sem nenhum <span> (por isso a seleção de texto não funcionava,
-// mesmo com o PDF aparecendo normalmente).
+// use the same canvas during multiple render() operations".
 let didBoot = false;
 async function boot(){
   if(didBoot) return;
@@ -950,32 +303,16 @@ async function boot(){
     // esse tipo de requisição exige CORS configurado no bucket (não
     // configurado neste projeto); sem isso o navegador bloqueia com
     // "Failed to fetch". getBytes() evita isso: a requisição é feita pelo
-    // canal autenticado do próprio SDK, sem depender de Range/CORS. Também
-    // não gera nenhuma URL de acesso compartilhável em memória.
-    const [pdfBytes, hs, ns, mods] = await Promise.all([
-      window.AppStorage.getMaterialPdfBytes(material.storagePath),
-      window.AppDB.listHighlights(materialId),
-      window.AppDB.listNotes(materialId),
-      // Etapa 3 — módulos deste usuário gerados a partir DESTE material, pra
-      // oferecer no seletor "vincular a um conceito" do editor de anotação.
-      // Nunca deve travar a abertura do leitor — se falhar, o seletor fica
-      // vazio (a pessoa ainda consegue anotar normalmente, só sem vínculo).
-      window.AppDB.listUserModules()
-        .then(all => all.filter(m => m.sourceMaterialId === materialId))
-        .catch(e => { console.warn("Falha ao carregar módulos pra vínculo de anotação:", e); return []; })
-    ]);
-    highlights = hs;
-    notes = ns;
-    candidateModules = mods;
+    // canal autenticado do próprio SDK, sem depender de Range/CORS.
+    const pdfBytes = await window.AppStorage.getMaterialPdfBytes(material.storagePath);
 
     const ready = await waitForPdfjs(5000);
     if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
 
     // data (ArrayBuffer) em vez de url: o PDF.js abre o documento inteiro a
     // partir dos bytes já em memória, sem nenhuma requisição de rede extra.
-    // Trade-off: o arquivo inteiro já foi baixado antes de abrir (ver
-    // "impacto de memória" no relatório desta correção) — a renderização em
-    // si continua página a página (só a página atual é desenhada no canvas).
+    // A renderização em si continua página a página (só a página atual é
+    // desenhada no canvas).
     pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     totalPages = pdfDoc.numPages;
 
@@ -987,14 +324,9 @@ async function boot(){
     const startPage = (!isNaN(pageParam) && pageParam >= 1 && pageParam <= totalPages) ? pageParam : 1;
     currentPage = startPage; // computeFitWidthScale() usa currentPage pra medir a página certa
 
-    // display:flex (não "block") porque .reader-shell já é flex-column no
-    // CSS (assets/styles.css) — necessário pra .reader-main crescer
-    // corretamente dentro dela no modo expandido (ver setExpanded()).
     document.getElementById("reader-shell").style.display = "flex";
     await computeFitWidthScale();
     await renderPage(startPage);
-    renderSidebarHighlights();
-    renderSidebarNotes();
   }catch(e){
     console.error(e);
     showFatalError(e.message || "Não foi possível abrir este material agora.");
