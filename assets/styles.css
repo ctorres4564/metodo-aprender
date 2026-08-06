@@ -246,9 +246,9 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
 
 /* =====================================================================
    LEITOR DE PDF — leitor.html
-   Versão simplificada: visualização + seleção/cópia de texto nativa do
-   navegador (sem menu customizado). Destaques, anotações e o modo
-   Expandir foram removidos — ver comentário no topo de leitor.html.
+   Versão simplificada: só visualização (navegação por página + zoom).
+   Seleção de texto, destaques, anotações e o modo Expandir foram
+   removidos — ver comentário no topo de leitor.html.
    ===================================================================== */
 .reader-wrap{ max-width: 1100px; margin: 0 auto; padding: 16px 14px 40px; }
 
@@ -267,52 +267,14 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
 }
 .page-input:focus{ outline:none; border-color: var(--accent); }
 
-.reader-notice{
-  background: rgba(244,185,66,0.12); border:1px solid rgba(244,185,66,0.4); color: var(--text);
-  border-radius: var(--radius); padding:9px 14px; margin-bottom:12px; font-size:12.5px;
-}
-
 .reader-main{ display:flex; }
 .pdf-viewer{
   flex:1; min-width:0; background: var(--panel-2); border:1px solid var(--border); border-radius: var(--radius);
   overflow:auto; display:flex; justify-content:center; padding:22px;
   max-height: calc(100vh - 180px);
 }
-/* --scale-factor/--user-unit/--total-scale-factor/--scale-round-x/y:
-   necessárias pro TextLayer do PDF.js 6.x dimensionar o próprio
-   #text-layer (setLayerDimensions, em display_utils.js, usa
-   "round(down, var(--total-scale-factor) * larguraDaPágina,
-   var(--scale-round-x))"). Valores default idênticos aos do próprio
-   PDF.js (web/pdf_viewer.css); --scale-factor é atualizado via JS a
-   cada renderPage() (leitor.html), sempre igual ao scale atual. */
-.pdf-page-container{
-  position:relative; line-height:0; box-shadow:0 10px 30px rgba(0,0,0,0.45); flex-shrink:0;
-  --scale-factor:1; --user-unit:1;
-  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
-  --scale-round-x:1px; --scale-round-y:1px;
-}
-.pdf-page-container canvas{ display:block; background:#fff; pointer-events:none; }
-
-/* Camada de texto do PDF.js — invisível (texto transparente) e
-   selecionável, sobreposta exatamente aos glifos desenhados no canvas.
-   Desde a v6.x, cada <span> usa --font-height/--scale-x/--rotate
-   (definidas pelo próprio PDF.js) em vez de font-size/transform diretos
-   — o CSS abaixo as transforma em valores reais. Sem nenhum menu
-   customizado aqui: a seleção/cópia usa só o comportamento nativo do
-   navegador (arrastar o mouse + Ctrl+C ou "Copiar" do menu de contexto). */
-.textLayer{
-  position:absolute; top:0; left:0; overflow:hidden; line-height:1; transform-origin:0 0;
-  pointer-events:auto; user-select:text; cursor:text;
-  --min-font-size:1;
-}
-.textLayer span, .textLayer br{
-  color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0% 0%;
-  pointer-events:auto; user-select:text;
-  --font-height:0; --scale-x:1; --rotate:0deg;
-  font-size: calc(var(--font-height) * var(--min-font-size));
-  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(calc(1 / var(--min-font-size)));
-}
-.textLayer ::selection{ background: rgba(46,163,74,0.55); }
+.pdf-page-container{ position:relative; line-height:0; box-shadow:0 10px 30px rgba(0,0,0,0.45); flex-shrink:0; }
+.pdf-page-container canvas{ display:block; background:#fff; }
 
 @media (max-width: 900px){
   .pdf-viewer{ max-height: 65vh; }
