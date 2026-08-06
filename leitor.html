@@ -258,6 +258,54 @@ document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
   // da página, sem interferir.
 }, { passive: false });
 
+// Navegação por teclado: setas/PageUp/PageDown trocam de página, Home/End
+// vão pro início/fim do livro. Ignorado quando o foco está num campo de
+// texto/número (ex: o campo "ir para a página", que já tem seu próprio
+// atalho de Enter) — senão, digitar um número ali disparava troca de
+// página ao mesmo tempo.
+document.addEventListener("keydown", (ev)=>{
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  if(tag === "INPUT" || tag === "TEXTAREA") return;
+  if(!pdfDoc) return;
+
+  if(ev.key === "ArrowRight" || ev.key === "ArrowDown" || ev.key === "PageDown"){
+    ev.preventDefault();
+    goToPage(currentPage + 1);
+  } else if(ev.key === "ArrowLeft" || ev.key === "ArrowUp" || ev.key === "PageUp"){
+    ev.preventDefault();
+    goToPage(currentPage - 1);
+  } else if(ev.key === "Home"){
+    ev.preventDefault();
+    goToPage(1);
+  } else if(ev.key === "End"){
+    ev.preventDefault();
+    goToPage(totalPages);
+  }
+});
+
+// Navegação por gesto (swipe) em telas de toque: arrastar o dedo na
+// horizontal troca de página (esquerda = próxima, direita = anterior) —
+// só quando o movimento é predominantemente horizontal, pra não atrapalhar
+// a rolagem vertical normal dentro de uma página com zoom.
+let touchStartX = 0, touchStartY = 0;
+document.getElementById("pdf-viewer").addEventListener("touchstart", (ev)=>{
+  if(ev.touches.length !== 1) return;
+  touchStartX = ev.touches[0].clientX;
+  touchStartY = ev.touches[0].clientY;
+}, { passive: true });
+document.getElementById("pdf-viewer").addEventListener("touchend", (ev)=>{
+  if(!touchStartX && !touchStartY) return;
+  const touch = ev.changedTouches[0];
+  const deltaX = touch.clientX - touchStartX;
+  const deltaY = touch.clientY - touchStartY;
+  touchStartX = 0; touchStartY = 0;
+
+  const SWIPE_THRESHOLD = 60;
+  if(Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+  if(deltaX < 0) goToPage(currentPage + 1);
+  else goToPage(currentPage - 1);
+}, { passive: true });
+
 /* =====================================================================
    BOOT
    ===================================================================== */
