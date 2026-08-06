@@ -58,6 +58,9 @@
           <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura">↔ Largura</button>
           <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura">↕ Altura</button>
         </div>
+        <div class="toolbar-group">
+          <button class="btn ghost" id="dark-mode-btn" title="Ativar modo escuro do PDF">🌙 Escuro</button>
+        </div>
       </div>
 
       <div class="reader-main">
@@ -214,6 +217,27 @@ document.getElementById("fit-height-btn").addEventListener("click", async ()=>{
   await computeFitHeightScale();
   await renderPage(currentPage);
 });
+
+/* =====================================================================
+   MODO ESCURO (inverte as cores do PDF pra leitura noturna)
+   ===================================================================== */
+// Inverter cores é um truque puramente visual (filter CSS no canvas) —
+// não muda em nada o que é desenhado, então não tem nenhum risco de
+// quebrar renderização/zoom/navegação. Preferência salva no localStorage
+// (por navegador, não por conta) pra continuar valendo na próxima visita.
+const DARK_MODE_KEY = "leitor_pdf_dark_mode";
+function applyDarkMode(on){
+  document.getElementById("pdf-page-container").classList.toggle("pdf-dark", on);
+  const btn = document.getElementById("dark-mode-btn");
+  btn.textContent = on ? "☀️ Claro" : "🌙 Escuro";
+  btn.title = on ? "Voltar ao modo claro do PDF" : "Ativar modo escuro do PDF";
+}
+document.getElementById("dark-mode-btn").addEventListener("click", ()=>{
+  const on = !document.getElementById("pdf-page-container").classList.contains("pdf-dark");
+  localStorage.setItem(DARK_MODE_KEY, on ? "1" : "0");
+  applyDarkMode(on);
+});
+applyDarkMode(localStorage.getItem(DARK_MODE_KEY) === "1");
 
 /* =====================================================================
    NAVEGAÇÃO
