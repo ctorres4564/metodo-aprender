@@ -373,7 +373,18 @@ function setExpanded(active){
   // zoom da tela cheia num visualizador bem menor).
   requestAnimationFrame(()=>{
     if(!pdfDoc) return;
-    computeFitWidthScale().then(()=> renderPage(currentPage));
+    computeFitWidthScale().then(()=> renderPage(currentPage)).then(()=>{
+      // Empurrão de reflow (SEC-EXPAND-01): reportado que a rolagem
+      // dentro de #pdf-viewer só funciona no modo expandido enquanto o
+      // DevTools está aberto — e volta a travar assim que ele é fechado.
+      // Abrir/fechar o DevTools dispara um "resize" de verdade na janela,
+      // que força o navegador a recalcular a área rolável (overflow:auto)
+      // de #pdf-viewer; sem esse empurrão, a troca de classe CSS sozinha
+      // (body.reader-expanded) às vezes não é suficiente pro Chrome/Edge
+      // atualizar esse cálculo. Disparar um "resize" sintético reproduz o
+      // mesmo efeito sem depender do DevTools.
+      window.dispatchEvent(new Event("resize"));
+    });
   });
 }
 
