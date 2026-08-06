@@ -285,6 +285,12 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
   max-height: calc(100vh - 180px);
 }
 .pdf-page-container{ position:relative; line-height:0; box-shadow:0 10px 30px rgba(0,0,0,0.45); flex-shrink:0; }
+/* Modo escuro: inverte as cores do canvas (fundo branco vira escuro,
+   texto preto vira claro) — hue-rotate(180deg) compensa a inversão de
+   matiz que o invert() sozinho causa em cores (deixa tons próximos do
+   original em vez de todo mundo saturado/complementar). Truque puramente
+   visual, aplicado só no canvas — nunca no que é desenhado nele. */
+.pdf-page-container.pdf-dark canvas{ filter: invert(1) hue-rotate(180deg); }
 .pdf-page-container canvas{ display:block; background:#fff; }
 
 @media (max-width: 900px){
