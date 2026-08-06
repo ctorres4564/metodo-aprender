@@ -36,6 +36,11 @@
 
     <div id="reader-fatal" style="display:none;"></div>
 
+    <div id="reader-loading" class="reader-loading">
+      <div class="spinner"></div>
+      <p>Carregando PDF…</p>
+    </div>
+
     <div id="reader-shell" class="reader-shell" style="display:none;">
       <div class="reader-toolbar">
         <div class="toolbar-group">
@@ -102,6 +107,7 @@ function escapeHtml(str){
 }
 
 function showFatalError(msg){
+  document.getElementById("reader-loading").style.display = "none";
   document.getElementById("reader-shell").style.display = "none";
   const box = document.getElementById("reader-fatal");
   box.style.display = "block";
@@ -366,12 +372,19 @@ async function boot(){
 
     // Etapa 2 — "voltar ao trecho original": leitor.html?...&page=N abre
     // direto na página N (usado pelo link de origem de um conceito em
-    // assets/engine.js). Sem o parâmetro, ou com um valor inválido, abre
-    // na página 1 como sempre.
+    // assets/engine.js, e também pelo botão "Continuar leitura" da
+    // Biblioteca, que já manda &page=<lastPageRead>). Sem o parâmetro (ex.:
+    // abrir o leitor direto pelo botão "Abrir PDF", sem passar por um link
+    // que já informe a página), cai de volta pra material.lastPageRead —
+    // mesmo campo que a Biblioteca usa pra mostrar "última leitura" — pra
+    // retomar de onde parou em vez de sempre reabrir na página 1.
     const pageParam = parseInt(params.get("page"), 10);
-    const startPage = (!isNaN(pageParam) && pageParam >= 1 && pageParam <= totalPages) ? pageParam : 1;
+    const lastRead = (typeof material.lastPageRead === "number" && material.lastPageRead > 0) ? material.lastPageRead : null;
+    const fallbackPage = (lastRead && lastRead <= totalPages) ? lastRead : 1;
+    const startPage = (!isNaN(pageParam) && pageParam >= 1 && pageParam <= totalPages) ? pageParam : fallbackPage;
     currentPage = startPage; // computeFitWidthScale() usa currentPage pra medir a página certa
 
+    document.getElementById("reader-loading").style.display = "none";
     document.getElementById("reader-shell").style.display = "flex";
     await computeFitWidthScale();
     await renderPage(startPage);
