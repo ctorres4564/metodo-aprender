@@ -1,416 +1,584 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#1c2e22">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="assets/icons/icon-192.png">
-<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Método Aprender">
-<title>App de Estudo</title>
-<link rel="stylesheet" href="assets/styles.css">
-</head>
-<body>
-<div class="wrap">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="theme-color" content="#1c2e22" />
+		<link rel="manifest" href="manifest.json" />
+		<link rel="icon" href="assets/icons/icon-192.png" />
+		<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta
+			name="apple-mobile-web-app-status-bar-style"
+			content="black-translucent"
+		/>
+		<meta name="apple-mobile-web-app-title" content="Método Aprender" />
+		<title>App de Estudo</title>
+		<link rel="stylesheet" href="assets/styles.css" />
+	</head>
+	<body>
+		<div class="wrap">
+			<div id="auth-gate"></div>
 
-  <div id="auth-gate"></div>
+			<div id="app-root" style="display: none">
+				<div class="setup-banner" id="setup-banner" style="display: none">
+					⚠️ Não foi possível carregar o conteúdo deste módulo. Se você abriu
+					este arquivo diretamente (duplo clique, endereço começando com
+					<code>file://</code>), o navegador bloqueia por segurança o
+					carregamento de arquivos JSON locais. Rode um servidor local na pasta
+					do projeto — por exemplo: <code>python3 -m http.server 8000</code> — e
+					acesse <code>http://localhost:8000</code>.
+				</div>
 
-  <div id="app-root" style="display:none;">
+				<header class="topbar">
+					<div class="brand">
+						<a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+						<div class="logo" id="app-logo">📚</div>
+						<div>
+							<h1 id="app-title">Carregando…</h1>
+							<p id="app-subtitle"></p>
+						</div>
+					</div>
+					<div class="stats">
+						<span class="pill" id="user-email" title="Conta conectada"></span>
+						<div
+							class="pill"
+							title="Conceitos que voltaram para ser explicados hoje"
+						>
+							🗣️ <b id="stat-due">0</b> para explicar
+						</div>
+						<a class="pill" href="conta.html" style="text-decoration: none"
+							>👤 Conta</a
+						>
+						<button
+							class="pill"
+							id="logout-btn"
+							style="
+								cursor: pointer;
+								border: 1px solid var(--border);
+								background: rgba(255, 255, 255, 0.04);
+							"
+						>
+							🚪 Sair
+						</button>
+					</div>
+				</header>
 
-  <div class="setup-banner" id="setup-banner" style="display:none;">
-    ⚠️ Não foi possível carregar o conteúdo deste módulo. Se você abriu este arquivo diretamente
-    (duplo clique, endereço começando com <code>file://</code>), o navegador bloqueia por segurança o
-    carregamento de arquivos JSON locais. Rode um servidor local na pasta do projeto — por exemplo:
-    <code>python3 -m http.server 8000</code> — e acesse <code>http://localhost:8000</code>.
-  </div>
+				<nav class="tabs">
+					<button data-tab="inicio" class="active">
+						<span class="emoji">🏕️</span>Início
+					</button>
+					<button data-tab="aprender">
+						<span class="emoji">📖</span>Aprender
+					</button>
+					<button data-tab="explicar">
+						<span class="emoji">🗣️</span>Explicar<span
+							class="badge-dot"
+							id="due-badge"
+							style="display: none"
+							>0</span
+						>
+					</button>
+					<button data-tab="revisar">
+						<span class="emoji">🔁</span>Revisar
+					</button>
+					<button data-tab="progresso">
+						<span class="emoji">📊</span>Progresso
+					</button>
+					<button
+						data-tab="quiz"
+						class="tab-secondary"
+						title="Modo leve, opcional"
+					>
+						<span class="emoji">🎯</span>Quiz
+					</button>
+				</nav>
 
-  <header class="topbar">
-    <div class="brand">
-      <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
-      <div class="logo" id="app-logo">📚</div>
-      <div>
-        <h1 id="app-title">Carregando…</h1>
-        <p id="app-subtitle"></p>
-      </div>
-    </div>
-    <div class="stats">
-      <span class="pill" id="user-email" title="Conta conectada"></span>
-      <div class="pill" title="Conceitos que voltaram para ser explicados hoje">🗣️ <b id="stat-due">0</b> para explicar</div>
-      <a class="pill" href="conta.html" style="text-decoration:none;">👤 Conta</a>
-      <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
-    </div>
-  </header>
+				<section id="tab-inicio" class="tab-content">
+					<div class="panel">
+						<h2 class="section-title">🌱 Bem-vindo(a)</h2>
+						<div class="lead" id="home-intro-text"></div>
+						<div class="grid2" style="margin-top: 14px">
+							<div class="stat-card">
+								<div class="num" id="home-introduced">0 / 0</div>
+								<div class="label">conceitos apresentados</div>
+							</div>
+							<div class="stat-card">
+								<div class="num" id="home-due">0</div>
+								<div class="label">conceitos para explicar hoje</div>
+							</div>
+						</div>
+						<div
+							style="
+								margin-top: 16px;
+								display: flex;
+								gap: 10px;
+								flex-wrap: wrap;
+							"
+						>
+							<button class="btn" id="cta-explain">
+								🗣️ Explicar o que já aprendi
+							</button>
+							<button class="btn secondary" id="cta-learn">
+								📖 Aprender um conceito novo
+							</button>
+						</div>
+					</div>
 
-  <nav class="tabs">
-    <button data-tab="inicio" class="active"><span class="emoji">🏕️</span>Início</button>
-    <button data-tab="aprender"><span class="emoji">📖</span>Aprender</button>
-    <button data-tab="explicar"><span class="emoji">🗣️</span>Explicar<span class="badge-dot" id="due-badge" style="display:none;">0</span></button>
-    <button data-tab="revisar"><span class="emoji">🔁</span>Revisar</button>
-    <button data-tab="progresso"><span class="emoji">📊</span>Progresso</button>
-    <button data-tab="quiz" class="tab-secondary" title="Modo leve, opcional"><span class="emoji">🎯</span>Quiz</button>
-  </nav>
+					<div class="panel">
+						<h2 class="section-title">🧭 Como funciona</h2>
+						<p class="lead">
+							Ler de novo cria familiaridade, e familiaridade se confunde com
+							domínio. É por isso que dá para estudar muito e descobrir, na hora
+							que importa, que não se aprendeu nada. Aqui o critério é outro:
+							<b>você só avançou quando consegue explicar</b>.<br /><br />
+							<b>1. Aprender</b> — cada conceito é apresentado em linguagem
+							simples.<br /><br />
+							<b>2. Explicar</b> — você escreve o conceito com suas próprias
+							palavras, como se ensinasse alguém. A avaliação aponta se você
+							enunciou o mecanismo ou apenas citou os elementos — e é ela que
+							decide quando o conceito volta.<br /><br />
+							<b>3. Explicar de novo</b> — o conceito reaparece em intervalos
+							calculados pelo FSRS. Explicação fraca traz o conceito de volta
+							logo; explicação sólida afasta a próxima cobrança.<br /><br />
+							<span style="opacity: 0.75"
+								>O <b>Quiz</b> e a <b>Revisão rápida</b> continuam disponíveis
+								como modo leve, para quando não houver energia de escrever — mas
+								reconhecer uma alternativa certa é bem mais fácil do que
+								explicar, e por isso não são o caminho principal.</span
+							>
+						</p>
+					</div>
+				</section>
 
-  <section id="tab-inicio" class="tab-content">
-    <div class="panel">
-      <h2 class="section-title">🌱 Bem-vindo(a)</h2>
-      <div class="lead" id="home-intro-text"></div>
-      <div class="grid2" style="margin-top:14px;">
-        <div class="stat-card">
-          <div class="num" id="home-introduced">0 / 0</div>
-          <div class="label">conceitos apresentados</div>
-        </div>
-        <div class="stat-card">
-          <div class="num" id="home-due">0</div>
-          <div class="label">conceitos para explicar hoje</div>
-        </div>
-      </div>
-      <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn" id="cta-explain">🗣️ Explicar o que já aprendi</button>
-        <button class="btn secondary" id="cta-learn">📖 Aprender um conceito novo</button>
-      </div>
-    </div>
+				<section id="tab-aprender" class="tab-content" style="display: none">
+					<div class="panel" id="learn-panel"></div>
+				</section>
 
-    <div class="panel">
-      <h2 class="section-title">🧭 Como funciona</h2>
-      <p class="lead">
-        Ler de novo cria familiaridade, e familiaridade se confunde com domínio. É por isso que dá para
-        estudar muito e descobrir, na hora que importa, que não se aprendeu nada. Aqui o critério é outro:
-        <b>você só avançou quando consegue explicar</b>.<br><br>
-        <b>1. Aprender</b> — cada conceito é apresentado em linguagem simples.<br><br>
-        <b>2. Explicar</b> — você escreve o conceito com suas próprias palavras, como se ensinasse alguém.
-        A avaliação aponta se você enunciou o mecanismo ou apenas citou os elementos — e é ela que decide
-        quando o conceito volta.<br><br>
-        <b>3. Explicar de novo</b> — o conceito reaparece em intervalos calculados pelo FSRS. Explicação
-        fraca traz o conceito de volta logo; explicação sólida afasta a próxima cobrança.<br><br>
-        <span style="opacity:.75;">O <b>Quiz</b> e a <b>Revisão rápida</b> continuam disponíveis como modo leve,
-        para quando não houver energia de escrever — mas reconhecer uma alternativa certa é bem mais fácil
-        do que explicar, e por isso não são o caminho principal.</span>
-      </p>
-    </div>
-  </section>
+				<section id="tab-revisar" class="tab-content" style="display: none">
+					<div class="panel" id="review-panel"></div>
+				</section>
 
-  <section id="tab-aprender" class="tab-content" style="display:none;">
-    <div class="panel" id="learn-panel"></div>
-  </section>
+				<section id="tab-explicar" class="tab-content" style="display: none">
+					<div class="panel" id="explain-panel"></div>
+				</section>
 
-  <section id="tab-revisar" class="tab-content" style="display:none;">
-    <div class="panel" id="review-panel"></div>
-  </section>
+				<section id="tab-quiz" class="tab-content" style="display: none">
+					<div class="panel" id="quiz-panel"></div>
+				</section>
 
-  <section id="tab-explicar" class="tab-content" style="display:none;">
-    <div class="panel" id="explain-panel"></div>
-  </section>
+				<section id="tab-progresso" class="tab-content" style="display: none">
+					<div class="panel">
+						<h2 class="section-title">💎 Plano</h2>
+						<div class="grid2">
+							<div class="stat-card">
+								<div class="label">Plano atual</div>
+								<div class="num" id="plan-name" style="font-size: 20px">—</div>
+							</div>
+							<div class="stat-card">
+								<div class="label">Uso de IA este mês</div>
+								<div class="num" id="plan-usage" style="font-size: 20px">—</div>
+								<div class="progressbar" style="margin-top: 6px">
+									<div id="plan-usage-bar" style="width: 0%"></div>
+								</div>
+							</div>
+						</div>
+						<p class="lead" id="plan-desc" style="margin-top: 12px"></p>
+						<button class="btn" id="plan-action-btn" style="margin-top: 4px">
+							…
+						</button>
+						<div id="plan-feedback"></div>
+					</div>
 
-  <section id="tab-quiz" class="tab-content" style="display:none;">
-    <div class="panel" id="quiz-panel"></div>
-  </section>
+					<div class="panel">
+						<h2 class="section-title">📧 Lembrete diário por e-mail</h2>
+						<p class="lead" style="margin-top: -4px">
+							Quando ativado, você recebe um e-mail (uma vez por dia) avisando
+							quantas fichas estão com revisão vencida — só quando houver
+							alguma.
+						</p>
+						<label
+							style="
+								display: flex;
+								align-items: center;
+								gap: 10px;
+								cursor: pointer;
+								margin-top: 6px;
+							"
+						>
+							<input
+								type="checkbox"
+								id="setting-reminders"
+								style="width: 18px; height: 18px; accent-color: var(--accent)"
+							/>
+							<span>Receber lembrete diário por e-mail</span>
+						</label>
+						<div
+							id="reminders-status"
+							style="font-size: 12px; color: var(--text-dim); margin-top: 8px"
+						></div>
+					</div>
 
-  <section id="tab-progresso" class="tab-content" style="display:none;">
-    <div class="panel">
-      <h2 class="section-title">💎 Plano</h2>
-      <div class="grid2">
-        <div class="stat-card">
-          <div class="label">Plano atual</div>
-          <div class="num" id="plan-name" style="font-size:20px;">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Gerações por IA usadas este mês</div>
-          <div class="num" id="plan-usage" style="font-size:20px;">—</div>
-          <div class="progressbar" style="margin-top:6px;"><div id="plan-usage-bar" style="width:0%"></div></div>
-        </div>
-      </div>
-      <p class="lead" id="plan-desc" style="margin-top:12px;"></p>
-      <button class="btn" id="plan-action-btn" style="margin-top:4px;">…</button>
-      <div id="plan-feedback"></div>
-    </div>
+					<div class="panel">
+						<h2 class="section-title">⚙️ Metas diárias</h2>
+						<p class="lead" style="margin-top: -4px">
+							Aprender aos poucos, todo dia, funciona melhor do que estudar tudo
+							de uma vez. Ajuste seus limites diários abaixo.
+						</p>
+						<div class="grid2">
+							<div class="stat-card">
+								<div class="label">Novos conceitos por dia</div>
+								<input
+									type="number"
+									id="setting-new-limit"
+									class="auth-input"
+									min="1"
+									max="50"
+									style="margin-top: 6px"
+								/>
+							</div>
+							<div class="stat-card">
+								<div class="label">
+									Limite de revisões por dia (0 = sem limite)
+								</div>
+								<input
+									type="number"
+									id="setting-review-limit"
+									class="auth-input"
+									min="0"
+									max="500"
+									style="margin-top: 6px"
+								/>
+							</div>
+						</div>
+						<button class="btn" id="save-settings-btn" style="margin-top: 12px">
+							💾 Salvar metas
+						</button>
+					</div>
 
-    <div class="panel">
-      <h2 class="section-title">📧 Lembrete diário por e-mail</h2>
-      <p class="lead" style="margin-top:-4px;">Quando ativado, você recebe um e-mail (uma vez por dia) avisando
-        quantas fichas estão com revisão vencida — só quando houver alguma.</p>
-      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:6px;">
-        <input type="checkbox" id="setting-reminders" style="width:18px; height:18px; accent-color: var(--accent);">
-        <span>Receber lembrete diário por e-mail</span>
-      </label>
-      <div id="reminders-status" style="font-size:12px; color:var(--text-dim); margin-top:8px;"></div>
-    </div>
+					<div class="panel">
+						<h2 class="section-title">📊 Seu progresso</h2>
+						<div class="grid2">
+							<div class="stat-card">
+								<div class="label">Nível atual</div>
+								<div class="num" id="prog-level-name">Iniciante</div>
+								<div class="progressbar">
+									<div id="prog-xp-bar" style="width: 0%"></div>
+								</div>
+								<div
+									class="label"
+									id="prog-xp-text"
+									style="margin-top: 4px"
+								></div>
+							</div>
+							<div class="stat-card">
+								<div class="label">Domínio dos conceitos</div>
+								<div class="num" id="prog-mastery">0%</div>
+								<div class="progressbar">
+									<div id="prog-mastery-bar" style="width: 0%"></div>
+								</div>
+							</div>
+						</div>
+					</div>
 
-    <div class="panel">
-      <h2 class="section-title">⚙️ Metas diárias</h2>
-      <p class="lead" style="margin-top:-4px;">Aprender aos poucos, todo dia, funciona melhor do que estudar tudo de uma vez. Ajuste seus limites diários abaixo.</p>
-      <div class="grid2">
-        <div class="stat-card">
-          <div class="label">Novos conceitos por dia</div>
-          <input type="number" id="setting-new-limit" class="auth-input" min="1" max="50" style="margin-top:6px;">
-        </div>
-        <div class="stat-card">
-          <div class="label">Limite de revisões por dia (0 = sem limite)</div>
-          <input type="number" id="setting-review-limit" class="auth-input" min="0" max="500" style="margin-top:6px;">
-        </div>
-      </div>
-      <button class="btn" id="save-settings-btn" style="margin-top:12px;">💾 Salvar metas</button>
-    </div>
+					<div class="panel">
+						<h2 class="section-title">🎯 Calibração de confiança</h2>
+						<p class="lead" style="margin-top: -4px">
+							Na aba Revisar, antes de ver a resposta você avalia sua confiança.
+							Isso mostra o quanto essa autoavaliação bate com a realidade.
+						</p>
+						<div class="grid2">
+							<div class="stat-card">
+								<div class="label">Bem calibrado(a)</div>
+								<div class="num" id="calib-aligned">0</div>
+							</div>
+							<div class="stat-card">
+								<div class="label">Excesso de confiança</div>
+								<div class="num" id="calib-over">0</div>
+							</div>
+						</div>
+						<p class="lead" id="calib-under-text" style="margin-top: 10px"></p>
+					</div>
 
-    <div class="panel">
-      <h2 class="section-title">📊 Seu progresso</h2>
-      <div class="grid2">
-        <div class="stat-card">
-          <div class="label">Nível atual</div>
-          <div class="num" id="prog-level-name">Iniciante</div>
-          <div class="progressbar"><div id="prog-xp-bar" style="width:0%"></div></div>
-          <div class="label" id="prog-xp-text" style="margin-top:4px;"></div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Domínio dos conceitos</div>
-          <div class="num" id="prog-mastery">0%</div>
-          <div class="progressbar"><div id="prog-mastery-bar" style="width:0%"></div></div>
-        </div>
-      </div>
-    </div>
+					<div class="panel">
+						<h2 class="section-title">🏆 Conquistas</h2>
+						<div class="badges-grid" id="badges-grid"></div>
+					</div>
 
-    <div class="panel">
-      <h2 class="section-title">🎯 Calibração de confiança</h2>
-      <p class="lead" style="margin-top:-4px;">Na aba Revisar, antes de ver a resposta você avalia sua confiança. Isso mostra o quanto essa autoavaliação bate com a realidade.</p>
-      <div class="grid2">
-        <div class="stat-card">
-          <div class="label">Bem calibrado(a)</div>
-          <div class="num" id="calib-aligned">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Excesso de confiança</div>
-          <div class="num" id="calib-over">0</div>
-        </div>
-      </div>
-      <p class="lead" id="calib-under-text" style="margin-top:10px;"></p>
-    </div>
+					<div class="panel">
+						<h2 class="section-title">🗂️ Conceitos deste módulo</h2>
+						<div id="concept-list"></div>
+					</div>
 
-    <div class="panel">
-      <h2 class="section-title">🏆 Conquistas</h2>
-      <div class="badges-grid" id="badges-grid"></div>
-    </div>
+					<div class="panel">
+						<button class="btn ghost" id="reset-btn">
+							🗑️ Reiniciar progresso deste módulo
+						</button>
+					</div>
+				</section>
 
-    <div class="panel">
-      <h2 class="section-title">🗂️ Conceitos deste módulo</h2>
-      <div id="concept-list"></div>
-    </div>
+				<footer class="credit" id="footer-credit"></footer>
+			</div>
+			<!-- /#app-root -->
+		</div>
 
-    <div class="panel">
-      <button class="btn ghost" id="reset-btn">🗑️ Reiniciar progresso deste módulo</button>
-    </div>
-  </section>
+		<script type="module" src="assets/firebase-init.js"></script>
+		<script src="assets/auth-ui.js"></script>
+		<script src="assets/api-client.js"></script>
+		<script src="assets/pwa.js"></script>
+		<script src="assets/storage.js"></script>
+		<script src="assets/engine.js"></script>
+		<script>
+			// A2-09: onAuthStateChanged (window.AppAuth.onChange, chamado dentro de
+			// initAuthGate em auth-ui.js) pode disparar mais de uma vez pro mesmo
+			// usuário — não só no primeiro login/logout, mas em qualquer reavaliação
+			// do estado de auth. Sem essa guarda, cada disparo repetia boot() inteiro:
+			// registrava os mesmos event listeners de novo (então um clique passava a
+			// disparar a mesma ação várias vezes) e recarregava o módulo do zero.
+			// Mesmo padrão já usado em leitor.html (ver variável didBoot lá).
+			let didBoot = false;
+			async function boot() {
+				if (didBoot) return;
+				didBoot = true;
+				const params = new URLSearchParams(window.location.search);
+				const moduleId = params.get('m');
+				const isUserModule = params.get('src') === 'user';
 
-  <footer class="credit" id="footer-credit"></footer>
+				if (!moduleId) {
+					document.getElementById('setup-banner').style.display = 'block';
+					document.getElementById('setup-banner').textContent =
+						'Nenhum módulo especificado. Volte ao catálogo e escolha uma trilha de estudo.';
+					return;
+				}
 
-  </div><!-- /#app-root -->
-</div>
+				try {
+					let moduleData;
 
-<script type="module" src="assets/firebase-init.js"></script>
-<script src="assets/auth-ui.js"></script>
-<script src="assets/api-client.js"></script>
-<script src="assets/pwa.js"></script>
-<script src="assets/storage.js"></script>
-<script src="assets/engine.js"></script>
-<script>
-// A2-09: onAuthStateChanged (window.AppAuth.onChange, chamado dentro de
-// initAuthGate em auth-ui.js) pode disparar mais de uma vez pro mesmo
-// usuário — não só no primeiro login/logout, mas em qualquer reavaliação
-// do estado de auth. Sem essa guarda, cada disparo repetia boot() inteiro:
-// registrava os mesmos event listeners de novo (então um clique passava a
-// disparar a mesma ação várias vezes) e recarregava o módulo do zero.
-// Mesmo padrão já usado em leitor.html (ver variável didBoot lá).
-let didBoot = false;
-async function boot(){
-  if(didBoot) return;
-  didBoot = true;
-  const params = new URLSearchParams(window.location.search);
-  const moduleId = params.get("m");
-  const isUserModule = params.get("src") === "user";
+					if (isUserModule) {
+						if (!window.AppDB || !window.AppDB.getUserModule)
+							throw new Error('AppDB indisponível');
+						const userMod = await window.AppDB.getUserModule(moduleId);
+						if (
+							!userMod ||
+							!userMod.concepts ||
+							userMod.concepts.length === 0
+						) {
+							throw new Error('módulo do usuário não encontrado ou vazio');
+						}
+						moduleData = {
+							config: userMod.config,
+							concepts: userMod.concepts,
+							sourceMaterialId: userMod.sourceMaterialId || null,
+						};
 
-  if(!moduleId){
-    document.getElementById("setup-banner").style.display = "block";
-    document.getElementById("setup-banner").textContent =
-      "Nenhum módulo especificado. Volte ao catálogo e escolha uma trilha de estudo.";
-    return;
-  }
+						// Etapa 3 — anotações feitas no leitor de PDF e vinculadas a um
+						// conceito deste módulo específico. Nunca deve travar o carregamento
+						// do módulo: se falhar, o módulo abre normalmente, só sem as notas.
+						if (
+							moduleData.sourceMaterialId &&
+							window.AppDB &&
+							window.AppDB.listNotes
+						) {
+							try {
+								const allNotes = await window.AppDB.listNotes(
+									moduleData.sourceMaterialId,
+								);
+								moduleData.linkedNotes = allNotes.filter(
+									(n) => n.linkedModuleId === moduleId,
+								);
+							} catch (e) {
+								console.warn(
+									'Falha ao carregar anotações vinculadas a este módulo:',
+									e,
+								);
+								moduleData.linkedNotes = [];
+							}
+						}
 
-  try{
-    let moduleData;
+						const editLink = document.createElement('a');
+						editLink.href = `criar-modulo.html?edit=${encodeURIComponent(moduleId)}`;
+						editLink.className = 'pill';
+						editLink.style.textDecoration = 'none';
+						editLink.textContent = '✏️ Editar módulo';
+						document.querySelector('header.topbar .stats').prepend(editLink);
+					} else {
+						const catalogRes = await fetch('content/catalog.json');
+						if (!catalogRes.ok) throw new Error('catalog fetch failed');
+						const catalog = await catalogRes.json();
+						const entry = catalog.modules.find((m) => m.id === moduleId);
+						if (!entry || !entry.contentFile)
+							throw new Error('module not found or not ready');
 
-    if(isUserModule){
-      if(!window.AppDB || !window.AppDB.getUserModule) throw new Error("AppDB indisponível");
-      const userMod = await window.AppDB.getUserModule(moduleId);
-      if(!userMod || !userMod.concepts || userMod.concepts.length === 0){
-        throw new Error("módulo do usuário não encontrado ou vazio");
-      }
-      moduleData = { config: userMod.config, concepts: userMod.concepts, sourceMaterialId: userMod.sourceMaterialId || null };
+						const contentRes = await fetch(entry.contentFile);
+						if (!contentRes.ok) throw new Error('content fetch failed');
+						moduleData = await contentRes.json();
+					}
 
-      // Etapa 3 — anotações feitas no leitor de PDF e vinculadas a um
-      // conceito deste módulo específico. Nunca deve travar o carregamento
-      // do módulo: se falhar, o módulo abre normalmente, só sem as notas.
-      if(moduleData.sourceMaterialId && window.AppDB && window.AppDB.listNotes){
-        try{
-          const allNotes = await window.AppDB.listNotes(moduleData.sourceMaterialId);
-          moduleData.linkedNotes = allNotes.filter(n => n.linkedModuleId === moduleId);
-        }catch(e){
-          console.warn("Falha ao carregar anotações vinculadas a este módulo:", e);
-          moduleData.linkedNotes = [];
-        }
-      }
+					// Registra o handler global usado pelos botões inline do catálogo/telas
+					window.switchTab = switchTab;
+					document
+						.getElementById('cta-explain')
+						.addEventListener('click', () => switchTab('explicar'));
+					document
+						.getElementById('cta-learn')
+						.addEventListener('click', () => switchTab('aprender'));
+					document
+						.getElementById('reset-btn')
+						.addEventListener('click', async () => {
+							if (
+								confirm(
+									'Isso vai apagar o progresso salvo deste módulo. Continuar?',
+								)
+							) {
+								STATE = defaultState();
+								await saveState();
+								renderHeader();
+								renderProgress();
+							}
+						});
 
-      const editLink = document.createElement("a");
-      editLink.href = `criar-modulo.html?edit=${encodeURIComponent(moduleId)}`;
-      editLink.className = "pill";
-      editLink.style.textDecoration = "none";
-      editLink.textContent = "✏️ Editar módulo";
-      document.querySelector("header.topbar .stats").prepend(editLink);
-    } else {
-      const catalogRes = await fetch("content/catalog.json");
-      if(!catalogRes.ok) throw new Error("catalog fetch failed");
-      const catalog = await catalogRes.json();
-      const entry = catalog.modules.find(m => m.id === moduleId);
-      if(!entry || !entry.contentFile) throw new Error("module not found or not ready");
+					await initApp(
+						moduleData.config,
+						moduleData.concepts,
+						moduleData.sourceMaterialId || null,
+						moduleId,
+						moduleData.linkedNotes || [],
+					);
+					initReminderToggle();
+					initPlanPanel();
+				} catch (e) {
+					console.error(e);
+					document.getElementById('setup-banner').style.display = 'block';
+					if (isUserModule) {
+						document.getElementById('setup-banner').textContent =
+							'Não foi possível carregar este módulo. Ele pode ter sido excluído, ou você não tem permissão para acessá-lo.';
+					}
+				}
+			}
 
-      const contentRes = await fetch(entry.contentFile);
-      if(!contentRes.ok) throw new Error("content fetch failed");
-      moduleData = await contentRes.json();
-    }
+			// Mantido igual aos limites reais em api/_lib/usage.js — usado só para exibição
+			// (o controle de verdade acontece no servidor a cada chamada de IA).
+			// Espelha PLAN_LIMITS de api/_lib/usage.js — só para exibição; quem decide de
+			// verdade é o servidor. Se mudar lá, mudar aqui.
+			const PLAN_LIMITS_DISPLAY = {
+				free: { explain: 300, generate: 60 },
+				premium: { explain: 3000, generate: 600 },
+			};
 
-    // Registra o handler global usado pelos botões inline do catálogo/telas
-    window.switchTab = switchTab;
-    document.getElementById("cta-explain").addEventListener("click", ()=> switchTab("explicar"));
-    document.getElementById("cta-learn").addEventListener("click", ()=> switchTab("aprender"));
-    document.getElementById("reset-btn").addEventListener("click", async ()=>{
-      if(confirm("Isso vai apagar o progresso salvo deste módulo. Continuar?")){
-        STATE = defaultState();
-        await saveState();
-        renderHeader();
-        renderProgress();
-      }
-    });
+			async function initPlanPanel() {
+				const nameEl = document.getElementById('plan-name');
+				const usageEl = document.getElementById('plan-usage');
+				const usageBar = document.getElementById('plan-usage-bar');
+				const descEl = document.getElementById('plan-desc');
+				const btn = document.getElementById('plan-action-btn');
+				const fb = document.getElementById('plan-feedback');
+				if (!nameEl || !window.AppDB) return;
 
-    await initApp(moduleData.config, moduleData.concepts, moduleData.sourceMaterialId || null, moduleId, moduleData.linkedNotes || []);
-    initReminderToggle();
-    initPlanPanel();
-  }catch(e){
-    console.error(e);
-    document.getElementById("setup-banner").style.display = "block";
-    if(isUserModule){
-      document.getElementById("setup-banner").textContent =
-        "Não foi possível carregar este módulo. Ele pode ter sido excluído, ou você não tem permissão para acessá-lo.";
-    }
-  }
-}
+				let plan = 'free';
+				try {
+					const profile = await window.AppDB.getUserProfile();
+					plan = (profile && profile.plan) || 'free';
+				} catch (e) {
+					console.warn('Falha ao carregar plano:', e);
+				}
 
-// Mantido igual aos limites reais em api/_lib/usage.js — usado só para exibição
-// (o controle de verdade acontece no servidor a cada chamada de IA).
-// Espelha PLAN_LIMITS de api/_lib/usage.js — só para exibição; quem decide de
-// verdade é o servidor. Se mudar lá, mudar aqui.
-const PLAN_LIMITS_DISPLAY = {
-  free:    { explain: 300,  generate: 60 },
-  premium: { explain: 3000, generate: 600 }
-};
+				let explainCount = 0,
+					generateCount = 0;
+				try {
+					const usage = await window.AppDB.getUserUsage();
+					explainCount = (usage && usage.explain) || 0;
+					generateCount = (usage && usage.generate) || 0;
+				} catch (e) {
+					console.warn('Falha ao carregar uso de IA:', e);
+				}
 
-async function initPlanPanel(){
-  const nameEl = document.getElementById("plan-name");
-  const usageEl = document.getElementById("plan-usage");
-  const usageBar = document.getElementById("plan-usage-bar");
-  const descEl = document.getElementById("plan-desc");
-  const btn = document.getElementById("plan-action-btn");
-  const fb = document.getElementById("plan-feedback");
-  if(!nameEl || !window.AppDB) return;
+				const limits = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
+				// A barra acompanha as explicações: é o uso do dia a dia. As gerações de
+				// conteúdo aparecem ao lado, em texto.
+				const pct = Math.min(
+					100,
+					Math.round((explainCount / limits.explain) * 100),
+				);
 
-  let plan = "free";
-  try{
-    const profile = await window.AppDB.getUserProfile();
-    plan = (profile && profile.plan) || "free";
-  }catch(e){ console.warn("Falha ao carregar plano:", e); }
+				nameEl.textContent = plan === 'premium' ? '💎 Premium' : '🆓 Free';
+				usageEl.textContent = `${explainCount} / ${limits.explain} explicações · ${generateCount} / ${limits.generate} gerações`;
+				usageBar.style.width = pct + '%';
 
-  let explainCount = 0, generateCount = 0;
-  try{
-    const usage = await window.AppDB.getUserUsage();
-    explainCount = (usage && usage.explain) || 0;
-    generateCount = (usage && usage.generate) || 0;
-  }catch(e){ console.warn("Falha ao carregar uso de IA:", e); }
+				if (plan === 'premium') {
+					descEl.textContent =
+						'Sua assinatura Premium está ativa — obrigado por apoiar o projeto! Você pode gerenciar ou cancelar sua assinatura a qualquer momento.';
+					btn.textContent = '⚙️ Gerenciar assinatura';
+				} else {
+					descEl.textContent =
+						'Plano Free: 300 avaliações de explicação e 60 gerações de conteúdo (módulos a partir de livros) por mês. Assine o Premium por R$19,90/mês (7 dias grátis) e tenha 3000 avaliações e 600 gerações.';
+					btn.textContent = '✨ Assinar Premium';
+				}
 
-  const limits = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
-  // A barra acompanha as explicações: é o uso do dia a dia. As gerações de
-  // conteúdo aparecem ao lado, em texto.
-  const pct = Math.min(100, Math.round((explainCount / limits.explain) * 100));
+				btn.onclick = async () => {
+					btn.disabled = true;
+					const originalText = btn.textContent;
+					btn.textContent = 'Aguarde...';
+					fb.innerHTML = '';
+					try {
+						const endpoint =
+							plan === 'premium' ? '/api/stripe-portal' : '/api/criar-checkout';
+						const resp = await authedFetch(endpoint, { method: 'POST' });
+						const data = await resp.json();
+						if (!resp.ok || !data.url) {
+							fb.innerHTML = `<div class="feedback bad">${data.error || 'Não foi possível continuar agora.'}</div>`;
+							btn.disabled = false;
+							btn.textContent = originalText;
+							return;
+						}
+						window.location.href = data.url;
+					} catch (e) {
+						console.error(e);
+						fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || 'tente novamente.'}</div>`;
+						btn.disabled = false;
+						btn.textContent = originalText;
+					}
+				};
+			}
 
-  nameEl.textContent = plan === "premium" ? "💎 Premium" : "🆓 Free";
-  usageEl.textContent = `${explainCount} / ${limits.explain} explicações · ${generateCount} / ${limits.generate} gerações`;
-  usageBar.style.width = pct + "%";
+			function initReminderToggle() {
+				const checkbox = document.getElementById('setting-reminders');
+				const statusEl = document.getElementById('reminders-status');
+				if (!checkbox || !window.AppDB || !window.AppDB.getUserProfile) return;
 
-  if(plan === "premium"){
-    descEl.textContent = "Sua assinatura Premium está ativa — obrigado por apoiar o projeto! Você pode gerenciar ou cancelar sua assinatura a qualquer momento.";
-    btn.textContent = "⚙️ Gerenciar assinatura";
-  } else {
-    descEl.textContent = "Plano Free: 300 avaliações de explicação e 60 gerações de conteúdo (módulos a partir de livros) por mês. Assine o Premium por R$19,90/mês (7 dias grátis) e tenha 3000 avaliações e 600 gerações.";
-    btn.textContent = "✨ Assinar Premium";
-  }
+				window.AppDB.getUserProfile()
+					.then((profile) => {
+						checkbox.checked = !!(profile && profile.remindersEnabled);
+					})
+					.catch((e) =>
+						console.warn('Falha ao carregar preferência de lembrete:', e),
+					);
 
-  btn.onclick = async ()=>{
-    btn.disabled = true;
-    const originalText = btn.textContent;
-    btn.textContent = "Aguarde...";
-    fb.innerHTML = "";
-    try{
-      const endpoint = plan === "premium" ? "/api/stripe-portal" : "/api/criar-checkout";
-      const resp = await authedFetch(endpoint, { method: "POST" });
-      const data = await resp.json();
-      if(!resp.ok || !data.url){
-        fb.innerHTML = `<div class="feedback bad">${data.error || "Não foi possível continuar agora."}</div>`;
-        btn.disabled = false;
-        btn.textContent = originalText;
-        return;
-      }
-      window.location.href = data.url;
-    }catch(e){
-      console.error(e);
-      fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
-  };
-}
+				checkbox.addEventListener('change', async () => {
+					checkbox.disabled = true;
+					statusEl.textContent = 'Salvando...';
+					try {
+						const user = window.AppAuth.currentUser();
+						await window.AppDB.saveUserProfile({
+							email: (user && user.email) || '',
+							remindersEnabled: checkbox.checked,
+						});
+						statusEl.textContent = checkbox.checked
+							? '✅ Lembretes ativados. Você recebe um e-mail por dia quando houver revisão vencida.'
+							: 'Lembretes desativados.';
+					} catch (e) {
+						console.error(e);
+						checkbox.checked = !checkbox.checked;
+						statusEl.textContent =
+							'Não foi possível salvar agora. Tente novamente.';
+					}
+					checkbox.disabled = false;
+				});
+			}
 
-function initReminderToggle(){
-  const checkbox = document.getElementById("setting-reminders");
-  const statusEl = document.getElementById("reminders-status");
-  if(!checkbox || !window.AppDB || !window.AppDB.getUserProfile) return;
-
-  window.AppDB.getUserProfile().then(profile=>{
-    checkbox.checked = !!(profile && profile.remindersEnabled);
-  }).catch(e=> console.warn("Falha ao carregar preferência de lembrete:", e));
-
-  checkbox.addEventListener("change", async ()=>{
-    checkbox.disabled = true;
-    statusEl.textContent = "Salvando...";
-    try{
-      const user = window.AppAuth.currentUser();
-      await window.AppDB.saveUserProfile({
-        email: (user && user.email) || "",
-        remindersEnabled: checkbox.checked
-      });
-      statusEl.textContent = checkbox.checked
-        ? "✅ Lembretes ativados. Você recebe um e-mail por dia quando houver revisão vencida."
-        : "Lembretes desativados.";
-    }catch(e){
-      console.error(e);
-      checkbox.checked = !checkbox.checked;
-      statusEl.textContent = "Não foi possível salvar agora. Tente novamente.";
-    }
-    checkbox.disabled = false;
-  });
-}
-
-initAuthGate(()=>{
-  bindLogoutButton();
-  boot();
-});
-</script>
-</body>
+			initAuthGate(() => {
+				bindLogoutButton();
+				boot();
+			});
+		</script>
+	</body>
 </html>
