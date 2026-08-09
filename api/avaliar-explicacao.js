@@ -56,12 +56,43 @@ export default async function handler(req, res) {
 
   const systemPrompt = `Você é um tutor que aplica a Técnica de Feynman: avalia se um(a) estudante conseguiu explicar um conceito com as próprias palavras, de forma clara e simples, como se estivesse ensinando alguém que não conhece o assunto.
 
-Compare a explicação do(a) estudante com a explicação de referência fornecida. Avalie:
+O propósito desta avaliação é distinguir compreensão real de fluência vazia. Um texto pode ser bem
+escrito, usar todo o vocabulário técnico correto e mesmo assim não demonstrar entendimento nenhum.
+Sua tarefa mais importante é não se deixar impressionar por isso.
+
+PASSO 1 — IDENTIFICAR O MECANISMO
+Antes de qualquer nota, identifique qual é o mecanismo central do conceito: a relação causal que faz
+o conceito funcionar. Não são os elementos que ele cita — é o que acontece entre esses elementos.
+Depois, procure no texto do(a) estudante uma frase que enuncie esse mecanismo, e copie-a no campo
+"mecanismoNoTexto". Se nenhuma frase enunciar o mecanismo, escreva exatamente: NAO_ENCONTRADO.
+
+Citar os elementos não é enunciar o mecanismo. Dizer que o conceito "relaciona custo e benefício"
+é citar elementos; dizer o que precisa acontecer entre custo e benefício para o conceito valer é
+enunciar o mecanismo.
+
+PASSO 2 — TETOS OBRIGATÓRIOS DE NOTA
+Aplique nesta ordem, antes de qualquer outra consideração:
+- Se "mecanismoNoTexto" é NAO_ENCONTRADO, a nota NÃO PODE passar de 45, por melhor escrito que
+  seja o texto.
+- Se o texto é circular — reafirma o nome do conceito com outras palavras, elogia a importância do
+  conceito, ou descreve o que ele "permite compreender" sem dizer o que ele afirma —, a nota NÃO
+  PODE passar de 30. Um texto assim é fluente e vazio; é o caso mais importante de reconhecer.
+- Se o texto enuncia o mecanismo mas de forma incorreta, a nota NÃO PODE passar de 40.
+- Notas acima de 85 exigem mecanismo correto E completo, sem lacuna relevante.
+
+Boa escrita, vocabulário técnico correto, extensão do texto e tom seguro NÃO aumentam a nota.
+São irrelevantes para a avaliação. O único critério é: a pessoa demonstrou entender como o
+conceito funciona?
+
+PASSO 3 — AVALIAR O RESTO
+Dentro do teto obtido acima, considere:
 - Se as ideias centrais do conceito foram cobertas (mesmo com palavras diferentes da referência)
 - Se há erros conceituais ou confusões
 - Se a explicação está em linguagem simples e própria, e não apenas copiando frases da referência
 
 Seja encorajador(a) mas honesto(a): se a explicação for fraca, diga isso claramente, com gentileza.
+Não suavize a NOTA por gentileza — a gentileza vai no campo "feedback", nunca no número. Uma nota
+generosa faz o conceito demorar semanas para voltar a ser revisado, o que prejudica quem confia nela.
 
 IMPORTANTE sobre o campo "equivocos": inclua APENAS erros que estejam claramente escritos no texto do(a)
 estudante — nunca invente, presuma ou infira um equívoco que a pessoa não escreveu explicitamente. Se você
@@ -75,12 +106,14 @@ factualmente errada, NÃO inclua esse item — mesmo que pareça uma lacuna ou u
 
 Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto antes ou depois:
 {
-  "nota": <número inteiro de 0 a 100>,
+  "mecanismoCentral": "<uma frase: qual a relação causal que faz este conceito funcionar>",
+  "mecanismoNoTexto": "<a frase exata do(a) estudante que enuncia esse mecanismo, ou NAO_ENCONTRADO>",
+  "nota": <número inteiro de 0 a 100, respeitando os tetos do PASSO 2>,
   "pontosCobertos": ["...", "..."],
   "pontosFaltando": ["...", "..."],
   "equivocos": ["apenas erros claramente presentes no texto do(a) estudante; [] se nenhum"],
   "feedback": "parágrafo curto (2-3 frases), direto e encorajador, em português",
-  "qualidadeSM2": <1, 3, 4 ou 5 — 1 se muito incompleta/incorreta, 3 se cobre parte com lacunas relevantes, 4 se boa e cobre o essencial, 5 se excelente e completa>
+  "qualidadeSM2": <1, 3, 4 ou 5 — 1 se o mecanismo não aparece ou está errado, 3 se aparece de forma incompleta, 4 se aparece correto com alguma lacuna, 5 se aparece correto e completo>
 }`;
 
   const userPrompt = `Conceito: ${title}
@@ -116,14 +149,31 @@ ${studentText}
       (Array.isArray(v) ? v : []).filter(i => typeof i === "string").slice(0, maxItems).map(i => i.slice(0, maxLen));
 
     const notaRaw = Number(parsed.nota);
-    const nota = Number.isFinite(notaRaw) ? Math.min(100, Math.max(0, Math.round(notaRaw))) : 0;
-    // Mesma regra de fallback que o cliente já aplicava (assets/engine.js).
-    const qualidadeSM2 = [1, 3, 4, 5].includes(parsed.qualidadeSM2)
+    let nota = Number.isFinite(notaRaw) ? Math.min(100, Math.max(0, Math.round(notaRaw))) : 0;
+
+    // Teto aplicado aqui, e não só no prompt: a instrução do PASSO 2 é uma regra
+    // do produto, não uma sugestão ao modelo. Sem mecanismo identificado no texto,
+    // a nota não passa de 45 mesmo que o modelo tenha devolvido 90 — é o que
+    // impede uma explicação fluente e vazia de ganhar um intervalo longo no FSRS.
+    const mecanismoNoTexto = cleanStr(parsed.mecanismoNoTexto, 500).trim();
+    const semMecanismo =
+      !mecanismoNoTexto || mecanismoNoTexto.toUpperCase().includes("NAO_ENCONTRADO");
+    if (semMecanismo) nota = Math.min(nota, 45);
+
+    // Limiares mais rigorosos que os anteriores (85/65/40): errar para o lado do
+    // rigor traz a ficha de volta mais cedo, o que é barato; errar para o lado da
+    // generosidade é exatamente a ilusão de aprendizado que o modo Feynman existe
+    // para quebrar. O valor do modelo é aceito apenas quando não conflita com a nota.
+    const qualidadePelaNota = nota >= 90 ? 5 : nota >= 70 ? 4 : nota >= 45 ? 3 : 1;
+    const qualidadeModelo = [1, 3, 4, 5].includes(parsed.qualidadeSM2)
       ? parsed.qualidadeSM2
-      : (nota >= 85 ? 5 : nota >= 65 ? 4 : nota >= 40 ? 3 : 1);
+      : qualidadePelaNota;
+    const qualidadeSM2 = Math.min(qualidadeModelo, qualidadePelaNota);
 
     res.status(200).json({
       nota,
+      mecanismoCentral: cleanStr(parsed.mecanismoCentral, 300),
+      mecanismoNoTexto: semMecanismo ? "" : mecanismoNoTexto,
       pontosCobertos: cleanList(parsed.pontosCobertos, 10, 300),
       pontosFaltando: cleanList(parsed.pontosFaltando, 10, 300),
       equivocos: cleanList(parsed.equivocos, 10, 300),
