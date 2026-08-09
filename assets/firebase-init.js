@@ -166,9 +166,19 @@ window.AppDB = {
     if(!uid) return null;
     const d = new Date();
     const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
-    const ref = doc(db, "ai_usage", `${uid}_${monthKey}`);
-    const snap = await getDoc(ref);
-    return snap.exists() ? snap.data() : { count: 0 };
+    // Dois contadores separados (ver api/_lib/usage.js): o balde "generate"
+    // mantém o id antigo `uid_AAAA-MM` para não perder a contagem já existente;
+    // o balde "explain" tem sufixo próprio.
+    const [genSnap, expSnap] = await Promise.all([
+      getDoc(doc(db, "ai_usage", `${uid}_${monthKey}`)),
+      getDoc(doc(db, "ai_usage", `${uid}_${monthKey}_explain`))
+    ]);
+    return {
+      generate: genSnap.exists() ? (genSnap.data().count || 0) : 0,
+      explain: expSnap.exists() ? (expSnap.data().count || 0) : 0,
+      // mantido para compatibilidade com qualquer leitura antiga
+      count: genSnap.exists() ? (genSnap.data().count || 0) : 0
+    };
   },
 
   /* ---- Biblioteca de materiais (Etapa 1) ----

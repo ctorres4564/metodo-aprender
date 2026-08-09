@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   // validação do corpo e da checagem de OPENROUTER_API_KEY de propósito:
   // requisição malformada ou servidor mal configurado não deve consumir
   // 1 unidade da cota de ninguém.
-  const uid = await requireUsageQuota(req, res);
+  const uid = await requireUsageQuota(req, res, "explain");
   if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
@@ -186,7 +186,7 @@ ${studentText}
     // consumido 1 unidade da cota mensal (requireUsageQuota, acima) e
     // ANTES de qualquer resposta válida ter chegado à pessoa — por isso
     // sempre estorna, independente da causa.
-    await refundUsage(uid);
+    await refundUsage(uid, "explain");
     if (e && e.code) {
       res.status(statusForOpenRouterError(e)).json({ error: e.message });
       return;

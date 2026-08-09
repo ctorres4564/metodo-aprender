@@ -226,7 +226,7 @@ A analogia gerada fica salva no progresso da pessoa (por conceito), então ela s
 
 Todas as funções que chamam a OpenRouter (`avaliar-explicacao`, `gerar-modulo`, `localizar-secao`, `gerar-analogia`) agora exigem login: o servidor verifica o token do Firebase de quem está chamando (`api/_lib/usage.js`, usando o Firebase Admin SDK) antes de gastar qualquer crédito de IA. Sem isso, qualquer pessoa sem conta poderia consumir créditos livremente.
 
-Cada pessoa tem um limite mensal de gerações: 40/mês no plano "free", 400/mês no plano "premium". O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). O campo `plan` no documento `users/{uid}` é quem decide o limite — e agora é mantido automaticamente pelo webhook da Stripe (ver seção abaixo), sem precisar mexer neste código.
+Cada pessoa tem dois limites mensais separados, porque os custos são de ordens de grandeza diferentes. Balde `explain` (avaliar explicação, gerar analogia — cerca de US$ 0,0009 por chamada): 300/mês no free, 3000/mês no premium. Balde `generate` (gerar módulo, regenerar conceito, localizar seção — processam capítulos inteiros): 60/mês no free, 600/mês no premium. Antes era um contador único de 40/400 para tudo, o que fazia a avaliação barata competir por espaço com a geração cara. O contador fica em `ai_usage/{uid}_{ano-mes}` no Firestore e reseta sozinho todo mês (é uma chave nova, não precisa de rotina de limpeza). O campo `plan` no documento `users/{uid}` é quem decide o limite — e agora é mantido automaticamente pelo webhook da Stripe (ver seção abaixo), sem precisar mexer neste código.
 
 **Configuração obrigatória (uma vez só), além do que já existia:**
 
@@ -240,7 +240,7 @@ Sem essa variável configurada, as 4 funções de IA passam a responder com erro
 
 ## Cobrança real com Stripe (Fase 2)
 
-Plano Premium: **R$19,90/mês**, com **7 dias grátis** de teste antes da primeira cobrança. Desbloqueia 400 gerações de IA/mês (contra 40/mês no plano Free) — por enquanto essa é a única diferença entre os planos.
+Plano Premium: **R$19,90/mês**, com **7 dias grátis** de teste antes da primeira cobrança. Desbloqueia 3000 avaliações de explicação e 600 gerações de conteúdo por mês (contra 300 e 60 no plano Free) — por enquanto essa é a única diferença entre os planos.
 
 Como funciona:
 1. Na aba **Progresso** (dentro de qualquer módulo), o painel "💎 Plano" mostra o plano atual e quantas gerações de IA já foram usadas no mês, com um botão "✨ Assinar Premium".

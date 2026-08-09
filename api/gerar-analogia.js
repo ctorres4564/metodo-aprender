@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   }
 
   // V3-C: ver comentário equivalente em api/avaliar-explicacao.js.
-  const uid = await requireUsageQuota(req, res);
+  const uid = await requireUsageQuota(req, res, "explain");
   if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
@@ -73,14 +73,14 @@ ${referenceText}
     if (!analogia) {
       // A1-03: resposta "vazia" da IA também é uma falha (nada útil foi
       // entregue) — estorna a cota consumida, igual às falhas de rede/parse.
-      await refundUsage(uid);
+      await refundUsage(uid, "explain");
       res.status(502).json({ error: "Não foi possível gerar uma analogia agora." });
       return;
     }
 
     res.status(200).json({ analogia });
   } catch (e) {
-    await refundUsage(uid);
+    await refundUsage(uid, "explain");
     if (e && e.code) {
       res.status(statusForOpenRouterError(e)).json({ error: e.message });
       return;

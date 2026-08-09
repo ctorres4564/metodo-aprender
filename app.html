@@ -306,7 +306,12 @@ async function boot(){
 
 // Mantido igual aos limites reais em api/_lib/usage.js — usado só para exibição
 // (o controle de verdade acontece no servidor a cada chamada de IA).
-const PLAN_LIMITS_DISPLAY = { free: 40, premium: 400 };
+// Espelha PLAN_LIMITS de api/_lib/usage.js — só para exibição; quem decide de
+// verdade é o servidor. Se mudar lá, mudar aqui.
+const PLAN_LIMITS_DISPLAY = {
+  free:    { explain: 300,  generate: 60 },
+  premium: { explain: 3000, generate: 600 }
+};
 
 async function initPlanPanel(){
   const nameEl = document.getElementById("plan-name");
@@ -323,24 +328,27 @@ async function initPlanPanel(){
     plan = (profile && profile.plan) || "free";
   }catch(e){ console.warn("Falha ao carregar plano:", e); }
 
-  let usageCount = 0;
+  let explainCount = 0, generateCount = 0;
   try{
     const usage = await window.AppDB.getUserUsage();
-    usageCount = (usage && usage.count) || 0;
+    explainCount = (usage && usage.explain) || 0;
+    generateCount = (usage && usage.generate) || 0;
   }catch(e){ console.warn("Falha ao carregar uso de IA:", e); }
 
-  const limit = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
-  const pct = Math.min(100, Math.round((usageCount / limit) * 100));
+  const limits = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
+  // A barra acompanha as explicações: é o uso do dia a dia. As gerações de
+  // conteúdo aparecem ao lado, em texto.
+  const pct = Math.min(100, Math.round((explainCount / limits.explain) * 100));
 
   nameEl.textContent = plan === "premium" ? "💎 Premium" : "🆓 Free";
-  usageEl.textContent = `${usageCount} / ${limit}`;
+  usageEl.textContent = `${explainCount} / ${limits.explain} explicações · ${generateCount} / ${limits.generate} gerações`;
   usageBar.style.width = pct + "%";
 
   if(plan === "premium"){
     descEl.textContent = "Sua assinatura Premium está ativa — obrigado por apoiar o projeto! Você pode gerenciar ou cancelar sua assinatura a qualquer momento.";
     btn.textContent = "⚙️ Gerenciar assinatura";
   } else {
-    descEl.textContent = "Plano Free: até 40 gerações por IA por mês. Assine o Premium por R$19,90/mês (7 dias grátis) e tenha 400 gerações por mês.";
+    descEl.textContent = "Plano Free: 300 avaliações de explicação e 60 gerações de conteúdo (módulos a partir de livros) por mês. Assine o Premium por R$19,90/mês (7 dias grátis) e tenha 3000 avaliações e 600 gerações.";
     btn.textContent = "✨ Assinar Premium";
   }
 

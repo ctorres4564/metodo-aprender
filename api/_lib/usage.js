@@ -13,14 +13,44 @@
    ===================================================================== */
 import { adminAuth, adminDb } from "./firebaseAdmin.js";
 
+/* Duas cotas separadas, porque os custos são de ordens de grandeza diferentes.
+ *
+ * "explain" — avaliar explicação e gerar analogia. Medido em produção: cerca de
+ * US$ 0,0009 por avaliação, ou meio centavo de real. Racionar isso não protege
+ * nada e contraria o produto: explicar é o fluxo principal, e uma pessoa que
+ * bate no teto simplesmente para de usar a coisa que deveria usar todo dia.
+ * 300 avaliações/mês no plano gratuito custam menos de R$ 1,50.
+ *
+ * "generate" — gerar módulo, regenerar conceito e localizar seção. Processam
+ * capítulos inteiros de livro e custam muito mais por chamada, então mantêm um
+ * teto conservador. Este é o balde que realmente precisa de controle.
+ *
+ * Antes existia um contador único de 40/mês para tudo, o que fazia a avaliação
+ * barata competir por espaço com a geração cara.
+ */
 const PLAN_LIMITS = {
-  free: 40,
-  premium: 400
+  explain: { free: 300, premium: 3000 },
+  generate: { free: 60, premium: 600 }
 };
+
+const DEFAULT_BUCKET = "generate";
+
+function planLimit(bucket, plan) {
+  const table = PLAN_LIMITS[bucket] || PLAN_LIMITS[DEFAULT_BUCKET];
+  return table[plan] || table.free;
+}
 
 function currentMonthKey() {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// O balde "generate" mantém o id de documento antigo (`uid_AAAA-MM`) para não
+// zerar nem duplicar a contagem de quem já usou o app neste mês. O balde novo
+// ganha sufixo próprio.
+function usageDocId(uid, bucket) {
+  const base = `${uid}_${currentMonthKey()}`;
+  return bucket === DEFAULT_BUCKET ? base : `${base}_${bucket}`;
 }
 
 // Extrai e valida o token de login enviado pelo cliente no header
@@ -57,7 +87,7 @@ export async function getUserPlan(uid) {
 // Recebe o usuário decodificado (não só o uid) porque também bloqueia
 // e-mail não verificado aqui — ver comentário abaixo.
 // Retorna { allowed, current, limit, plan, reason? }.
-export async function checkAndConsumeUsage(user) {
+export async function checkAndConsumeUsage(user, bucket = DEFAULT_BUCKET) {
   const uid = user.uid;
 
   // Bloqueio de e-mail não verificado: sem isso, qualquer pessoa pode criar
@@ -72,18 +102,18 @@ export async function checkAndConsumeUsage(user) {
   }
 
   const plan = await getUserPlan(uid);
-  const limit = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  const limit = planLimit(bucket, plan);
   const db = adminDb();
-  const ref = db.collection("ai_usage").doc(`${uid}_${currentMonthKey()}`);
+  const ref = db.collection("ai_usage").doc(usageDocId(uid, bucket));
 
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const current = snap.exists ? snap.data().count || 0 : 0;
     if (current >= limit) {
-      return { allowed: false, current, limit, plan };
+      return { allowed: false, current, limit, plan, bucket };
     }
-    tx.set(ref, { count: current + 1, uid, updatedAt: Date.now() }, { merge: true });
-    return { allowed: true, current: current + 1, limit, plan };
+    tx.set(ref, { count: current + 1, uid, bucket, updatedAt: Date.now() }, { merge: true });
+    return { allowed: true, current: current + 1, limit, plan, bucket };
   });
 
   return result;
@@ -100,10 +130,10 @@ export async function checkAndConsumeUsage(user) {
 // e antes de uma resposta 200 válida ao cliente. Nunca deixa o contador
 // negativo, e nunca lança erro (uma falha ao estornar não deve virar um
 // erro 500 pro usuário, que já está lidando com a falha original).
-export async function refundUsage(uid) {
+export async function refundUsage(uid, bucket = DEFAULT_BUCKET) {
   if (!uid) return;
   const db = adminDb();
-  const ref = db.collection("ai_usage").doc(`${uid}_${currentMonthKey()}`);
+  const ref = db.collection("ai_usage").doc(usageDocId(uid, bucket));
   try {
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
@@ -125,14 +155,14 @@ export async function refundUsage(uid) {
 // palavra por palavra, chamando verifyUserFromRequest + checkAndConsumeUsage
 // separadamente — essa duplicação era o próprio helper, só que sem nunca
 // ser usado.
-export async function requireUsageQuota(req, res) {
+export async function requireUsageQuota(req, res, bucket = DEFAULT_BUCKET) {
   const user = await verifyUserFromRequest(req);
   if (!user) {
     res.status(401).json({ error: "Sessão expirada ou inválida. Faça login novamente e tente de novo." });
     return null;
   }
 
-  const usage = await checkAndConsumeUsage(user);
+  const usage = await checkAndConsumeUsage(user, bucket);
   if (!usage.allowed) {
     if (usage.reason === "email_not_verified") {
       res.status(403).json({
@@ -140,8 +170,9 @@ export async function requireUsageQuota(req, res) {
         code: "email_not_verified"
       });
     } else {
+      const what = usage.bucket === "explain" ? "avaliações de explicação" : "gerações de conteúdo";
       res.status(429).json({
-        error: `Limite mensal de gerações por IA atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
+        error: `Limite mensal de ${what} atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
       });
     }
     return null;
