@@ -10,9 +10,15 @@
    suficiente pra testar que checkAndConsumeUsage nunca deixa passar mais
    consumos do que o limite quando chamado em paralelo.
    ===================================================================== */
-export function createMockDb(initialDocs = {}) {
+export function createMockDb(initialDocs = {}, opts = {}) {
   const store = new Map(Object.entries(initialDocs));
   let queue = Promise.resolve();
+  // Simula N transações consecutivas abortadas pelo Firestore (código de
+  // erro real observado contra o emulator: "10 ABORTED: Transaction lock
+  // timeout") antes de deixar as chamadas seguintes passarem normalmente
+  // — usado só pra testar o retry de checkAndConsumeUsage (ver
+  // usage.test.js), sem precisar de um Firestore de verdade.
+  let failCount = opts.failTransactionsCount || 0;
 
   function makeSnap(path) {
     const data = store.get(path);
@@ -38,6 +44,12 @@ export function createMockDb(initialDocs = {}) {
 
   function runTransaction(fn) {
     const run = queue.then(async () => {
+      if (failCount > 0) {
+        failCount -= 1;
+        const err = new Error("10 ABORTED: Transaction lock timeout.");
+        err.code = 10;
+        throw err;
+      }
       const tx = {
         async get(ref) {
           return makeSnap(ref.path);
@@ -59,6 +71,7 @@ export function createMockDb(initialDocs = {}) {
     runTransaction,
     // Acesso direto ao estado interno, só pra asserções nos testes.
     _get(path) { return store.get(path); },
-    _set(path, data) { store.set(path, data); }
+    _set(path, data) { store.set(path, data); },
+    _setFailCount(n) { failCount = n; }
   };
 }
