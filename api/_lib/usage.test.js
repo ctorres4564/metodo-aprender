@@ -10,13 +10,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb } from "../../test/mocks/firestoreMock.js";
 
 let mockDb;
+// Usuário "decodificado" que adminAuth().verifyIdToken() devolve — só usado
+// pelos testes de requireUsageQuota (que passam por verifyUserFromRequest).
+// null por padrão: qualquer teste que não configurar isso e tentar validar
+// um token recebe um erro, como um token inválido de verdade.
+let mockAuthUser = null;
 
 vi.mock("./firebaseAdmin.js", () => ({
   adminDb: () => mockDb,
-  adminAuth: () => ({})
+  adminAuth: () => ({
+    async verifyIdToken() {
+      if (!mockAuthUser) throw new Error("Token de teste não configurado (mockAuthUser).");
+      return mockAuthUser;
+    }
+  })
 }));
 
-const { checkAndConsumeUsage, refundUsage } = await import("./usage.js");
+const { checkAndConsumeUsage, refundUsage, requireUsageQuota } = await import("./usage.js");
 
 function makeUser(overrides = {}) {
   return { uid: "user-1", email_verified: true, ...overrides };
@@ -26,9 +36,24 @@ function setPlan(uid, plan) {
   mockDb._set(`users/${uid}`, { plan });
 }
 
+// Mock mínimo de req/res no estilo Vercel/Express — só o que
+// requireUsageQuota usa (req.headers, res.status().json()).
+function makeReq(bearerToken = "token-valido") {
+  return { headers: { authorization: `Bearer ${bearerToken}` } };
+}
+function makeRes() {
+  return {
+    statusCode: null,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.body = payload; return this; }
+  };
+}
+
 describe("usage.js — cotas de IA", () => {
   beforeEach(() => {
     mockDb = createMockDb();
+    mockAuthUser = null;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-15T12:00:00Z"));
   });
@@ -129,12 +154,54 @@ describe("usage.js — cotas de IA", () => {
       expect(mockDb._get(`ai_usage/user-retry-ok_${currentMonthKeyReal()}_explain`).count).toBe(1);
     });
 
-    it("desiste depois de esgotar as tentativas, sem deixar o app quebrado silenciosamente", async () => {
+    it("desiste depois de esgotar as tentativas SEM lançar exceção — retorna resultado controlado", async () => {
       mockDb._setFailCount(10); // sempre aborta — mais que TRANSACTION_MAX_ATTEMPTS
-      await expect(checkAndConsumeUsage(makeUser({ uid: "user-retry-fail" }), "explain"))
-        .rejects.toThrow(/ABORTED/);
+      // Antes desta correção, isto relançava a exceção (mesmo caminho pro
+      // 500 genérico que motivou o retry). Agora precisa resolver, não
+      // rejeitar — e sem consumir cota nem fingir que foi "limite atingido".
+      const result = await checkAndConsumeUsage(makeUser({ uid: "user-retry-fail" }), "explain");
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe("transient_error");
+      expect(result.reason).not.toBe("email_not_verified");
       // Nenhuma escrita deve ter "vazado" apesar das tentativas.
       expect(mockDb._get(`ai_usage/user-retry-fail_${currentMonthKeyReal()}_explain`)).toBeUndefined();
+    });
+  });
+
+  describe("requireUsageQuota — resposta HTTP (transient_error não pode virar 'limite atingido')", () => {
+    beforeEach(() => {
+      vi.useRealTimers(); // mesmo motivo do describe acima: o retry usa setTimeout de verdade
+    });
+
+    it("responde 503 (não 429, não 500) quando os retries de ABORTED se esgotam", async () => {
+      mockAuthUser = { uid: "user-http-abort", email_verified: true };
+      mockDb._setFailCount(10); // sempre aborta
+      const req = makeReq();
+      const res = makeRes();
+
+      const uid = await requireUsageQuota(req, res, "explain");
+
+      expect(uid).toBeNull(); // mesmo contrato de qualquer bloqueio: null = "já respondi com erro"
+      expect(res.statusCode).toBe(503);
+      expect(res.body.code).toBe("transient_error");
+      expect(res.body.error.toLowerCase()).not.toMatch(/limite/); // não pode parecer "limite atingido"
+
+      // E, claro, continua sem ter consumido cota nenhuma.
+      expect(mockDb._get("ai_usage/user-http-abort_2026-08_explain")).toBeUndefined();
+    });
+
+    it("continua respondendo 429 normalmente quando é mesmo o limite (não confunde os dois casos)", async () => {
+      mockAuthUser = { uid: "user-http-limit", email_verified: true };
+      const user = makeUser({ uid: "user-http-limit" });
+      for (let i = 0; i < 60; i++) {
+        await checkAndConsumeUsage(user, "generate");
+      }
+
+      const res = makeRes();
+      const uid = await requireUsageQuota(makeReq(), res, "generate");
+      expect(uid).toBeNull();
+      expect(res.statusCode).toBe(429);
+      expect(res.body.code).not.toBe("transient_error");
     });
   });
 

@@ -90,9 +90,18 @@ export async function getUserPlan(uid) {
 // depois de esgotar o próprio retry interno dele. Descoberto testando
 // checkAndConsumeUsage de verdade contra o Firestore Emulator (o mock em
 // memória usado no resto deste arquivo de testes nunca reproduziria
-// isso, porque serializa as transações de propósito). Sem tratar isso
-// aqui, a exceção subia sem controle e virava um 500 genérico pro
-// usuário, em vez do 429 normal de "limite atingido".
+// isso, porque serializa as transações de propósito).
+//
+// Depois de esgotar as TENTATIVAS DESTE retry (não confundir com o retry
+// interno do próprio Firestore, que já rodou e falhou antes de chegar
+// aqui), a função NÃO relança a exceção — isso mantinha aberto o mesmo
+// caminho pro 500 genérico que motivou esta correção (a exceção subia
+// sem controle até o endpoint, sem nunca passar por requireUsageQuota).
+// Em vez disso, retorna um resultado controlado com reason
+// "transient_error", que requireUsageQuota transforma numa resposta
+// HTTP 503 própria — nunca consome cota (allowed:false) e nunca diz
+// "limite atingido" (seria enganoso: a pessoa pode estar bem longe do
+// limite, o problema foi contenção passageira no Firestore, não cota).
 const TRANSACTION_MAX_ATTEMPTS = 4; // 1 tentativa + 3 retries
 const TRANSACTION_RETRY_BASE_MS = 50;
 
@@ -145,9 +154,18 @@ export async function checkAndConsumeUsage(user, bucket = DEFAULT_BUCKET) {
         return { allowed: true, current: current + 1, limit, plan, bucket };
       });
     } catch (e) {
-      const isLastAttempt = attempt === TRANSACTION_MAX_ATTEMPTS - 1;
-      if (!isAbortedTransactionError(e) || isLastAttempt) {
+      // Erro que não é de contenção de transação (ex.: Firestore fora do
+      // ar, permissão, bug de verdade) — não é o que este retry existe
+      // pra tratar, sobe igual sempre subiu.
+      if (!isAbortedTransactionError(e)) {
         throw e;
+      }
+      const isLastAttempt = attempt === TRANSACTION_MAX_ATTEMPTS - 1;
+      if (isLastAttempt) {
+        console.error(
+          `Cota de IA: ${TRANSACTION_MAX_ATTEMPTS} tentativas esgotadas por contenção no Firestore (ABORTED) — uid=${uid}, bucket=${bucket}. Retornando erro controlado (transient_error) em vez de deixar a exceção subir.`
+        );
+        return { allowed: false, current: null, limit, plan, bucket, reason: "transient_error" };
       }
       await sleep(TRANSACTION_RETRY_BASE_MS * Math.pow(2, attempt));
     }
@@ -203,6 +221,15 @@ export async function requireUsageQuota(req, res, bucket = DEFAULT_BUCKET) {
       res.status(403).json({
         error: "Confirme seu e-mail antes de gerar conteúdo com IA. Reenvie o e-mail de verificação na tela inicial se não o recebeu.",
         code: "email_not_verified"
+      });
+    } else if (usage.reason === "transient_error") {
+      // Contenção passageira no Firestore (ver checkAndConsumeUsage) —
+      // nunca dizer "limite atingido" aqui, seria enganoso: a pessoa pode
+      // estar bem longe do limite real. 503 (não 429/500) deixa claro
+      // pro cliente que é passageiro e vale tentar de novo.
+      res.status(503).json({
+        error: "Não foi possível confirmar sua cota de uso agora (instabilidade momentânea). Tente novamente em alguns segundos.",
+        code: "transient_error"
       });
     } else {
       const what = usage.bucket === "explain" ? "avaliações de explicação" : "gerações de conteúdo";
