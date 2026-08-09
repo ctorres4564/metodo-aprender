@@ -2,8 +2,15 @@
   "name": "metodo-aprender",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "dependencies": {
     "firebase-admin": "^12.6.0",
     "stripe": "^17.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }
