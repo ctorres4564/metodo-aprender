@@ -38,9 +38,7 @@
     </div>
     <div class="stats">
       <span class="pill" id="user-email" title="Conta conectada"></span>
-      <div class="pill">🏅 Nível <b id="stat-level">1</b></div>
-      <div class="pill">✨ <b id="stat-xp">0</b> XP</div>
-      <div class="pill">🔥 <b id="stat-streak">0</b> dias</div>
+      <div class="pill" title="Conceitos que voltaram para ser explicados hoje">🗣️ <b id="stat-due">0</b> para explicar</div>
       <a class="pill" href="conta.html" style="text-decoration:none;">👤 Conta</a>
       <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
     </div>
@@ -49,10 +47,10 @@
   <nav class="tabs">
     <button data-tab="inicio" class="active"><span class="emoji">🏕️</span>Início</button>
     <button data-tab="aprender"><span class="emoji">📖</span>Aprender</button>
-    <button data-tab="revisar"><span class="emoji">🔁</span>Revisar<span class="badge-dot" id="due-badge" style="display:none;">0</span></button>
-    <button data-tab="explicar"><span class="emoji">🗣️</span>Explicar</button>
-    <button data-tab="quiz"><span class="emoji">🎯</span>Quiz</button>
+    <button data-tab="explicar"><span class="emoji">🗣️</span>Explicar<span class="badge-dot" id="due-badge" style="display:none;">0</span></button>
+    <button data-tab="revisar"><span class="emoji">🔁</span>Revisar</button>
     <button data-tab="progresso"><span class="emoji">📊</span>Progresso</button>
+    <button data-tab="quiz" class="tab-secondary" title="Modo leve, opcional"><span class="emoji">🎯</span>Quiz</button>
   </nav>
 
   <section id="tab-inicio" class="tab-content">
@@ -66,25 +64,30 @@
         </div>
         <div class="stat-card">
           <div class="num" id="home-due">0</div>
-          <div class="label">cartas para revisar hoje</div>
+          <div class="label">conceitos para explicar hoje</div>
         </div>
       </div>
       <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn" id="cta-learn">▶️ Continuar Aprendendo</button>
-        <button class="btn secondary" id="cta-review">🔁 Ir para Revisão</button>
+        <button class="btn" id="cta-explain">🗣️ Explicar o que já aprendi</button>
+        <button class="btn secondary" id="cta-learn">📖 Aprender um conceito novo</button>
       </div>
     </div>
 
     <div class="panel">
       <h2 class="section-title">🧭 Como funciona</h2>
       <p class="lead">
-        <b>1. Aprender</b> — cada conceito é apresentado em linguagem simples, seguido de uma pergunta rápida
-        para checar o entendimento.<br><br>
-        <b>2. Revisar</b> — os conceitos voltam em intervalos crescentes (dias, depois semanas, depois meses),
-        usando o algoritmo de repetição espaçada FSRS, que se ajusta à sua própria dificuldade em cada conceito.<br><br>
-        <b>3. Explicar</b> — técnica de Feynman: você explica o conceito com suas próprias palavras e recebe uma
-        avaliação sobre o que ficou claro e o que ainda falta entender.<br><br>
-        <b>4. Quiz</b> — teste geral com todos os conceitos, embaralhados, para consolidar a memória sob pressão.
+        Ler de novo cria familiaridade, e familiaridade se confunde com domínio. É por isso que dá para
+        estudar muito e descobrir, na hora que importa, que não se aprendeu nada. Aqui o critério é outro:
+        <b>você só avançou quando consegue explicar</b>.<br><br>
+        <b>1. Aprender</b> — cada conceito é apresentado em linguagem simples.<br><br>
+        <b>2. Explicar</b> — você escreve o conceito com suas próprias palavras, como se ensinasse alguém.
+        A avaliação aponta se você enunciou o mecanismo ou apenas citou os elementos — e é ela que decide
+        quando o conceito volta.<br><br>
+        <b>3. Explicar de novo</b> — o conceito reaparece em intervalos calculados pelo FSRS. Explicação
+        fraca traz o conceito de volta logo; explicação sólida afasta a próxima cobrança.<br><br>
+        <span style="opacity:.75;">O <b>Quiz</b> e a <b>Revisão rápida</b> continuam disponíveis como modo leve,
+        para quando não houver energia de escrever — mas reconhecer uma alternativa certa é bem mais fácil
+        do que explicar, e por isso não são o caminho principal.</span>
       </p>
     </div>
   </section>
@@ -277,8 +280,8 @@ async function boot(){
 
     // Registra o handler global usado pelos botões inline do catálogo/telas
     window.switchTab = switchTab;
+    document.getElementById("cta-explain").addEventListener("click", ()=> switchTab("explicar"));
     document.getElementById("cta-learn").addEventListener("click", ()=> switchTab("aprender"));
-    document.getElementById("cta-review").addEventListener("click", ()=> switchTab("revisar"));
     document.getElementById("reset-btn").addEventListener("click", async ()=>{
       if(confirm("Isso vai apagar o progresso salvo deste módulo. Continuar?")){
         STATE = defaultState();

@@ -162,7 +162,15 @@ function touchStreak(){
   STATE.lastStudyDate = t;
 }
 
+// Gamificação desativada: XP, níveis, streak e badges saíram da interface.
+// Num produto cujo propósito é impedir a sensação falsa de progresso, pontuar
+// a tentativa recria a ilusão em outro lugar. Os campos continuam no STATE
+// apenas para não invalidar o progresso já salvo de quem usou as versões
+// anteriores — nada é exibido nem premiado.
+const GAMIFICATION_ENABLED = false;
+
 function addXP(n){
+  if(!GAMIFICATION_ENABLED) return;
   STATE.xp += n;
   showToast(`+${n} XP`);
 }
@@ -177,6 +185,7 @@ function levelInfo(xp){
 }
 
 function checkBadges(){
+  if(!GAMIFICATION_ENABLED) return;
   const newly = [];
   BADGES.forEach(b=>{
     if(!STATE.badges.includes(b.id) && b.check(STATE)){
@@ -341,15 +350,9 @@ function switchTab(name){
 }
 
 function renderHeader(){
-  const li = levelInfo(STATE.xp);
-  const elLevel = document.getElementById("stat-level");
-  const elXp = document.getElementById("stat-xp");
-  const elStreak = document.getElementById("stat-streak");
-  if(elLevel) elLevel.textContent = li.level;
-  if(elXp) elXp.textContent = STATE.xp;
-  if(elStreak) elStreak.textContent = STATE.streak;
-
   const due = dueCards().length;
+  const elDueStat = document.getElementById("stat-due");
+  if(elDueStat) elDueStat.textContent = due;
   const dueBadge = document.getElementById("due-badge");
   if(dueBadge){
     if(due>0){ dueBadge.style.display="inline-block"; dueBadge.textContent = due; }
@@ -388,8 +391,8 @@ function renderLearnCard(){
         <h2 class="section-title" style="justify-content:center;">Todos os conceitos foram apresentados!</h2>
         <p class="lead">Agora é hora de fortalecer a memória. Vá para a aba <b>Revisar</b> ou desafie-se no <b>Quiz</b>.</p>
         <div style="margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-          <button class="btn" onclick="switchTab('revisar')">🔁 Revisar agora</button>
-          <button class="btn secondary" onclick="switchTab('quiz')">🎯 Ir ao Quiz</button>
+          <button class="btn" onclick="switchTab('explicar')">🗣️ Explicar agora</button>
+          <button class="btn secondary" onclick="switchTab('revisar')">🔁 Revisão rápida</button>
         </div>
       </div>`;
     return;
@@ -689,12 +692,34 @@ function renderReviewCard(){
 /* ---- Explicar (Técnica de Feynman) ---- */
 let explainCurrent = null;
 
+// Ordem de prioridade do que é pedido para explicar. O vencimento vem primeiro:
+// é o que fecha o ciclo entre a avaliação da explicação (que já alimenta o FSRS)
+// e a cobrança seguinte. Antes esta função sorteava sem olhar nextReview, então
+// um conceito vencido podia nunca voltar — a repetição espaçada agendava, mas
+// nada consultava esse agendamento.
 function pickExplainConcept(){
   const seen = CONCEPTS.filter(c => STATE.cards[c.id].seen);
   if(seen.length === 0) return null;
+
+  const today = todayStr();
+  // 1) vencidos, do mais atrasado para o menos
+  const due = seen
+    .filter(c => STATE.cards[c.id].nextReview <= today)
+    .sort((a,b) => String(STATE.cards[a.id].nextReview).localeCompare(String(STATE.cards[b.id].nextReview)));
+  if(due.length > 0) return due[0];
+
+  // 2) nada vencido: conceitos que ainda nunca foram explicados
   const neverExplained = seen.filter(c => !STATE.cards[c.id].explainCount);
-  const pool = neverExplained.length > 0 ? neverExplained : seen;
-  return pool[Math.floor(Math.random()*pool.length)];
+  if(neverExplained.length > 0) return neverExplained[Math.floor(Math.random()*neverExplained.length)];
+
+  // 3) tudo em dia: revisão livre, sorteada
+  return seen[Math.floor(Math.random()*seen.length)];
+}
+
+// Quantos conceitos estão vencidos e portanto serão pedidos antes dos demais.
+function dueForExplanation(){
+  const today = todayStr();
+  return CONCEPTS.filter(c => STATE.cards[c.id].seen && STATE.cards[c.id].nextReview <= today);
 }
 
 function renderExplain(){
@@ -724,6 +749,9 @@ function renderExplainCard(){
       <span class="concept-tag">${escapeHtml(c.tag)}</span>
       <div class="concept-title">${escapeHtml(c.title)}</div>
       ${cs.explainCount > 0 ? `<p class="lead" style="margin-top:-6px;">Última nota: <b>${cs.lastExplainScore ?? "—"}/100</b> (tentativa ${cs.explainCount})</p>` : ""}
+      ${cs.seen && cs.nextReview <= todayStr()
+        ? `<p class="lead" style="margin-top:-6px;">🗣️ Este conceito voltou hoje${cs.explainCount > 0 ? " porque a última explicação indicou que ele ainda não estava firme" : ""}. Faltam ${Math.max(0, dueForExplanation().length - 1)} depois deste.</p>`
+        : `<p class="lead" style="margin-top:-6px;">✅ Nada vencido no momento — este é um treino extra, por sua conta.</p>`}
       <textarea id="explain-input" class="explain-textarea" rows="6" placeholder="Comece explicando aqui, com suas próprias palavras..."></textarea>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:10px; flex-wrap:wrap;">
         <span class="lead" id="explain-charcount" style="margin:0; font-size:11.5px;">0 caracteres (mínimo 30)</span>
@@ -778,9 +806,13 @@ async function handleExplainSubmit(c, studentText){
 function renderExplainResult(c, data, previousScore){
   const resultBox = document.getElementById("explain-result");
   const nota = Math.max(0, Math.min(100, Math.round(data.nota || 0)));
+  // Limiares alinhados ao servidor (api/avaliar-explicacao.js). Mais rigorosos
+  // que os anteriores (85/65/40) de propósito: uma nota generosa manda o conceito
+  // para semanas depois, que é justamente o que o modo Feynman existe para evitar.
+  const qualityByScore = nota>=90 ? 5 : nota>=70 ? 4 : nota>=45 ? 3 : 1;
   const quality = [1,3,4,5].includes(data.qualidadeSM2)
-    ? data.qualidadeSM2
-    : (nota>=85 ? 5 : nota>=65 ? 4 : nota>=40 ? 3 : 1);
+    ? Math.min(data.qualidadeSM2, qualityByScore)
+    : qualityByScore;
 
   const listHtml = (items, icon) => (items && items.length)
     ? `<ul style="margin:6px 0 0; padding-left:18px;">${items.map(i=>`<li style="margin-bottom:4px;">${icon} ${escapeHtml(i)}</li>`).join("")}</ul>`
@@ -803,7 +835,15 @@ function renderExplainResult(c, data, previousScore){
       <div class="score-big" style="font-size:32px;">${nota}/100</div>
       <div class="progressbar" style="margin-bottom:10px;"><div style="width:${nota}%"></div></div>
       ${comparisonHtml}
-      <p class="feedback ${nota>=65?'ok':'bad'}">${escapeHtml(data.feedback || "")}</p>
+      <p class="feedback ${nota>=70?'ok':'bad'}">${escapeHtml(data.feedback || "")}</p>
+      ${data.mecanismoCentral ? `
+        <div class="stat-card" style="margin-top:10px;">
+          <div class="label">🔑 O mecanismo central deste conceito</div>
+          <p class="lead" style="margin:6px 0 0;">${escapeHtml(data.mecanismoCentral)}</p>
+          ${data.mecanismoNoTexto
+            ? `<p class="lead" style="margin:6px 0 0;">✅ Você enunciou: “${escapeHtml(data.mecanismoNoTexto)}”</p>`
+            : `<p class="lead" style="margin:6px 0 0;">➡️ Não encontrei no seu texto uma frase que diga <b>como</b> isso funciona — só os elementos envolvidos. É esse o próximo passo.</p>`}
+        </div>` : ""}
       <div class="grid2" style="margin-top:10px;">
         <div class="stat-card">
           <div class="label">✅ Você cobriu</div>
@@ -823,7 +863,7 @@ function renderExplainResult(c, data, previousScore){
     </div>
   `;
 
-  applyExplainResultToState(c, nota, quality);
+  applyExplainResultToState(c, nota, quality, previousScore);
 
   document.getElementById("explain-next").onclick = ()=>{
     renderExplain();
@@ -831,13 +871,20 @@ function renderExplainResult(c, data, previousScore){
   };
 }
 
-async function applyExplainResultToState(c, nota, quality){
+async function applyExplainResultToState(c, nota, quality, previousScore){
   const cardState = STATE.cards[c.id];
   cardState.explainCount = (cardState.explainCount || 0) + 1;
   cardState.lastExplainScore = nota;
   fsrsUpdate(cardState, quality);
   touchStreak();
-  const xpGain = Math.max(4, Math.round((nota/100) * 25));
+  // XP premia demonstração de entendimento e progresso real entre tentativas.
+  // Antes era Math.max(4, nota/100*25), o que dava mais pontos a uma explicação
+  // fluente e vazia (nota 72) do que a um erro conceitual honesto (nota 35) —
+  // incoerente num produto cujo propósito é justamente não recompensar a ilusão.
+  const improvement = previousScore != null ? Math.max(0, nota - previousScore) : 0;
+  const xpGain = (nota >= 70 ? Math.round((nota/100) * 25) : 0)
+    + Math.round(improvement / 5)
+    + 2; // participação: escrever e receber o diagnóstico já vale algo
   addXP(xpGain);
   await saveState();
   checkBadges();
@@ -978,8 +1025,6 @@ async function finishQuiz(){
   } else {
     STATE.quiz.best = Math.max(STATE.quiz.best, correct);
   }
-  const bonus = Math.round((correct/order.length)*30);
-  addXP(bonus);
   await saveState();
   checkBadges();
   renderHeader();
@@ -988,10 +1033,10 @@ async function finishQuiz(){
   panel.innerHTML = `
     <h2 class="section-title" style="justify-content:center;">🏁 Resultado — ${mode === "adaptive" ? "Quiz Adaptativo" : "Quiz Completo"}</h2>
     <div class="score-big">${correct} / ${order.length}</div>
-    <p class="lead" style="text-align:center;">Você ganhou +${bonus} XP neste desafio.</p>
+    <p class="lead" style="text-align:center;">Reconhecer a alternativa certa é mais fácil do que explicar. Se quiser saber se entendeu mesmo, escreva o conceito na aba Explicar.</p>
     <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:10px;">
       <button class="btn" id="retry-quiz">🔁 Tentar novamente</button>
-      <button class="btn secondary" onclick="switchTab('progresso')">📊 Ver progresso</button>
+      <button class="btn secondary" onclick="switchTab('explicar')">🗣️ Ir para Explicar</button>
     </div>
   `;
   document.getElementById("retry-quiz").onclick = ()=> startQuiz(mode);
@@ -999,27 +1044,38 @@ async function finishQuiz(){
 
 /* ---- Progresso ---- */
 function renderProgress(){
-  const li = levelInfo(STATE.xp);
-  document.getElementById("prog-level-name").textContent = li.name;
-  document.getElementById("prog-xp-bar").style.width = li.pct + "%";
-  document.getElementById("prog-xp-text").textContent = li.next
-    ? `${STATE.xp} XP — faltam ${li.next.min - STATE.xp} XP para o próximo nível`
-    : `${STATE.xp} XP — nível máximo alcançado!`;
+  // Progresso deixou de ser pontuação e passou a ser capacidade de explicar:
+  // quantos conceitos você já conseguiu enunciar bem, e quantos estão devendo.
+  const explained = Object.values(STATE.cards).filter(c => c.lastExplainScore != null);
+  const solid = explained.filter(c => c.lastExplainScore >= 70).length;
+  const shaky = explained.length - solid;
+  const neverExplained = Object.values(STATE.cards).filter(c => c.seen && c.lastExplainScore == null).length;
+  const solidPct = CONCEPTS.length ? Math.round((solid / CONCEPTS.length) * 100) : 0;
+
+  const levelNameEl = document.getElementById("prog-level-name");
+  if(levelNameEl) levelNameEl.textContent = `${solid} de ${CONCEPTS.length} conceitos você já conseguiu explicar bem`;
+  const xpBarEl = document.getElementById("prog-xp-bar");
+  if(xpBarEl) xpBarEl.style.width = solidPct + "%";
+  const xpTextEl = document.getElementById("prog-xp-text");
+  if(xpTextEl){
+    xpTextEl.textContent = explained.length === 0
+      ? "Você ainda não explicou nenhum conceito. É a aba Explicar que move este número."
+      : `${shaky} explicação(ões) ainda fraca(s) e ${neverExplained} conceito(s) vistos que você nunca tentou explicar.`;
+  }
 
   const mastered = Object.values(STATE.cards).filter(c=>c.reps>=3).length;
   const masteryPct = CONCEPTS.length ? Math.round((mastered/CONCEPTS.length)*100) : 0;
-  document.getElementById("prog-mastery").textContent = masteryPct + "%";
-  document.getElementById("prog-mastery-bar").style.width = masteryPct + "%";
+  const masteryEl = document.getElementById("prog-mastery");
+  if(masteryEl) masteryEl.textContent = masteryPct + "%";
+  const masteryBarEl = document.getElementById("prog-mastery-bar");
+  if(masteryBarEl) masteryBarEl.style.width = masteryPct + "%";
 
+  // Badges saíram da interface junto com a gamificação.
   const badgesGrid = document.getElementById("badges-grid");
-  badgesGrid.innerHTML = "";
-  BADGES.forEach(b=>{
-    const unlocked = STATE.badges.includes(b.id);
-    const div = document.createElement("div");
-    div.className = "badge-item" + (unlocked?"":" locked");
-    div.innerHTML = `<div class="ic">${b.ic}</div><div><b>${b.name}</b></div><div style="opacity:.8;">${b.desc}</div>`;
-    badgesGrid.appendChild(div);
-  });
+  if(badgesGrid){
+    const badgesPanel = badgesGrid.closest(".panel");
+    if(badgesPanel) badgesPanel.style.display = "none";
+  }
 
   const list = document.getElementById("concept-list");
   list.innerHTML = "";
@@ -1031,7 +1087,11 @@ function renderProgress(){
     row.innerHTML = `
       <div>
         <div style="font-weight:700;">${escapeHtml(c.title)}</div>
-        <div style="color:var(--text-dim); font-size:11.5px;">${cs.seen ? "Próxima revisão: " + cs.nextReview : "Ainda não apresentado"}</div>
+        <div style="color:var(--text-dim); font-size:11.5px;">${cs.seen
+          ? (cs.lastExplainScore != null
+              ? `Última explicação: ${cs.lastExplainScore}/100 · volta em ${cs.nextReview}`
+              : `Nunca explicado · volta em ${cs.nextReview}`)
+          : "Ainda não apresentado"}</div>
       </div>
       <span class="status-chip ${st.cls}">${st.label}</span>
     `;

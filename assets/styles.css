@@ -296,3 +296,15 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
 @media (max-width: 900px){
   .pdf-viewer{ max-height: 65vh; }
 }
+
+/* Aba de modo secundário (Quiz): continua acessível, mas visualmente recuada,
+   para não competir com o fluxo principal (Explicar). Reconhecer uma
+   alternativa é bem mais fácil do que explicar — a hierarquia visual precisa
+   dizer isso sem precisar de texto. */
+nav.tabs button.tab-secondary{
+  opacity: .55;
+}
+nav.tabs button.tab-secondary:hover,
+nav.tabs button.tab-secondary.active{
+  opacity: 1;
+}
