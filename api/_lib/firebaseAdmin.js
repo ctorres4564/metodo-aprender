@@ -28,7 +28,12 @@ function getAdminApp() {
   // produção (Vercel) ela nunca é definida, então este branch nunca roda
   // lá — o caminho de produção abaixo continua idêntico.
   if (process.env.FIRESTORE_EMULATOR_HOST) {
-    return initializeApp({ projectId: process.env.GCLOUD_PROJECT || "demo-metodo-aprender" });
+    const projectId = process.env.GCLOUD_PROJECT || "demo-metodo-aprender";
+    // storageBucket precisa de um nome pra adminStorage().bucket() (sem
+    // argumento) funcionar — o Storage Emulator não valida se o bucket
+    // "existe" de verdade, só precisa que cliente e servidor concordem no
+    // mesmo nome (mesma convenção usada em test/emulator/storage.rules.test.js).
+    return initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` });
   }
 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
