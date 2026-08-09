@@ -19,6 +19,18 @@ function getAdminApp() {
   const existing = getApps();
   if (existing.length) return existing[0];
 
+  // Modo emulador (só em teste — ver test/emulator/): quando
+  // FIRESTORE_EMULATOR_HOST está definida, o Admin SDK já sabe conversar
+  // com o Firestore Emulator local em vez do Firestore de produção, e o
+  // emulator não verifica credencial nenhuma — por isso inicializa sem
+  // "cert". Essa variável só existe quando os testes rodam dentro de
+  // `firebase emulators:exec` (ver package.json: "test:emulator"); em
+  // produção (Vercel) ela nunca é definida, então este branch nunca roda
+  // lá — o caminho de produção abaixo continua idêntico.
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return initializeApp({ projectId: process.env.GCLOUD_PROJECT || "demo-metodo-aprender" });
+  }
+
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT não configurada no servidor.");

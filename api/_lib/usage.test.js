@@ -107,6 +107,37 @@ describe("usage.js — cotas de IA", () => {
     });
   });
 
+  describe("retry em erro ABORTED do Firestore", () => {
+    // Precisa de timers de verdade: o retry usa setTimeout() pra esperar
+    // entre tentativas (backoff curto), e o resto do arquivo usa
+    // vi.useFakeTimers() (pro teste de troca de mês) — sem isso, o
+    // await sleep(...) dentro do retry nunca resolveria sozinho.
+    beforeEach(() => {
+      vi.useRealTimers();
+    });
+
+    function currentMonthKeyReal() {
+      const d = new Date();
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+
+    it("se recupera de falhas ABORTED isoladas (menos que o limite de tentativas) sem contar 2x", async () => {
+      mockDb._setFailCount(2); // as 2 primeiras tentativas abortam, a 3ª (de 4 possíveis) passa
+      const result = await checkAndConsumeUsage(makeUser({ uid: "user-retry-ok" }), "explain");
+      expect(result.allowed).toBe(true);
+      expect(result.current).toBe(1);
+      expect(mockDb._get(`ai_usage/user-retry-ok_${currentMonthKeyReal()}_explain`).count).toBe(1);
+    });
+
+    it("desiste depois de esgotar as tentativas, sem deixar o app quebrado silenciosamente", async () => {
+      mockDb._setFailCount(10); // sempre aborta — mais que TRANSACTION_MAX_ATTEMPTS
+      await expect(checkAndConsumeUsage(makeUser({ uid: "user-retry-fail" }), "explain"))
+        .rejects.toThrow(/ABORTED/);
+      // Nenhuma escrita deve ter "vazado" apesar das tentativas.
+      expect(mockDb._get(`ai_usage/user-retry-fail_${currentMonthKeyReal()}_explain`)).toBeUndefined();
+    });
+  });
+
   describe("refundUsage", () => {
     it("devolve exatamente 1 unidade ao contador do balde certo", async () => {
       const user = makeUser({ uid: "user-refund" });

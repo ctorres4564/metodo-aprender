@@ -82,6 +82,28 @@ export async function getUserPlan(uid) {
   return "free";
 }
 
+// SEGURANÇA/FINANCEIRO (concorrência real — ver
+// test/emulator/usage.concurrency.test.js): sob concorrência extrema no
+// MESMO documento (várias chamadas simultâneas da mesma pessoa/balde,
+// ex.: várias abas gerando conteúdo ao mesmo tempo), o Firestore pode
+// abortar uma transação com "10 ABORTED: Transaction lock timeout"
+// depois de esgotar o próprio retry interno dele. Descoberto testando
+// checkAndConsumeUsage de verdade contra o Firestore Emulator (o mock em
+// memória usado no resto deste arquivo de testes nunca reproduziria
+// isso, porque serializa as transações de propósito). Sem tratar isso
+// aqui, a exceção subia sem controle e virava um 500 genérico pro
+// usuário, em vez do 429 normal de "limite atingido".
+const TRANSACTION_MAX_ATTEMPTS = 4; // 1 tentativa + 3 retries
+const TRANSACTION_RETRY_BASE_MS = 50;
+
+function isAbortedTransactionError(err) {
+  return !!err && (err.code === 10 || err.code === "ABORTED" || /\bABORTED\b/.test(String(err.message || "")));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Verifica se o usuário ainda tem cota disponível no mês e, se tiver,
 // já consome 1 unidade (operação atômica via transação do Firestore).
 // Recebe o usuário decodificado (não só o uid) porque também bloqueia
@@ -106,17 +128,30 @@ export async function checkAndConsumeUsage(user, bucket = DEFAULT_BUCKET) {
   const db = adminDb();
   const ref = db.collection("ai_usage").doc(usageDocId(uid, bucket));
 
-  const result = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const current = snap.exists ? snap.data().count || 0 : 0;
-    if (current >= limit) {
-      return { allowed: false, current, limit, plan, bucket };
+  // Cada tentativa relê o contador do zero dentro da própria transação —
+  // nunca reaproveita um valor calculado numa tentativa anterior. Por
+  // isso o retry é seguro: nunca conta 2x, nunca deixa passar acima do
+  // limite, só insiste um pouco mais (com um espaçamento curto e
+  // crescente entre tentativas) antes de desistir de vez.
+  for (let attempt = 0; attempt < TRANSACTION_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const current = snap.exists ? snap.data().count || 0 : 0;
+        if (current >= limit) {
+          return { allowed: false, current, limit, plan, bucket };
+        }
+        tx.set(ref, { count: current + 1, uid, bucket, updatedAt: Date.now() }, { merge: true });
+        return { allowed: true, current: current + 1, limit, plan, bucket };
+      });
+    } catch (e) {
+      const isLastAttempt = attempt === TRANSACTION_MAX_ATTEMPTS - 1;
+      if (!isAbortedTransactionError(e) || isLastAttempt) {
+        throw e;
+      }
+      await sleep(TRANSACTION_RETRY_BASE_MS * Math.pow(2, attempt));
     }
-    tx.set(ref, { count: current + 1, uid, bucket, updatedAt: Date.now() }, { merge: true });
-    return { allowed: true, current: current + 1, limit, plan, bucket };
-  });
-
-  return result;
+  }
 }
 
 // SEGURANÇA/FINANCEIRO (A1-03): checkAndConsumeUsage já consome 1 unidade
