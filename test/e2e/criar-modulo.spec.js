@@ -45,3 +45,39 @@ test("criar módulo manual (sem IA) salva e aparece em 'Meus Módulos'", async (
   await page.goto("/index.html");
   await expect(page.locator("#user-modules-grid")).toContainText(title, { timeout: 10000 });
 });
+
+test("remover um conceito do meio e adicionar outro não cruza os grupos de alternativa correta", async ({ page }) => {
+  // Regressão: addConceptCard() usava container.children.length como idx do
+  // grupo de radio (name="correct-N"). Ao remover o card do meio e criar um
+  // novo depois, o novo card podia repetir o idx de um card que continuava
+  // na tela — os dois passavam a compartilhar o mesmo name, então marcar a
+  // alternativa correta num desmarcava a do outro (ver criar-modulo.html,
+  // addConceptCard()).
+  await loginAsSeededUser(page);
+  await page.goto("/criar-modulo.html");
+  await expect(page.locator("#user-email")).toBeVisible({ timeout: 15000 });
+
+  const cards = page.locator(".concept-editor");
+  await expect(cards).toHaveCount(3); // init() já cria 3 fichas em branco
+
+  // Remove o card do meio (posição 1) — sobram os cards originalmente
+  // criados nas posições 0 e 2.
+  await cards.nth(1).locator(".remove-concept").click();
+  await expect(cards).toHaveCount(2);
+
+  // Adiciona um card novo — é aqui que o idx podia colidir com o card
+  // remanescente que antes estava na posição 2.
+  await page.locator("#add-concept-btn").click();
+  await expect(cards).toHaveCount(3);
+
+  const survivor = cards.nth(1); // o card original que sobrou
+  const newcomer = cards.nth(2); // o card recém-adicionado
+
+  await survivor.locator(".c-correct").nth(0).check();
+  await newcomer.locator(".c-correct").nth(1).check();
+
+  // Marcar a alternativa do card novo não pode desmarcar a do sobrevivente
+  // — só aconteceria se os dois compartilhassem o mesmo name de radio.
+  await expect(survivor.locator(".c-correct").nth(0)).toBeChecked();
+  await expect(newcomer.locator(".c-correct").nth(1)).toBeChecked();
+});
