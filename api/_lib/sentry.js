@@ -35,12 +35,34 @@ export function initSentry() {
 
   const originalConsoleError = console.error.bind(console);
   console.error = (...args) => {
+    // O console.error original roda sempre, incondicionalmente, ANTES de
+    // qualquer tentativa de falar com o Sentry — log continua funcionando
+    // mesmo que tudo abaixo falhe.
     originalConsoleError(...args);
-    const err = args.find((a) => a instanceof Error);
-    if (err) {
-      Sentry.captureException(err);
-    } else {
-      Sentry.captureMessage(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "), "error");
+    // Tudo daqui pra baixo é telemetria best-effort: um erro aqui (ex.:
+    // JSON.stringify de um objeto circular, ou o próprio SDK do Sentry
+    // lançando) nunca pode escapar de dentro de um console.error — isso
+    // transformaria um log de erro TRATADO em uma exceção NÃO tratada,
+    // o oposto do que este módulo existe para evitar.
+    try {
+      const err = args.find((a) => a instanceof Error);
+      if (err) {
+        Sentry.captureException(err);
+      } else {
+        const message = args
+          .map((a) => {
+            if (typeof a === "string") return a;
+            try {
+              return JSON.stringify(a);
+            } catch {
+              return String(a);
+            }
+          })
+          .join(" ");
+        Sentry.captureMessage(message, "error");
+      }
+    } catch {
+      // Engolido de propósito — ver comentário acima.
     }
   };
 }

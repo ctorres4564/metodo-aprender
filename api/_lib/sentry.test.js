@@ -130,6 +130,30 @@ describe("api/_lib/sentry.js — com SENTRY_DSN configurada", () => {
     );
   });
 
+  it("console.error com um objeto circular nunca lança — loga normalmente e o handler continua", async () => {
+    const { initSentry, withSentry } = await import("./sentry.js");
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    initSentry();
+
+    const circular = { nome: "obj" };
+    circular.self = circular; // JSON.stringify(circular) lançaria TypeError
+
+    // 1) console.error("erro", objetoCircular) não lança.
+    expect(() => console.error("erro", circular)).not.toThrow();
+    // 2) o log original continua ocorrendo, com o objeto intacto.
+    expect(spy).toHaveBeenCalledWith("erro", circular);
+
+    // 3) usado dentro de um handler envolvido por withSentry, o fluxo
+    // segue normal até o fim — a falha de serialização não vaza como
+    // exceção não tratada.
+    const handler = vi.fn(async (req, res) => {
+      console.error("erro", circular);
+      return "ok";
+    });
+    const wrapped = withSentry(handler);
+    await expect(wrapped("req", "res")).resolves.toBe("ok");
+  });
+
   it("withSentry engole falha do próprio flush (não deve derrubar a resposta já enviada)", async () => {
     const { withSentry } = await import("./sentry.js");
     sentryMock.flush.mockRejectedValue(new Error("Sentry indisponível"));
