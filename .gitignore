@@ -4,3 +4,7 @@ node_modules
 firestore-debug.log
 firebase-debug.log
 ui-debug.log
+test-results
+playwright-report
+blob-report
+playwright/.cache
