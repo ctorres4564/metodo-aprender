@@ -4,11 +4,11 @@
 
 ## Bloqueadores — não abrir para pagamento sem isso
 
-- [ ] Política de Privacidade publicada (página no app + link visível)
-- [ ] Termos de Uso publicados (página no app + link visível)
-- [ ] Fluxo de "excluir minha conta" (apaga dados do Firestore/Storage do uid — exigência LGPD)
-- [ ] Verificação de e-mail no cadastro (`sendEmailVerification`, já nativo no Firebase Auth)
-- [ ] Limite de armazenamento/nº de materiais diferenciado por plano (free hoje tem o mesmo limite do premium)
+- [x] Política de Privacidade publicada ([privacidade.html](privacidade.html), link visível no rodapé de `index.html` e em `conta.html`)
+- [x] Termos de Uso publicados ([termos.html](termos.html), mesmo link visível)
+- [x] Fluxo de "excluir minha conta" (`api/account.js` — apaga Firestore/Storage/Auth do uid, coberto por testes do Firebase Emulator)
+- [x] Verificação de e-mail no cadastro — servidor recusa gerações de IA para quem não confirmou (`api/_lib/usage.js`), com banner de aviso/reenvio na UI (`assets/auth-ui.js`)
+- [x] Limite de armazenamento/nº de materiais diferenciado por plano (`api/material.js`, `MATERIAL_LIMITS.maxMaterialsPerPlan`)
 
 ## Antes da primeira cobrança real
 
