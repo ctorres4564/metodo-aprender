@@ -111,14 +111,24 @@ Antes de escrever cada conceito, considere internamente:
 5. Existe algum conceito próximo que possa ser confundido com este?
 6. Existe algum erro ou confusão comum sobre essa ideia?
 7. Um exemplo concreto ajudaria a compreendê-la?
+8. Considerando as respostas acima, qual operação cognitiva (entre as categorias abaixo) é a mais apropriada para testar ESTE conceito especificamente? É o conteúdo do conceito que decide a categoria — nunca escolha uma ao acaso.
 
-Use essas relações para melhorar a explicação e a pergunta, mas NÃO crie novos campos no JSON.
+Categorias de operação cognitiva para a pergunta "q" (escolha UMA por conceito, a que o conteúdo sustentar):
+- COMPREENSÃO: identificar o significado, princípio, característica essencial ou relação central do conceito.
+- CAUSALIDADE: identificar uma relação de causa e efeito — o que provoca o quê, ou por que algo acontece.
+- COMPARAÇÃO: distinguir este conceito de outro próximo, modelo, posição ou situação semelhante.
+- APLICAÇÃO: aplicar o conceito a uma situação concreta, exemplo ou cenário.
+- INFERÊNCIA: deduzir uma consequência, implicação ou conclusão a partir do conceito.
+- ANÁLISE CRÍTICA: identificar um pressuposto, limitação, tensão ou crítica associada ao conceito.
+Nem todo conceito sustenta as seis categorias igualmente — um conceito puramente descritivo pode só admitir COMPREENSÃO ou COMPARAÇÃO, por exemplo; não force uma categoria que o conteúdo não sustenta. Ao mesmo tempo, olhando o módulo inteiro, evite concentrar quase todas as perguntas na mesma categoria quando o material permitir variedade — não é uma distribuição exata (não é "20% de cada categoria"), é só evitar repetir sempre o mesmo padrão quando o conteúdo oferece ângulos diferentes.
+
+Use essas relações para melhorar a explicação e a pergunta, mas NÃO crie novos campos no JSON — a categoria escolhida no passo 8 orienta como "q" é formulada, ela não aparece em nenhum campo da saída.
 
 Regras OBRIGATÓRIAS para cada conceito:
 1. "title": um título curto e específico (até aproximadamente 8 palavras), que identifica o conceito sem ser genérico.
 2. "tag": uma categoria/etiqueta curta (1-3 palavras) para agrupar conceitos relacionados.
 3. "text": uma explicação de 2 a 4 frases, em português, escrita com SUAS PRÓPRIAS PALAVRAS — nunca copie frases inteiras do texto-fonte. Explique a ideia central, e quando relevante, explique mecanismo, causa, consequência ou relação com outro conceito. Quando útil, inclua um exemplo curto. Quando houver risco de confusão, deixe clara a diferença entre conceitos próximos. Não transforme o texto em lista. Evite explicações genéricas que apenas repetem o título.
-4. "q": uma pergunta de múltipla escolha simples que testa compreensão real. Não escreva perguntas que simplesmente peçam a definição do conceito ou repitam uma afirmação explícita do campo "text". A resposta correta não deve ser uma reprodução quase literal de uma frase do "text". Sempre que o conteúdo permitir, teste uma relação conceitual — por exemplo, causa e consequência, mecanismo, aplicação, comparação, distinção entre conceitos próximos, implicação de uma ideia ou relação entre dois elementos apresentados. A pergunta deve exigir compreensão do conceito, mas continuar respondível usando apenas o conteúdo da ficha. Evite aumentar desnecessariamente a dificuldade linguística da pergunta.
+4. "q": uma pergunta de múltipla escolha que testa a operação cognitiva escolhida no passo 8 (COMPREENSÃO, CAUSALIDADE, COMPARAÇÃO, APLICAÇÃO, INFERÊNCIA ou ANÁLISE CRÍTICA). Não escreva perguntas que simplesmente peçam a definição do conceito ou repitam uma afirmação explícita do campo "text". A resposta correta não deve ser uma reprodução quase literal de uma frase do "text". A pergunta deve exigir compreensão do conceito, mas continuar respondível usando apenas o conteúdo da ficha. Evite aumentar desnecessariamente a dificuldade linguística da pergunta.
 5. "options": exatamente 4 alternativas de resposta. Elas precisam ser difíceis de adivinhar por eliminação, mesmo por quem nunca leu o texto-fonte. Siga estas regras ao criar as 3 alternativas erradas:
    - Devem ser sobre o MESMO assunto/categoria da resposta certa, nunca de um assunto claramente diferente.
    - Devem ser plausíveis para alguém que compreendeu o tema apenas parcialmente.
