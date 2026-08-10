@@ -20,8 +20,8 @@
 
 ## Recomendado, não bloqueante
 
-- [ ] Monitoramento de erros em produção (Sentry ou equivalente)
+- [x] Monitoramento de erros em produção — Sentry (`api/_lib/sentry.js`, opcional/inativo sem `SENTRY_DSN`; falta só criar a conta e configurar a variável, ver README)
 - [ ] Validar/redefinir a diferenciação entre planos free e premium (hoje só muda a quantidade de gerações de IA) — decisão de produto
-- [ ] Corrigir bug de grupo de rádio em `criar-modulo.html` (remover conceito do meio da lista pode afetar o card errado)
+- [x] Corrigir bug de grupo de rádio em `criar-modulo.html` (remover conceito do meio da lista podia afetar o card errado)
 - [x] Testes automatizados básicos — Vitest (unit), Firebase Emulator (regras Firestore/Storage, concorrência real, Stripe webhook, exclusão de conta, checkout), FSRS/parsing de IA e Playwright (E2E), com CI no GitHub Actions
 - [ ] Revisar os limites mensais de IA (40 free / 400 premium) com dados reais de uso, depois dos primeiros usuários pagantes

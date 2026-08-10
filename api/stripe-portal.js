@@ -12,10 +12,11 @@
 import { verifyUserFromRequest } from "./_lib/usage.js";
 import { getStripe } from "./_lib/stripe.js";
 import { adminDb } from "./_lib/firebaseAdmin.js";
+import { withSentry } from "./_lib/sentry.js";
 
 const APP_URL = process.env.APP_URL || "https://metodo-aprender-ten.vercel.app";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -47,3 +48,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Não foi possível abrir o gerenciamento de assinatura agora. Tente novamente." });
   }
 }
+
+export default withSentry(handler);

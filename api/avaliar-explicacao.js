@@ -17,10 +17,11 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -195,3 +196,5 @@ ${studentText}
     res.status(500).json({ error: "Erro interno ao avaliar a explicação." });
   }
 }
+
+export default withSentry(handler);

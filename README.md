@@ -168,11 +168,7 @@ Toda essa Biblioteca (criar material, atualizar status, registrar módulo gerado
 2. No mesmo console → **Storage** (se ainda não tiver usado o Storage neste projeto, clique em "Vamos começar" para ativá-lo, mantendo o modo produção) → **Regras**, cole o conteúdo de `storage.rules.txt` e publique. Esta é uma tela separada da regra do Firestore — os dois arquivos de regras são independentes.
 3. Publique de novo (`vercel --prod`) para levar `biblioteca.html` e os novos endpoints `api/material-*.js` ao ar.
 
-**Verificação manual de isolamento entre usuários (em vez de testes automatizados):** o ambiente usado para desenvolver este projeto não tem acesso ao registro de pacotes do npm, então não foi possível instalar/rodar o Firebase Emulator Suite (`@firebase/rules-unit-testing`) para testes automatizados das regras. Em vez disso, confira manualmente, com duas contas diferentes:
-- Faça login com a Conta A, importe um livro pequeno e confirme que ele aparece em "Minha Biblioteca".
-- Copie o link "Usar" desse material (contém `?material=<id>`), faça logout, entre com a Conta B e cole o mesmo link — a página deve mostrar "material não encontrado, ou você não tem permissão" (bloqueado pela regra de leitura do Firestore).
-- Ainda com a Conta B, abra o Console do navegador (F12) e tente chamar `window.AppDB.getMaterial("<id-da-conta-A>")` — deve retornar `null`, nunca os dados do material de outra pessoa.
-- Confirme que excluir um material (Conta A) não afeta os módulos já criados a partir dele em "Meus Módulos" (eles continuam lá, só o material some da Biblioteca).
+**Isolamento entre usuários:** coberto por testes automatizados das regras do Firestore/Storage contra o Firebase Emulator (`test/emulator/firestore.rules.test.js`, `test/emulator/storage.rules.test.js`) — ver seção "Testes automatizados" abaixo. Não é mais necessário verificar isso manualmente com duas contas a cada mudança.
 
 ### Leitor de PDF com destaques e anotações (Etapa 2)
 
@@ -270,6 +266,40 @@ O agendamento das revisões usa o **FSRS** (Free Spaced Repetition Scheduler), o
 Implementado em `assets/engine.js` (função `fsrsUpdate` e as funções auxiliares `fsrs*`), usando os pesos padrão publicados pela comunidade open-spaced-repetition (FSRS-4.5) — não há ajuste por usuário individual (isso exigiria treinar um modelo com o histórico de revisões de cada pessoa, fora do escopo atual).
 
 **Migração de quem já tinha progresso salvo:** fichas que já estavam sendo revisadas antes desta mudança não perdem o histórico — na primeira revisão após a atualização, o intervalo que já existia (calculado pelo SM-2) é reaproveitado como estimativa inicial de estabilidade, em vez de reiniciar do zero.
+
+## Testes automatizados
+
+O projeto tem 3 suítes de teste, cada uma cobrindo uma camada diferente — juntas rodam também no CI (GitHub Actions, `.github/workflows/tests.yml`) a cada push/PR na `main`.
+
+```
+npm test              # unitários (Vitest) — lógica pura, mocks, sem dependência externa
+npm run test:emulator # Firebase Emulator (Firestore/Storage/Auth) real + Stripe mockado
+npm run test:e2e      # Playwright — fluxos completos no navegador, contra o Emulator
+```
+
+- **`npm test`** — mais rápido, sem precisar de nada instalado além do `npm ci`. Cobre a lógica de cota de IA (`api/_lib/usage.js`), parsing/validação de resposta da IA (`api/_lib/parseJson.js`, `api/_lib/openrouter.js`), o algoritmo FSRS (`assets/engine.js`, carregado via `test/helpers/loadEngineFsrs.js`) e o wrapper de monitoramento de erros (`api/_lib/sentry.js`, ver seção abaixo).
+- **`npm run test:emulator`** — precisa do [Firebase CLI](https://firebase.google.com/docs/cli) instalado (`firebase-tools`, já é devDependency) e de um JDK (usado pelos binários do Emulator). Sobe Firestore/Storage/Auth localmente (`firebase emulators:exec`) e testa contra eles de verdade: regras de segurança (isolamento entre contas), concorrência real de transações, exclusão de conta, webhook e checkout da Stripe (cliente Stripe mockado — nenhuma chamada de rede real).
+- **`npm run test:e2e`** — mesma infraestrutura de Emulator, mas dirigindo um navegador Chromium de verdade (Playwright) contra as páginas HTML servidas localmente (`npx serve`): cadastro/login, criação de módulo manual, leitor de PDF.
+
+Cada suíte roda isolada da outra — não é preciso ter o Emulator rodando para `npm test`, nem o Playwright instalado para `npm run test:emulator`. Rodar `npm run test:emulator` e `npm run test:e2e` ao mesmo tempo (dois terminais) falha, porque os dois sobem o Emulator nas mesmas portas fixas — rode um de cada vez.
+
+## Monitoramento de erros com Sentry
+
+As 11 funções serverless (`api/*.js`) reportam automaticamente erros inesperados para o [Sentry](https://sentry.io) — recomendado antes de abrir para pagamento, para saber de um problema em produção sem depender de um usuário reportar. Implementado em `api/_lib/sentry.js` (testado em `api/_lib/sentry.test.js`), com dois mecanismos:
+
+1. **`withSentry(handler)`** envolve cada handler exportado — captura qualquer exceção que escape de todo `try/catch` interno (um bug realmente inesperado) antes de relançá-la.
+2. **Interceptação de `console.error`**: como todo erro tratado do projeto já é logado com `console.error(...)` antes de responder (padrão usado em todas as 11 funções), o módulo intercepta essa chamada uma única vez por instância de função e encaminha para o Sentry também — sem precisar tocar em nenhum dos `catch(e)` existentes.
+
+**Fica completamente inativo sem configuração** — nenhuma chamada de rede, nenhum overhead — até a variável `SENTRY_DSN` ser definida.
+
+**Configuração (opcional):**
+
+1. Crie um projeto em [sentry.io](https://sentry.io) (tem plano gratuito) — tipo de plataforma "Node.js".
+2. Copie o DSN gerado (Settings → Client Keys (DSN)).
+3. No painel da Vercel → **Settings → Environment Variables**, crie `SENTRY_DSN` com esse valor.
+4. Publique de novo (`vercel --prod`) — esse deploy também instala a nova dependência `@sentry/node` (adicionada em `package.json`) automaticamente.
+
+Monitoramento do lado do navegador (erros de JavaScript no cliente, fora das funções serverless) não está incluído — pode ser adicionado depois com `@sentry/browser`, se necessário.
 
 ## Instalável como app (PWA)
 

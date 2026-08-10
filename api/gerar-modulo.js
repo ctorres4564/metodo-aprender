@@ -33,6 +33,7 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
 const MAX_SOURCE_CHARS = 14000;
@@ -62,7 +63,7 @@ function buildAnnotationsBlock(annotations) {
   return `\n\nTrechos que o(a) usuário(a) já destacou ou anotou neste material (dê atenção especial a esses pontos: é provável que sejam os que mais importam pra ele(a) — procure garantir que os conceitos gerados cubram essas ideias, mas sempre com "text" em linguagem própria, nunca copiando este texto literalmente):\n${cleaned.join("\n")}`;
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -174,3 +175,5 @@ ${trimmedSource}
     res.status(500).json({ error: "Erro interno ao gerar conceitos." });
   }
 }
+
+export default withSentry(handler);
