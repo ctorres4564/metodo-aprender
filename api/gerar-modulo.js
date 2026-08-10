@@ -98,24 +98,51 @@ PARTE 1 — "resumo": escreva um resumo mais completo, em português, com SUAS P
    a) Um parágrafo de introdução (3 a 5 frases) apresentando do que trata esse trecho, como a introdução de um bom professor antes de começar a aula.
    b) Uma lista dos principais tópicos/conceitos que serão estudados neste módulo — de 5 a 10 itens, cada um em uma linha própria começando com "• " (marcador + espaço), com uma frase curta por item (não precisa ser cada conceito exato das fichas, pode agrupar temas relacionados).
    Formate como texto simples, com o parágrafo de introdução primeiro, uma linha em branco, e depois a lista de tópicos (uma linha por item, cada linha começando com "• "). Não copie frases do texto-fonte.
+   O resumo deve apresentar a ideia central do trecho, destacar as principais relações entre os temas e indicar as distinções mais importantes quando existirem.
 
-PARTE 2 — "concepts": leia o texto-fonte e extraia os conceitos mais importantes e independentes entre si (ideias que fazem sentido sozinhas, sem depender de outra ficha para serem entendidas). Gere no máximo ${MAX_CONCEPTS} conceitos, priorizando qualidade e cobertura das ideias centrais em vez de quantidade.
+PARTE 2 — "concepts": Leia o texto-fonte e identifique os conceitos mais importantes para compreensão e recuperação ativa. Não gere apenas definições isoladas. Cada conceito deve representar uma unidade de conhecimento útil para estudo e revisão espaçada.
+Gere no máximo ${MAX_CONCEPTS} conceitos, priorizando qualidade e cobertura das ideias centrais em vez de quantidade.
+
+Antes de escrever cada conceito, considere internamente:
+1. Qual é a ideia central?
+2. Como ela funciona?
+3. Existe relação de causa e efeito?
+4. Com quais outros conceitos ela se relaciona?
+5. Existe algum conceito próximo que possa ser confundido com este?
+6. Existe algum erro ou confusão comum sobre essa ideia?
+7. Um exemplo concreto ajudaria a compreendê-la?
+
+Use essas relações para melhorar a explicação e a pergunta, mas NÃO crie novos campos no JSON.
 
 Regras OBRIGATÓRIAS para cada conceito:
-1. "title": um título curto (até ~8 palavras) que identifica o conceito.
+1. "title": um título curto e específico (até aproximadamente 8 palavras), que identifica o conceito sem ser genérico.
 2. "tag": uma categoria/etiqueta curta (1-3 palavras) para agrupar conceitos relacionados.
-3. "text": uma explicação de 2 a 4 frases, em português, escrita com SUAS PRÓPRIAS PALAVRAS — nunca copie frases inteiras do texto-fonte. Parafraseie e simplifique como um bom professor explicaria, em linguagem clara e direta. Isso é importante por direitos autorais: o texto gerado deve ser uma síntese original, não uma cópia.
-4. "q": uma pergunta de múltipla escolha simples que testa se a pessoa entendeu o conceito.
-5. "options": exatamente 4 alternativas de resposta. Elas precisam ser difíceis de adivinhar por eliminação, mesmo por quem nunca leu o texto-fonte — esse é um erro comum a evitar. Siga estas regras ao criar as 3 alternativas erradas:
-   - Devem ser sobre o MESMO assunto/categoria da resposta certa, nunca de um assunto claramente diferente (ex: se a pergunta é sobre um mecanismo biológico, as 4 opções devem ser mecanismos biológicos plausíveis do mesmo domínio, não uma mistura de coisas aleatórias).
-   - Devem ter aproximadamente o mesmo tamanho e nível de detalhe da resposta certa — nunca deixe a opção correta visivelmente mais longa, mais específica ou mais "bem escrita" que as outras (isso entrega a resposta).
-   - Prefira usar confusões plausíveis e reais sobre o tema: um conceito parecido mas diferente, uma troca de causa por efeito, uma definição parcialmente certa mas incompleta ou distorcida, um equívoco comum que alguém sem entender bem o assunto cometeria.
-   - Evite palavras absolutas nas opções erradas (“sempre”, “nunca”, “todos”, “nenhum”, “impossível”) — isso costuma denunciar que a alternativa está errada.
+3. "text": uma explicação de 2 a 4 frases, em português, escrita com SUAS PRÓPRIAS PALAVRAS — nunca copie frases inteiras do texto-fonte. Explique a ideia central, e quando relevante, explique mecanismo, causa, consequência ou relação com outro conceito. Quando útil, inclua um exemplo curto. Quando houver risco de confusão, deixe clara a diferença entre conceitos próximos. Não transforme o texto em lista. Evite explicações genéricas que apenas repetem o título.
+4. "q": uma pergunta de múltipla escolha simples que testa compreensão real. Não escreva perguntas que simplesmente peçam a definição do conceito ou repitam uma afirmação explícita do campo "text". A resposta correta não deve ser uma reprodução quase literal de uma frase do "text". Sempre que o conteúdo permitir, teste uma relação conceitual — por exemplo, causa e consequência, mecanismo, aplicação, comparação, distinção entre conceitos próximos, implicação de uma ideia ou relação entre dois elementos apresentados. A pergunta deve exigir compreensão do conceito, mas continuar respondível usando apenas o conteúdo da ficha. Evite aumentar desnecessariamente a dificuldade linguística da pergunta.
+5. "options": exatamente 4 alternativas de resposta. Elas precisam ser difíceis de adivinhar por eliminação, mesmo por quem nunca leu o texto-fonte. Siga estas regras ao criar as 3 alternativas erradas:
+   - Devem ser sobre o MESMO assunto/categoria da resposta certa, nunca de um assunto claramente diferente.
+   - Devem ser plausíveis para alguém que compreendeu o tema apenas parcialmente.
+   - Evite distratores obviamente falsos, absurdos ou extremos.
+   - Evite pistas linguísticas como “sempre”, “nunca”, “completamente”, “exclusivamente”, salvo quando realmente necessárias pelo conteúdo.
+   - Prefira distratores que representem confusão entre conceitos próximos, inversão de causa e efeito, aplicação incorreta de um princípio correto, conclusão parcialmente correta mas conceitualmente inadequada, ou diferença sutil relevante para o conteúdo.
+   - Devem ter aproximadamente o mesmo tamanho, estrutura gramatical e nível de especificidade da resposta certa — nunca deixe a opção correta visivelmente mais longa, mais específica ou mais "bem escrita" que as outras (isso entrega a resposta).
+   - A resposta correta não deve se destacar por repetir palavras ou expressões exclusivas usadas na explicação.
    - Evite opções vagas, incompletas ou obviamente sem sentido — todas as 4 devem soar como respostas razoáveis para quem não domina o assunto.
 6. "correct": o índice (0 a 3) da alternativa correta em "options". Varie a posição da resposta certa entre os conceitos gerados (não deixe sempre no índice 0).
 7. "page": SOMENTE se o texto-fonte contiver marcadores no formato "[[PAGINA:N]]" (um número inteiro após os dois-pontos): informe o número da página onde está o trecho que originou esse conceito — use o marcador "[[PAGINA:N]]" mais próximo ANTES do trecho usado. Se o texto-fonte não tiver nenhum marcador "[[PAGINA:N]]", omita completamente o campo "page" (ou use null).
 
 Se o texto-fonte for muito curto, genérico demais, ou não tiver conteúdo suficiente para extrair conceitos de qualidade, gere quantos conceitos de qualidade forem possíveis (pode ser menos que ${MAX_CONCEPTS}, inclusive 0 se o texto não permitir nenhum). O "resumo" deve ser gerado sempre que houver conteúdo suficiente para isso.
+
+Critérios gerais:
+- priorize qualidade em vez de quantidade
+- evite conceitos repetidos ou quase equivalentes
+- mantenha cada ficha suficientemente independente para revisão espaçada
+- preserve relações importantes entre os conceitos
+- prefira explicações conceituais a detalhes periféricos
+- se o texto apresentar uma sequência causal ou um processo, preserve essa lógica
+- se houver distinções importantes, distribua-as entre as fichas
+- não invente informação que não esteja sustentada pelo texto-fonte
+- mantenha os textos curtos o suficiente para a interface atual
 
 Os marcadores "[[PAGINA:N]]", quando presentes, são apenas metadados de posição — nunca os mencione nem os copie dentro de "resumo", "text", "q" ou "options".
 
