@@ -44,14 +44,42 @@ import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
-  getBytes
+  getBytes,
+  connectStorageEmulator
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
+// Modo emulador (só em teste E2E — ver test/e2e/): window.__USE_FIREBASE_EMULATOR__
+// é injetada pelo Playwright ANTES da página carregar (page.addInitScript,
+// ver test/e2e/fixtures.js) — nunca definida em produção ou em uso manual
+// normal do app, então este branch nunca roda fora dos testes E2E.
+//
+// precisa de um "projectId" que bata com o projeto do emulador
+// (--project demo-metodo-aprender em package.json: "test:e2e"/"test:emulator")
+// — o projectId real de produção (firebaseConfig.projectId) é um projeto
+// DIFERENTE aos olhos do Firestore/Storage Emulator, então dados
+// semeados via Admin SDK (api/_lib/firebaseAdmin.js, mesmo branch de
+// emulador) num projeto "demo-metodo-aprender" nunca apareceriam pro
+// cliente conectado ao projeto de produção — mesmo os dois falando com
+// o mesmo host:porta local. apiKey/appId não importam pro emulador (ele
+// não valida credencial nenhuma), por isso só o projectId muda aqui.
+const USE_EMULATOR = typeof window !== "undefined" && window.__USE_FIREBASE_EMULATOR__;
+const activeConfig = USE_EMULATOR
+  ? Object.assign({}, firebaseConfig, { projectId: "demo-metodo-aprender", storageBucket: "demo-metodo-aprender.appspot.com" })
+  : firebaseConfig;
+
+const app = initializeApp(activeConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+if (USE_EMULATOR) {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8085);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
+}
 
 function sanitizeKeyPart(str){
   // Garante que o ID do documento no Firestore não tenha caracteres problemáticos
