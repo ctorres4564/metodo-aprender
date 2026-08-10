@@ -19,6 +19,7 @@ import { verifyUserFromRequest } from "./_lib/usage.js";
 import { getStripe } from "./_lib/stripe.js";
 import { adminDb } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
+import { withSentry } from "./_lib/sentry.js";
 
 const APP_URL = process.env.APP_URL || "https://metodo-aprender-ten.vercel.app";
 const TRIAL_DAYS = 7;
@@ -45,7 +46,7 @@ const INCOMPLETE_RECENT_MS = 60 * 60 * 1000;
 // nunca se cria outra enquanto uma dessas existir.
 const BLOCKING_SUBSCRIPTION_STATUSES = ["trialing", "active", "past_due", "unpaid"];
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -182,3 +183,5 @@ export default async function handler(req, res) {
     }
   }
 }
+
+export default withSentry(handler);

@@ -41,6 +41,7 @@
    ===================================================================== */
 
 import { adminAuth, adminDb } from "./_lib/firebaseAdmin.js";
+import { withSentry } from "./_lib/sentry.js";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const FROM_EMAIL = process.env.REMINDER_FROM_EMAIL || "onboarding@resend.dev";
@@ -184,7 +185,7 @@ async function processUsersWithConcurrency(uids, db, limit) {
   return results;
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const authHeader = req.headers["authorization"] || req.headers["Authorization"];
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     res.status(401).json({ error: "Não autorizado." });
@@ -219,3 +220,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: e.message });
   }
 }
+
+export default withSentry(handler);

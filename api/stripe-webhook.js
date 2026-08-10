@@ -23,6 +23,7 @@
 
 import { getStripe } from "./_lib/stripe.js";
 import { adminDb, adminAuth } from "./_lib/firebaseAdmin.js";
+import { withSentry } from "./_lib/sentry.js";
 
 export const config = {
   api: { bodyParser: false }
@@ -117,7 +118,7 @@ async function handleCheckoutCompleted(session) {
 
 const ACTIVE_STATUSES = ["trialing", "active"];
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).end();
     return;
@@ -187,3 +188,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Falha ao processar evento." });
   }
 }
+
+export default withSentry(handler);

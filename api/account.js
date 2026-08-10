@@ -26,6 +26,7 @@ import { verifyUserFromRequest } from "./_lib/usage.js";
 import { adminDb, adminAuth, adminStorage } from "./_lib/firebaseAdmin.js";
 import { getStripe } from "./_lib/stripe.js";
 import { FieldPath } from "firebase-admin/firestore";
+import { withSentry } from "./_lib/sentry.js";
 
 const BATCH_SIZE = 400; // margem de segurança abaixo do limite de 500 por batch do Firestore
 
@@ -200,7 +201,7 @@ async function handleDeleteAccount(req, res, user) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -221,3 +222,5 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "action inválida (use 'delete')." });
   }
 }
+
+export default withSentry(handler);

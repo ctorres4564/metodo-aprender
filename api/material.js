@@ -42,6 +42,7 @@ import { verifyUserFromRequest, getUserPlan } from "./_lib/usage.js";
 import { adminDb, adminStorage } from "./_lib/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { MATERIAL_LIMITS } from "./_lib/materialLimits.js";
+import { withSentry } from "./_lib/sentry.js";
 
 // Materiais que ainda contam pra cota (exclui "failed" — upload que não deu
 // certo não deveria ocupar vaga pra sempre — e "deleting", que já está a
@@ -347,7 +348,7 @@ async function handleDelete(req, res, user) {
 }
 
 /* ---- roteador --------------------------------------------------------- */
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método não permitido." });
     return;
@@ -376,3 +377,5 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "action inválida (use 'create', 'updateStatus', 'registerModule', 'recordRead' ou 'delete')." });
   }
 }
+
+export default withSentry(handler);
