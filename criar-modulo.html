@@ -257,7 +257,13 @@ function escapeAttr(s){ return escapeHtml(s).replace(/"/g, "&quot;"); }
 
 function addConceptCard(data){
   const container = document.getElementById("concepts-editor");
-  const idx = container.children.length;
+  // Precisa ser um contador crescente, nunca container.children.length: ao
+  // remover um card do meio e adicionar outro depois, children.length pode
+  // repetir o idx de um card que ainda está na tela — como o idx vira o
+  // name="correct-N" do grupo de radio (ver conceptTemplate), dois cards
+  // com o mesmo idx compartilham o mesmo grupo, e marcar a alternativa
+  // correta num desmarca a do outro.
+  const idx = conceptCount++;
   container.appendChild(conceptTemplate(idx, data));
 }
 
