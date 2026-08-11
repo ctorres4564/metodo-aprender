@@ -17,7 +17,8 @@ function initAuthGate(onReady){
   function showLoading(msg){
     gate.style.display = "block";
     if(appRoot) appRoot.style.display = "none";
-    gate.innerHTML = `<div class="panel" style="max-width:380px; margin:60px auto; text-align:center;"><p class="lead">${msg}</p></div>`;
+    gate.innerHTML = `<div class="panel" style="max-width:380px; margin:60px auto; text-align:center;"><p class="lead"></p></div>`;
+    gate.querySelector(".lead").textContent = String(msg || "");
   }
 
   function showApp(){

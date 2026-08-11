@@ -49,6 +49,7 @@ async function deleteMaterialSubcollections(materialRef) {
   await deleteQueryInBatches(materialRef.collection("pages"));
   await deleteQueryInBatches(materialRef.collection("highlights"));
   await deleteQueryInBatches(materialRef.collection("notes"));
+  await deleteQueryInBatches(materialRef.collection("generatedModules"));
 }
 
 // SEGURANÇA/FINANCEIRO (A1-01): sem isso, excluir a conta apagava todos os

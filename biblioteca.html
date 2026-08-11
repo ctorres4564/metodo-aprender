@@ -91,6 +91,12 @@
 <script src="assets/api-client.js"></script>
 <script src="assets/pwa.js"></script>
 <script>
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
 const STATUS_LABELS = {
   uploading: "Enviando...",
   processing: "Processando...",
@@ -156,8 +162,8 @@ async function loadMaterials(){
     materials.forEach(m=>{
       const card = document.createElement("div");
       card.className = "material-card";
-      const statusClass = `status-${m.status || "processing"}`;
-      const statusLabel = STATUS_LABELS[m.status] || m.status;
+      const statusClass = `status-${String(m.status || "processing").replace(/[^a-z-]/gi, "")}`;
+      const statusLabel = STATUS_LABELS[m.status] || m.status || "Processando";
       const sourceLabel = m.sourceType === "pdf" ? "PDF" : "Texto colado";
       const sizeInfo = m.sourceType === "pdf" && m.fileSize ? ` · ${formatSize(m.fileSize)}` : "";
       const ocrInfo = m.usedOcr ? ` · OCR em ${m.ocrPageCount || 0} pág.` : "";
@@ -168,21 +174,21 @@ async function loadMaterials(){
 
       card.innerHTML = `
         <div class="top">
-          <h3>${(m.title || "Sem título").replace(/</g,"&lt;")}</h3>
-          <span class="status-chip ${statusClass}">${statusLabel}</span>
+          <h3>${escapeHtml(m.title || "Sem título")}</h3>
+          <span class="status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
         </div>
         <div class="meta-line">${sourceLabel}${sizeInfo}${ocrInfo}</div>
         <div class="meta-line">${m.pageCount ? m.pageCount + " página(s) · " : ""}${moduleInfo}</div>
         <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
         ${m.lastOpenedAt ? `<div class="meta-line">Última leitura: ${formatDate(m.lastOpenedAt)}${m.lastPageRead ? ` · pág. ${m.lastPageRead}` : ""}</div>` : ""}
-        ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${m.processingError.replace(/</g,"&lt;")}</div>` : ""}
+        ${m.status === "failed" && m.processingError ? `<div class="meta-line" style="color:var(--danger);">${escapeHtml(m.processingError)}</div>` : ""}
         ${stuck ? `<div class="stuck-warning">⚠️ Isso está demorando muito mais que o normal — pode ter travado (aba fechada ou conexão perdida durante o envio).</div>` : ""}
         <div class="material-actions">
           ${m.status === "ready" ? `<a class="btn secondary" style="text-decoration:none;" href="importar-livro.html?material=${encodeURIComponent(m.id)}">📖 Usar</a>` : ""}
           ${m.status === "ready" && m.sourceType === "pdf" ? `<a class="btn secondary" style="text-decoration:none;" href="leitor.html?material=${encodeURIComponent(m.id)}${m.lastPageRead ? "&page=" + encodeURIComponent(m.lastPageRead) : ""}">📄 ${m.lastPageRead ? "Continuar leitura" : "Abrir PDF"}</a>` : ""}
-          ${stuck ? `<button class="btn secondary retry-material" data-id="${m.id}" title="Reconsulta o status atual deste material agora — não retoma upload, extração ou OCR." aria-label="Verificar novamente o status deste material">🔄 Verificar novamente</button>` : ""}
-          ${stuck ? `<button class="btn ghost mark-failed-material" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">❌ Marcar como falhou</button>` : ""}
-          <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${m.id}" data-title="${(m.title || "este material").replace(/"/g,'&quot;')}">🗑️ Excluir</button>
+          ${stuck ? `<button class="btn secondary retry-material" data-id="${escapeHtml(m.id)}" title="Reconsulta o status atual deste material agora — não retoma upload, extração ou OCR." aria-label="Verificar novamente o status deste material">🔄 Verificar novamente</button>` : ""}
+          ${stuck ? `<button class="btn ghost mark-failed-material" data-id="${escapeHtml(m.id)}" data-title="${escapeHtml(m.title || "este material")}">❌ Marcar como falhou</button>` : ""}
+          <button class="btn ghost delete-material" style="color:var(--danger);" data-id="${escapeHtml(m.id)}" data-title="${escapeHtml(m.title || "este material")}">🗑️ Excluir</button>
         </div>
       `;
       grid.appendChild(card);
@@ -228,7 +234,7 @@ async function loadMaterials(){
           loadMaterials();
         }catch(e){
           console.error(e);
-          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${e.message || "Não foi possível atualizar agora. Tente novamente."}</div>`;
+          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${escapeHtml(e.message || "Não foi possível atualizar agora. Tente novamente.")}</div>`;
           btn.disabled = false;
           btn.textContent = "❌ Marcar como falhou";
         }
@@ -253,7 +259,7 @@ async function loadMaterials(){
           loadMaterials();
         }catch(e){
           console.error(e);
-          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${e.message || "Não foi possível excluir agora. Tente novamente."}</div>`;
+          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${escapeHtml(e.message || "Não foi possível excluir agora. Tente novamente.")}</div>`;
           btn.disabled = false;
           btn.textContent = "🗑️ Excluir";
         }

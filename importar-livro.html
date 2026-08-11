@@ -93,6 +93,7 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
+<script src="assets/module-drafts.js"></script>
 <script src="assets/material-limits.js"></script>
 <script src="assets/pwa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js"></script>
@@ -103,6 +104,12 @@
   window.pdfjsLib = pdfjsLib;
 </script>
 <script>
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
 const MAX_SOURCE_CHARS = (window.MaterialLimits && window.MaterialLimits.maxSourceCharsPerGeneration) || 14000;
 const TEXT_MODE_THRESHOLD = 35000;
 
@@ -442,7 +449,7 @@ async function openMaterial(materialId){
   }catch(e){
     console.error(e);
     document.getElementById("upload-panel").style.display = "block";
-    fb.innerHTML = `<div class="feedback bad">${e.message || "Erro ao carregar material."}</div>`;
+    fb.innerHTML = `<div class="feedback bad">${escapeHtml(e.message || "Erro ao carregar material.")}</div>`;
   }
 }
 
@@ -540,7 +547,7 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
     }
   }catch(e){
     console.error(e);
-    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${escapeHtml(e.message || "tente novamente.")}</div>`;
     if(materialId){
       try{
         await updateMaterialStatus(materialId, { status: "failed", processingError: (e.message || "Falha desconhecida.").slice(0, 500) });
@@ -602,14 +609,14 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
     }
     if(!locData.found){
       row.className = "request-row err";
-      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${target}" não encontrada</div><div class="meta">Tente descrever de outra forma, ou confira se esse trecho existe no livro carregado.</div></div>`;
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${escapeHtml(target)}" não encontrada</div><div class="meta">Tente descrever de outra forma, ou confira se esse trecho existe no livro carregado.</div></div>`;
       return;
     }
 
     const startOffset = anchorToOffset(locData.startAnchor, mode);
     if(startOffset < 0){
       row.className = "request-row err";
-      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Não consegui localizar "${target}" no texto</div><div class="meta">Tente novamente ou descreva de outra forma.</div></div>`;
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Não consegui localizar "${escapeHtml(target)}" no texto</div><div class="meta">Tente novamente ou descreva de outra forma.</div></div>`;
       return;
     }
     let endOffset = bookFullText.length;
@@ -656,7 +663,7 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
 
     if(!genResp.ok || !genData.concepts || genData.concepts.length === 0){
       row.className = "request-row err";
-      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${sectionTitle}"</div><div class="meta">${genData.error || "Não foi possível gerar conceitos."}</div></div>`;
+      row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">"${escapeHtml(sectionTitle)}"</div><div class="meta">${escapeHtml(genData.error || "Não foi possível gerar conceitos.")}</div></div>`;
       return;
     }
 
@@ -688,27 +695,21 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
       sourcePageEnd: sourcePageEnd,
       generatedAt: Date.now()
     };
-    await window.AppDB.saveUserModule(moduleId, moduleData);
-
-    if(currentMaterialId){
-      try{
-        await authedFetch("/api/material", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "registerModule", materialId: currentMaterialId })
-        });
-      }catch(e){
-        console.warn("Falha ao registrar módulo no material (não afeta o resultado):", e);
-      }
-    }
-
-    row.className = "request-row ok";
-    row.innerHTML = `<span class="icon">✅</span><div class="body"><div class="title">"${sectionTitle}"</div><div class="meta">${genData.concepts.length} conceito(s) gerado(s) e salvo(s) em Meus Módulos.</div></div>`;
-    targetInput.value = "";
+    // IA propõe; a pessoa valida. Nada é persistido no Firestore aqui.
+    // O editor compartilhado restaura este rascunho, permite editar/excluir/
+    // regenerar conceitos e só salva quando a pessoa confirmar explicitamente.
+    window.ModuleDrafts.save(moduleId, {
+      mode: "import",
+      moduleId,
+      moduleData,
+      needsMaterialRegistration: !!currentMaterialId,
+      hasContent: true
+    });
+    window.location.href = `criar-modulo.html?draft=${encodeURIComponent(moduleId)}&review=1`;
   }catch(e){
     console.error(e);
     row.className = "request-row err";
-    row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Erro ao processar "${target}"</div><div class="meta">${e.message || "tente novamente."}</div></div>`;
+    row.innerHTML = `<span class="icon">❌</span><div class="body"><div class="title">Erro ao processar "${escapeHtml(target)}"</div><div class="meta">${escapeHtml(e.message || "tente novamente.")}</div></div>`;
   }finally{
     btn.disabled = false;
   }

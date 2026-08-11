@@ -476,7 +476,7 @@ async function loadAnalogy(c){
     });
     const data = await resp.json();
     if(!resp.ok){
-      box.innerHTML = `<div class="feedback bad" style="margin-top:10px;">${data.error || "Não foi possível gerar a analogia agora."}</div>`;
+      box.innerHTML = `<div class="feedback bad" style="margin-top:10px;">${escapeHtml(data.error || "Não foi possível gerar a analogia agora.")}</div>`;
       return;
     }
     STATE.cards[c.id].analogy = data.analogia;
@@ -796,7 +796,7 @@ async function handleExplainSubmit(c, studentText){
     console.error(e);
     resultBox.innerHTML = `
       <div class="feedback bad" style="margin-top:12px;">
-        Não foi possível avaliar sua explicação agora (${e.message}). Tente novamente em instantes.
+        Não foi possível avaliar sua explicação agora (${escapeHtml(e.message || "erro inesperado")}). Tente novamente em instantes.
       </div>`;
     submitBtn.disabled = false;
     submitBtn.textContent = "🎓 Avaliar explicação";
@@ -1128,7 +1128,7 @@ function renderProgress(){
 }
 
 function escapeHtml(s){
-  return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 // Renderiza o resumo do módulo (CONFIG.homeIntro) como texto formatado: linhas

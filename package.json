@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@sentry/node": "^10.69.0",
-    "firebase-admin": "^12.6.0",
+    "firebase-admin": "14.2.0",
     "stripe": "^17.0.0"
   },
   "devDependencies": {

@@ -525,7 +525,8 @@
 						const resp = await authedFetch(endpoint, { method: 'POST' });
 						const data = await resp.json();
 						if (!resp.ok || !data.url) {
-							fb.innerHTML = `<div class="feedback bad">${data.error || 'Não foi possível continuar agora.'}</div>`;
+							fb.textContent = data.error || 'Não foi possível continuar agora.';
+							fb.className = 'feedback bad';
 							btn.disabled = false;
 							btn.textContent = originalText;
 							return;
@@ -533,7 +534,8 @@
 						window.location.href = data.url;
 					} catch (e) {
 						console.error(e);
-						fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || 'tente novamente.'}</div>`;
+						fb.textContent = `Erro ao processar: ${e.message || 'tente novamente.'}`;
+						fb.className = 'feedback bad';
 						btn.disabled = false;
 						btn.textContent = originalText;
 					}
