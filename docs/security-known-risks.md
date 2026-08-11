@@ -2,18 +2,21 @@
 
 ## Dependências transitivas do Firebase Admin
 
-Data da verificação: 05/08/2026
+Data da última verificação: 10/08/2026
 
 Resultado do npm audit:
-- 8 vulnerabilidades moderadas
-- causa raiz: uuid < 11.1.1
+- 7 vulnerabilidades moderadas de produção, nenhuma alta ou crítica
+- causas transitivas remanescentes: `uuid`, `retry-request`/`teeny-request`
+  via Firebase Storage e `@opentelemetry/core` via Sentry
 - advisory: GHSA-w5hq-g745-h8pq
 - cadeia afetada: firebase-admin → google-gax / gaxios / teeny-request / retry-request / @google-cloud/firestore / @google-cloud/storage → uuid
-- correção automática sugerida pelo npm: firebase-admin@14.2.0
-- essa correção exige atualização de major com breaking changes
-- decisão atual: manter firebase-admin 12.7.0 temporariamente
-- justificativa: vulnerabilidades transitivas moderadas, sem evidência de exploração direta no fluxo atual, e upgrade exige migração controlada para Node 22 + testes de Auth, Firestore, Storage, webhook Stripe e exclusão de conta
-- ação futura: reavaliar a migração para firebase-admin 14.x em branch separada e ambiente de preview/staging
+- `firebase-admin` foi atualizado de 12.7.0 para 14.2.0
+- a migração passou nos testes unitários e nos testes com emuladores de Auth,
+  Firestore e Storage
+- os alertas restantes não possuem atualização transitiva segura publicada na
+  árvore atual; não foram usados `overrides` incompatíveis
+- ação futura: atualizar Firebase Admin, Google Cloud Storage e Sentry assim que
+  versões corrigidas forem publicadas e repetir `npm audit --omit=dev`
 
 ## Controles compensatórios atuais
 

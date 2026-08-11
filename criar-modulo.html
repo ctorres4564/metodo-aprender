@@ -128,6 +128,7 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
+<script src="assets/module-drafts.js"></script>
 <script src="assets/pwa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js"></script>
 <script src="assets/ocr.js"></script>
@@ -140,6 +141,9 @@
 let editingId = null;
 let editingOriginalMod = null;
 let conceptCount = 0;
+let activeDraft = null;
+let draftSaveTimer = null;
+let draftFinalizing = false;
 
 // Preserva, no próprio elemento do card, os campos que o formulário não
 // tem input pra editar (id original do conceito, página/trecho de origem
@@ -182,7 +186,7 @@ function conceptTemplate(idx, data){
     </div>
     <div class="regen-feedback"></div>
   `;
-  wrap.querySelector(".remove-concept").addEventListener("click", ()=> wrap.remove());
+  wrap.querySelector(".remove-concept").addEventListener("click", ()=>{ wrap.remove(); scheduleDraftSave(); });
   wrap.querySelector(".regen-concept-btn").addEventListener("click", ()=> regenerateConcept(wrap));
   return wrap;
 }
@@ -242,6 +246,7 @@ async function regenerateConcept(wrap){
 
     fb.className = "regen-feedback ok";
     fb.textContent = "✅ Conceito atualizado — revise antes de salvar.";
+    scheduleDraftSave();
   }catch(e){
     console.error(e);
     fb.className = "regen-feedback bad";
@@ -252,7 +257,7 @@ async function regenerateConcept(wrap){
   }
 }
 
-function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function escapeAttr(s){ return escapeHtml(s).replace(/"/g, "&quot;"); }
 
 function addConceptCard(data){
@@ -265,6 +270,76 @@ function addConceptCard(data){
   // correta num desmarca a do outro.
   const idx = conceptCount++;
   container.appendChild(conceptTemplate(idx, data));
+}
+
+function partialConcepts(){
+  return Array.from(document.querySelectorAll("#concepts-editor .concept-editor")).map((card, i)=>{
+    const correctRadio = card.querySelector(".c-correct:checked");
+    const concept = {
+      id: card.dataset.origId || null,
+      tag: card.querySelector(".c-tag").value,
+      title: card.querySelector(".c-title").value,
+      text: card.querySelector(".c-text").value,
+      q: card.querySelector(".c-question").value,
+      options: Array.from(card.querySelectorAll(".c-opt")).map(input => input.value),
+      correct: correctRadio ? parseInt(correctRadio.value, 10) : 0,
+      _order: i
+    };
+    if(card.dataset.sourcePage) concept.sourcePage = parseInt(card.dataset.sourcePage, 10);
+    if(card.dataset.sourceExcerpt) concept.sourceExcerpt = card.dataset.sourceExcerpt;
+    return concept;
+  });
+}
+
+function editorModuleData(){
+  const base = activeDraft && activeDraft.moduleData || editingOriginalMod || {};
+  const moduleId = activeDraft && activeDraft.moduleId || editingId || null;
+  return Object.assign({}, base, {
+    config: Object.assign({}, base.config || {}, {
+      appTitle: document.getElementById("mod-title").value,
+      appSubtitle: document.getElementById("mod-subtitle").value,
+      logoEmoji: document.getElementById("mod-icon").value,
+      sourceCredit: document.getElementById("mod-source").value,
+      homeIntro: document.getElementById("mod-summary").value,
+      storageKey: (base.config && base.config.storageKey) || (moduleId ? `estudo_${moduleId}_v1` : "")
+    }),
+    concepts: partialConcepts()
+  });
+}
+
+function scheduleDraftSave(){
+  if(draftFinalizing || !activeDraft || !window.ModuleDrafts) return;
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(()=>{
+    try{
+      const moduleData = editorModuleData();
+      const hasContent = !!(moduleData.config.appTitle.trim() || moduleData.config.homeIntro.trim() ||
+        moduleData.concepts.some(c => c.title.trim() || c.text.trim() || c.q.trim()));
+      activeDraft = window.ModuleDrafts.save(activeDraft.draftId, Object.assign({}, activeDraft, { moduleData, hasContent }));
+    }catch(e){
+      console.warn("Não foi possível salvar o rascunho local:", e);
+      const feedback = document.getElementById("save-feedback");
+      if(feedback) feedback.innerHTML = '<div class="feedback bad">Não foi possível atualizar o rascunho neste navegador. Salve o módulo antes de sair.</div>';
+    }
+  }, 500);
+}
+
+function applyModuleToEditor(moduleData, reviewMode){
+  const mod = moduleData || {};
+  const config = mod.config || {};
+  document.getElementById("mod-title").value = config.appTitle || "";
+  document.getElementById("mod-subtitle").value = config.appSubtitle || "";
+  document.getElementById("mod-icon").value = config.logoEmoji || "📘";
+  document.getElementById("mod-source").value = config.sourceCredit || "";
+  document.getElementById("mod-summary").value = config.homeIntro || "";
+  document.getElementById("concepts-editor").innerHTML = "";
+  conceptCount = 0;
+  (mod.concepts || []).forEach(c => addConceptCard(c));
+  if(!(mod.concepts || []).length) addConceptCard();
+  if(reviewMode){
+    document.getElementById("page-title").textContent = "Revisar módulo gerado";
+    document.getElementById("save-feedback").innerHTML = '<div class="feedback">Revise, edite, exclua ou regenere os conceitos. O módulo ainda não foi salvo.</div>';
+  }
 }
 
 function slugify(str){
@@ -367,7 +442,7 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
     if(!sourceText && fileInput.files && fileInput.files[0]){
       btn.textContent = "Lendo PDF...";
       sourceText = await extractPdfText(fileInput.files[0], (msg)=>{
-        fb.innerHTML = `<div class="feedback">${msg}</div>`;
+        fb.innerHTML = `<div class="feedback">${escapeHtml(msg)}</div>`;
       });
     }
 
@@ -387,7 +462,7 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
     const data = await resp.json();
 
     if(!resp.ok){
-      fb.innerHTML = `<div class="feedback bad">${data.error || "Não foi possível gerar conceitos agora."}</div>`;
+      fb.innerHTML = `<div class="feedback bad">${escapeHtml(data.error || "Não foi possível gerar conceitos agora.")}</div>`;
       btn.disabled = false;
       btn.textContent = "✨ Gerar conceitos com IA";
       return;
@@ -417,7 +492,7 @@ document.getElementById("import-generate-btn").addEventListener("click", async (
     document.getElementById("concepts-editor").scrollIntoView({ behavior: "smooth", block: "start" });
   }catch(e){
     console.error(e);
-    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${e.message || "tente novamente."}</div>`;
+    fb.innerHTML = `<div class="feedback bad">Erro ao processar: ${escapeHtml(e.message || "tente novamente.")}</div>`;
   }finally{
     btn.disabled = false;
     btn.textContent = "✨ Gerar conceitos com IA";
@@ -429,17 +504,20 @@ async function loadForEdit(id){
   if(!mod) return;
   editingId = id;
   editingOriginalMod = mod;
+  const draftId = `edit-${id}`;
+  const savedDraft = window.ModuleDrafts.load(draftId);
+  if(savedDraft && window.confirm("Existe um rascunho não salvo desta edição. Restaurar?")){
+    activeDraft = savedDraft;
+    applyModuleToEditor(savedDraft.moduleData, false);
+  }else{
+    if(savedDraft) window.ModuleDrafts.remove(draftId);
+    activeDraft = { draftId, mode: "edit", moduleId: id, moduleData: mod, hasContent: true };
+    applyModuleToEditor(mod, false);
+  }
   document.getElementById("page-title").textContent = "Editar módulo";
-  document.getElementById("mod-title").value = mod.config.appTitle || "";
-  document.getElementById("mod-subtitle").value = mod.config.appSubtitle || "";
-  document.getElementById("mod-icon").value = mod.config.logoEmoji || "📘";
-  document.getElementById("mod-source").value = mod.config.sourceCredit || "";
-  document.getElementById("mod-summary").value = mod.config.homeIntro || "";
-  document.getElementById("concepts-editor").innerHTML = "";
-  (mod.concepts || []).forEach(c => addConceptCard(c));
 }
 
-document.getElementById("add-concept-btn").addEventListener("click", ()=> addConceptCard());
+document.getElementById("add-concept-btn").addEventListener("click", ()=>{ addConceptCard(); scheduleDraftSave(); });
 
 document.getElementById("save-module-btn").addEventListener("click", async ()=>{
   const fb = document.getElementById("save-feedback");
@@ -459,11 +537,11 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
     return;
   }
   if(errors.length > 0){
-    fb.innerHTML = `<div class="feedback bad">${errors.join("<br>")}</div>`;
+    fb.innerHTML = `<div class="feedback bad">${errors.map(escapeHtml).join("<br>")}</div>`;
     return;
   }
 
-  const id = editingId || generateModuleId(title);
+  const id = (activeDraft && activeDraft.moduleId) || editingId || generateModuleId(title);
   const moduleData = {
     config: {
       appTitle: title,
@@ -480,39 +558,80 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
   // o material de origem (sourceMaterialId etc.), quebrando "voltar ao
   // trecho original" (Etapa 2), a busca por esse módulo (Etapa 4a) e
   // qualquer anotação já vinculada a ele (Etapa 3).
-  if(editingId && editingOriginalMod){
-    if(editingOriginalMod.sourceMaterialId) moduleData.sourceMaterialId = editingOriginalMod.sourceMaterialId;
-    if(editingOriginalMod.sourceMaterialTitle) moduleData.sourceMaterialTitle = editingOriginalMod.sourceMaterialTitle;
-    if(editingOriginalMod.sourcePageStart != null) moduleData.sourcePageStart = editingOriginalMod.sourcePageStart;
-    if(editingOriginalMod.sourcePageEnd != null) moduleData.sourcePageEnd = editingOriginalMod.sourcePageEnd;
-    if(editingOriginalMod.generatedAt != null) moduleData.generatedAt = editingOriginalMod.generatedAt;
+  const originalData = (activeDraft && activeDraft.moduleData) || editingOriginalMod;
+  if(originalData){
+    if(originalData.sourceMaterialId) moduleData.sourceMaterialId = originalData.sourceMaterialId;
+    if(originalData.sourceMaterialTitle) moduleData.sourceMaterialTitle = originalData.sourceMaterialTitle;
+    if(originalData.sourcePageStart != null) moduleData.sourcePageStart = originalData.sourcePageStart;
+    if(originalData.sourcePageEnd != null) moduleData.sourcePageEnd = originalData.sourcePageEnd;
+    if(originalData.generatedAt != null) moduleData.generatedAt = originalData.generatedAt;
   }
 
   const btn = document.getElementById("save-module-btn");
   btn.disabled = true;
   btn.textContent = "Salvando...";
+  draftFinalizing = true;
+  clearTimeout(draftSaveTimer);
   try{
     await window.AppDB.saveUserModule(id, moduleData);
+    if(activeDraft && activeDraft.needsMaterialRegistration && moduleData.sourceMaterialId){
+      try{
+        const registration = await authedFetch("/api/material", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "registerModule", materialId: moduleData.sourceMaterialId, moduleId: id })
+        });
+        if(!registration.ok) console.warn("Módulo salvo, mas o vínculo com o material não foi confirmado.");
+      }catch(e){
+        console.warn("Módulo salvo, mas o vínculo com o material não foi confirmado:", e);
+      }
+    }
+    if(activeDraft) window.ModuleDrafts.remove(activeDraft.draftId);
     window.location.href = `app.html?m=${encodeURIComponent(id)}&src=user`;
   }catch(e){
     console.error(e);
+    draftFinalizing = false;
     fb.innerHTML = `<div class="feedback bad">Não foi possível salvar agora. Tente novamente.</div>`;
     btn.disabled = false;
     btn.textContent = "💾 Salvar módulo";
   }
 });
 
-function boot(){
+async function boot(){
   const params = new URLSearchParams(window.location.search);
   const editId = params.get("edit");
+  const draftId = params.get("draft");
   if(editId){
-    loadForEdit(editId);
+    await loadForEdit(editId);
+  } else if(draftId){
+    const draft = window.ModuleDrafts.load(draftId);
+    if(draft){
+      activeDraft = draft;
+      applyModuleToEditor(draft.moduleData, draft.mode === "import");
+    }else{
+      document.getElementById("save-feedback").innerHTML = '<div class="feedback bad">Este rascunho não existe mais ou expirou.</div>';
+      activeDraft = { draftId, mode: "manual", moduleId: null, moduleData: {}, hasContent: false };
+      addConceptCard();
+    }
   } else {
+    const latest = window.ModuleDrafts.latest();
+    if(latest && window.confirm("Existe um rascunho não salvo. Restaurar?")){
+      activeDraft = latest;
+      history.replaceState(null, "", `criar-modulo.html?draft=${encodeURIComponent(latest.draftId)}`);
+      applyModuleToEditor(latest.moduleData, latest.mode === "import");
+      return;
+    }
+    const newDraftId = `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+    activeDraft = { draftId: newDraftId, mode: "manual", moduleId: null, moduleData: {}, hasContent: false };
+    history.replaceState(null, "", `criar-modulo.html?draft=${encodeURIComponent(newDraftId)}`);
     addConceptCard();
     addConceptCard();
     addConceptCard();
   }
 }
+
+document.getElementById("app-root").addEventListener("input", scheduleDraftSave);
+document.getElementById("app-root").addEventListener("change", scheduleDraftSave);
 
 initAuthGate(()=>{
   bindLogoutButton();

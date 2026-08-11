@@ -114,9 +114,9 @@ async function init(){
       if(!isReady) card.style.opacity = "0.55";
 
       card.innerHTML = `
-        <div class="ic">${m.icon || "📘"}</div>
-        <h3>${m.title}</h3>
-        <p>${m.subtitle || ""}</p>
+        <div class="ic">${escapeHtml(m.icon || "📘")}</div>
+        <h3>${escapeHtml(m.title || "")}</h3>
+        <p>${escapeHtml(m.subtitle || "")}</p>
         <div class="meta">
           <span>${m.conceptCount ? m.conceptCount + " conceitos" : (m.comingSoon ? "Em breve" : "")}</span>
           <span class="plan-chip ${planClass}">${planLabel}</span>

@@ -110,7 +110,8 @@ document.getElementById("delete-account-btn").addEventListener("click", async ()
     setTimeout(()=>{ window.location.href = "index.html"; }, 1500);
   }catch(e){
     console.error(e);
-    fb.innerHTML = `<div class="feedback bad">${e.message || "Não foi possível excluir sua conta agora. Tente novamente."}</div>`;
+    fb.textContent = e.message || "Não foi possível excluir sua conta agora. Tente novamente.";
+    fb.className = "feedback bad";
     btn.disabled = false;
     btn.textContent = "🗑️ Excluir minha conta permanentemente";
   }
