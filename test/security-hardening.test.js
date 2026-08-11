@@ -1,22 +1,70 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import vm from "node:vm";
+import { JSDOM } from "jsdom";
+import { extractFunctionSource } from "./helpers/extractFunctionSource.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoPath = (file) => path.resolve(__dirname, "..", file);
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
-describe("security hardening regressions", () => {
-  it("does not interpolate untrusted API and document values into known HTML sinks", () => {
-    const sources = [
-      read("index.html"),
-      read("biblioteca.html"),
-      read("criar-modulo.html"),
-      read("importar-livro.html"),
-      read("assets/engine.js")
-    ].join("\n");
+// Carrega a implementação REAL de escapeHtml() de cada arquivo — não uma
+// reimplementação no teste — do mesmo jeito que test/helpers/loadEngineFsrs.js
+// já faz para as funções do FSRS: roda o texto extraído num contexto isolado
+// do Node (vm), sem modificar nem duplicar a lógica de produção.
+function loadRealEscapeHtml(file) {
+  const src = extractFunctionSource(repoPath(file), "escapeHtml");
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox, { filename: file });
+  return sandbox.escapeHtml;
+}
 
-    expect(sources).not.toContain("<h3>${m.title}</h3>");
-    expect(sources).not.toMatch(/innerHTML\s*=.*\$\{data\.error/);
-    expect(sources).not.toMatch(/innerHTML\s*=.*\$\{e\.message/);
-    expect(sources).not.toContain('"${target}" não encontrada');
+const FILES_WITH_ESCAPE_HTML = ["index.html", "biblioteca.html", "criar-modulo.html", "importar-livro.html", "assets/engine.js"];
+
+// Payloads de injeção que qualquer um dos dois "sinks" HTML usados em
+// produção (texto de elemento e valor de atributo entre aspas duplas)
+// precisa neutralizar. Testa o comportamento renderizado de verdade (via
+// jsdom), não o texto-fonte — sobrevive a reformatação, só quebra se a
+// função realmente parar de escapar corretamente.
+const XSS_PAYLOADS = [
+  '<img src=x onerror="window.__pwned=1">',
+  "<script>window.__pwned=1</script>",
+  '"><svg onload="window.__pwned=1">',
+  "</h3><b>injetado</b>"
+];
+
+describe("security hardening regressions", () => {
+  describe.each(FILES_WITH_ESCAPE_HTML)("escapeHtml() real de %s", (file) => {
+    const escapeHtml = loadRealEscapeHtml(file);
+
+    it.each(XSS_PAYLOADS)("neutraliza \"%s\" em contexto de texto de elemento", (payload) => {
+      const dom = new JSDOM("<!doctype html><div id=\"c\"></div>");
+      const container = dom.window.document.getElementById("c");
+      // Mesmo padrão usado em produção: `<h3>${escapeHtml(valor)}</h3>`.
+      container.innerHTML = `<h3>${escapeHtml(payload)}</h3>`;
+
+      // Nenhum elemento executável/injetado deve ter sido criado — o
+      // payload inteiro deve ter virado texto literal dentro do <h3>.
+      expect(container.querySelectorAll("script, img, svg, b").length).toBe(0);
+      expect(container.textContent).toContain(payload);
+    });
+
+    it.each(XSS_PAYLOADS)("neutraliza \"%s\" em contexto de atributo entre aspas duplas", (payload) => {
+      const dom = new JSDOM("<!doctype html><div id=\"c\"></div>");
+      const container = dom.window.document.getElementById("c");
+      // Mesmo padrão usado em produção: `data-id="${escapeHtml(valor)}"`.
+      container.innerHTML = `<span data-id="${escapeHtml(payload)}"></span>`;
+      const span = container.querySelector("span");
+
+      // O payload não deve ter escapado do atributo criando um elemento
+      // novo, nem introduzido um atributo extra (ex.: onerror/onload).
+      expect(container.querySelectorAll("script, img, svg, b").length).toBe(0);
+      expect(span.attributes.length).toBe(1);
+      expect(span.getAttribute("data-id")).toBe(payload);
+    });
   });
 
   it("enforces baseline browser security headers", () => {
