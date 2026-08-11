@@ -10,12 +10,12 @@
    do app depois de um novo deploy.
    ===================================================================== */
 
-// V4: v4 -> v5. Bump sempre que SHELL_FILES mudar (como agora) — o
+// Bump sempre que SHELL_FILES mudar — o
 // "activate" abaixo já apaga QUALQUER cache com nome diferente do atual
 // (não só "v4" especificamente), então essa troca de nome sozinha garante
 // que o cache antigo (com a lista de arquivos desatualizada) some na
 // próxima ativação, sem precisar listar versões antigas manualmente aqui.
-const CACHE_NAME = "metodo-aprender-shell-v5";
+const CACHE_NAME = "metodo-aprender-shell-v6";
 
 // V4: lista revisada — cada arquivo aqui precisa (a) existir de fato no
 // projeto e (b) ser local (same-origin). Nunca incluir PDFs, dados do
@@ -51,6 +51,7 @@ const SHELL_FILES = [
   "assets/storage.js",
   "assets/ocr.js",
   "assets/material-limits.js",
+  "assets/module-drafts.js",
   // Ícones — apple-touch-icon.png é referenciado em <link> por várias
   // páginas (ver <head>) e também estava faltando.
   "assets/icons/icon-192.png",
