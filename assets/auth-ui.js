@@ -14,6 +14,13 @@ function initAuthGate(onReady){
   const appRoot = document.getElementById("app-root");
   if(!gate) return;
 
+  // Local de propósito: auth-ui.js roda antes de qualquer script inline da
+  // página (que é quem define o escapeHtml do HTML em questão) e é
+  // carregado também na tela de login (index.html), onde confiar numa
+  // função definida mais tarde seria frágil. Mesmo conjunto de caracteres
+  // das demais páginas — ver security-hardening.test.js.
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
   function showLoading(msg){
     gate.style.display = "block";
     if(appRoot) appRoot.style.display = "none";
@@ -159,7 +166,7 @@ function initAuthGate(onReady){
     banner.className = "feedback bad";
     banner.style.cssText = "margin:14px auto 0; max-width:960px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;";
     banner.innerHTML = `
-      <span>📧 Confirme seu e-mail (${(user.email || "").replace(/</g,"&lt;")}) para poder gerar conteúdo com IA. Verifique sua caixa de entrada (e o spam).</span>
+      <span>📧 Confirme seu e-mail (${escapeHtml(user.email || "")}) para poder gerar conteúdo com IA. Verifique sua caixa de entrada (e o spam).</span>
       <span style="display:flex; gap:6px; flex-wrap:wrap;">
         <button class="btn ghost" id="verify-resend-btn" style="font-size:12px;">Reenviar e-mail</button>
         <button class="btn ghost" id="verify-refresh-btn" style="font-size:12px;">Já verifiquei</button>

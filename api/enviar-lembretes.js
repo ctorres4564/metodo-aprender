@@ -217,7 +217,11 @@ async function handler(req, res) {
     res.status(200).json(summary);
   } catch (e) {
     console.error("Falha geral ao enviar lembretes:", e);
-    res.status(500).json({ error: e.message });
+    // SEGURANÇA (SEC-10): não vazar e.message aqui — ele pode embutir o
+    // texto da resposta do Resend (e, indiretamente, endereços de e-mail).
+    // O detalhe fica no log/Sentry; quem chama (o Vercel Cron) só precisa
+    // saber que falhou.
+    res.status(500).json({ error: "Falha ao processar lembretes." });
   }
 }
 

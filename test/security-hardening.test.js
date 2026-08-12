@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import vm from "node:vm";
@@ -73,6 +74,40 @@ describe("security hardening regressions", () => {
     expect(headers["Strict-Transport-Security"]).toContain("max-age=");
     expect(headers["Content-Security-Policy"]).toContain("object-src 'none'");
     expect(headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+  });
+
+  it("removes 'unsafe-inline' from script-src and hashes every inline script", () => {
+    // Mesma regra do CSP real (vercel.json): sem 'unsafe-inline' em
+    // script-src, cada bloco <script> inline de cada página precisa ter o
+    // próprio hash sha256- no header. Este teste recomputa os hashes a
+    // partir dos arquivos reais (byte a byte, decodificados como UTF-8 —
+    // igual ao navegador) e falha se alguém editar um script inline sem
+    // atualizar o header junto. Sem isso, a troca vazaria pra produção
+    // como página quebrada de script bloqueado silenciosamente.
+    const config = JSON.parse(read("vercel.json"));
+    const csp = config.headers[0].headers.find((h) => h.key === "Content-Security-Policy").value;
+    const scriptSrc = csp.match(/script-src\s+([^;]+)/i)[1];
+    const tokens = new Set(scriptSrc.trim().split(/\s+/));
+
+    expect(tokens.has("'unsafe-inline'")).toBe(false);
+
+    const htmlFiles = readdirSync(repoPath(".")).filter((f) => f.endsWith(".html"));
+    expect(htmlFiles.length).toBeGreaterThan(0);
+
+    const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+    const uniqueHashes = new Set();
+
+    for (const file of htmlFiles) {
+      const content = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      const matches = content.matchAll(INLINE_SCRIPT_RE);
+      for (const m of matches) {
+        const hash = "sha256-" + createHash("sha256").update(m[1], "utf8").digest("hex");
+        uniqueHashes.add(hash);
+        expect(tokens.has(hash), `${file}: hash do script inline ausente na CSP (${hash}). Atualize script-src em vercel.json.`).toBe(true);
+      }
+    }
+
+    expect(uniqueHashes.size).toBeGreaterThan(0);
   });
 
   it("reserves material quota and creates the material in one transaction", () => {

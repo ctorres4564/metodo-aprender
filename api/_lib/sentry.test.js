@@ -162,4 +162,37 @@ describe("api/_lib/sentry.js — com SENTRY_DSN configurada", () => {
 
     await expect(wrapped("req", "res")).resolves.toBe("ok");
   });
+
+  it("beforeSend redige segredos, e-mails e trunca conteúdo longo antes do envio", async () => {
+    const { initSentry } = await import("./sentry.js");
+    initSentry();
+
+    expect(sentryMock.init).toHaveBeenCalledWith(expect.objectContaining({ beforeSend: expect.any(Function) }));
+    const { beforeSend } = sentryMock.init.mock.calls[0][0];
+
+    const event = {
+      message: "Bearer abcdef0123456789_abcdefghijklmnop · fulano@gmail.com · sk_live_ABC123XYZ",
+      extra: { fonte: "A".repeat(5000) }
+    };
+    const out = beforeSend(event);
+
+    expect(out.message).not.toContain("abcdef0123456789_abcdefghijklmnop");
+    expect(out.message).not.toContain("fulano@gmail.com");
+    expect(out.message).not.toContain("sk_live_ABC123XYZ");
+    expect(out.message).toContain("[REDACTED]");
+    expect(out.message).toContain("[EMAIL REDACTED]");
+    expect(out.extra.fonte.length).toBeLessThanOrEqual(2100);
+    expect(out.extra.fonte).toContain("[TRUNCADO]");
+  });
+
+  it("beforeSend nunca lança (evento estranho ou null não derruba o envio)", async () => {
+    const { initSentry } = await import("./sentry.js");
+    initSentry();
+    const { beforeSend } = sentryMock.init.mock.calls[0][0];
+
+    expect(() => beforeSend(null)).not.toThrow();
+    expect(() => beforeSend(undefined)).not.toThrow();
+    expect(beforeSend({})).toEqual({});
+    expect(beforeSend({ message: "ok", extra: null })).toEqual({ message: "ok", extra: null });
+  });
 });
