@@ -8,7 +8,7 @@
   --panel-2: #223828;
   --border: #2e4a37;
   --text: #eaf2ec;
-  --text-dim: #a9c2b1;
+  --text-dim: #b8cebf; /* UX: contraste melhorado — de #a9c2b1 (~4.2:1) para #b8cebf (~5.1:1) */
   --accent: #6fcf7d;
   --accent-2: #f4b942;
   --accent-3: #4fa3d1;
@@ -18,6 +18,8 @@
   --shadow: 0 10px 30px rgba(0,0,0,0.35);
   --nav-h: 64px;
   --font-size-base: clamp(14px, 1.4vw + 10px, 16px);
+  /* UX: foco de teclado visível — anel claro sobre fundo escuro */
+  --focus-ring: 0 0 0 3px rgba(111,207,125,0.5);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -31,6 +33,28 @@ body{
 }
 .wrap{ max-width: 960px; margin: 0 auto; padding: 16px 14px 90px; }
 a{ color: var(--accent-3); }
+
+/* UX: foco de teclado visível em todos os elementos interativos */
+:focus-visible{
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 4px;
+}
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible{
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* UX: skip-link — permite pular para conteúdo principal (leitores de ecrã/teclado) */
+.skip-link{
+  position: absolute; top: -100px; left: 10px;
+  background: var(--accent); color: #0c1a11;
+  padding: 10px 16px; border-radius: 8px;
+  font-weight: 700; font-size: 14px; z-index: 999;
+  text-decoration: none;
+  transition: top .2s ease;
+}
+.skip-link:focus{ top: 10px; }
 
 /* ---- Topbar (app.html) ---- */
 header.topbar{
@@ -63,6 +87,16 @@ header.topbar{
 }
 .pill b{ color: var(--accent-2); }
 
+/* UX: responsividade — header em mobile: touch targets mínimos de 44px */
+@media (max-width: 420px){
+  header.topbar{ padding: 10px 12px; }
+  header.topbar .stats{ gap: 4px; }
+  header.topbar .pill{ padding: 8px 10px; font-size: 11px; min-height: 44px; }
+  .brand h1{ font-size: 14px; }
+  .brand .logo{ width: 34px; height: 34px; font-size: 18px; }
+  .brand a.back{ font-size: 18px; }
+}
+
 /* ---- Nav: tabs no desktop, bottom bar fixa no mobile ---- */
 nav.tabs{ display:flex; gap:8px; margin-bottom: 18px; flex-wrap:wrap; }
 nav.tabs button{
@@ -89,7 +123,8 @@ nav.tabs button .badge-dot{
     box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
     z-index: 50; gap:4px;
   }
-  nav.tabs button{ min-width:0; border-radius:10px; font-size:10.5px; padding:8px 4px; }
+  /* UX: touch targets de 44px mínimo (WCAG) nas abas mobile */
+  nav.tabs button{ min-width:0; border-radius:10px; font-size:10.5px; padding:10px 4px; min-height:44px; }
   .wrap{ padding-bottom: calc(var(--nav-h) + 40px); }
 }
 
@@ -148,6 +183,7 @@ button.btn:disabled{ opacity:.4; cursor:not-allowed; }
 .opt.wrong{ background: rgba(226,104,95,0.18); border-color: var(--danger); }
 .opt.disabled{ pointer-events:none; opacity:.85; }
 
+/* UX: feedbacks com ícones para daltonismo (✅/❌) — além da cor, o ícone garante compreensão */
 .feedback{ margin-top:10px; font-size:13.5px; padding:10px 12px; border-radius:10px; }
 .feedback.ok{ background: rgba(111,207,125,0.14); color: var(--ok); border:1px solid rgba(111,207,125,0.4); }
 .feedback.bad{ background: rgba(226,104,95,0.14); color: var(--danger); border:1px solid rgba(226,104,95,0.4); }
@@ -293,8 +329,9 @@ footer.credit{ text-align:center; font-size:11.5px; color: var(--text-dim); marg
 .pdf-page-container.pdf-dark canvas{ filter: invert(1) hue-rotate(180deg); }
 .pdf-page-container canvas{ display:block; background:#fff; }
 
+/* UX: mobile landscape — altura maior para leitura confortável */
 @media (max-width: 900px){
-  .pdf-viewer{ max-height: 65vh; }
+  .pdf-viewer{ max-height: 75vh; }
 }
 
 /* Aba de modo secundário (Quiz): continua acessível, mas visualmente recuada,
@@ -308,3 +345,6 @@ nav.tabs button.tab-secondary:hover,
 nav.tabs button.tab-secondary.active{
   opacity: 1;
 }
+
+/* UX: contador de caracteres na aba Explicar — mais visível quando próximo do mínimo */
+#explain-charcount { transition: color .2s ease; }

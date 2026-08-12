@@ -17,6 +17,8 @@
 		<link rel="stylesheet" href="assets/styles.css" />
 	</head>
 	<body>
+		<!-- UX: skip-link para leitores de ecrã e navegação por teclado -->
+		<a class="skip-link" href="#main-content">Pular para conteúdo principal</a>
 		<div class="wrap">
 			<div id="auth-gate"></div>
 
@@ -32,8 +34,8 @@
 
 				<header class="topbar">
 					<div class="brand">
-						<a class="back" href="index.html" title="Voltar ao catálogo">←</a>
-						<div class="logo" id="app-logo">📚</div>
+						<a class="back" href="index.html" title="Voltar ao catálogo" aria-label="Voltar ao catálogo">←</a>
+						<div class="logo" id="app-logo" aria-hidden="true">📚</div>
 						<div>
 							<h1 id="app-title">Carregando…</h1>
 							<p id="app-subtitle"></p>
@@ -44,15 +46,17 @@
 						<div
 							class="pill"
 							title="Conceitos que voltaram para ser explicados hoje"
+							aria-label="Conceitos para explicar hoje"
 						>
-							🗣️ <b id="stat-due">0</b> para explicar
+							<span aria-hidden="true">🗣️</span> <b id="stat-due">0</b> para explicar
 						</div>
 						<a class="pill" href="conta.html" style="text-decoration: none"
-							>👤 Conta</a
+							><span aria-hidden="true">👤</span> Conta</a
 						>
 						<button
 							class="pill"
 							id="logout-btn"
+							aria-label="Sair da conta"
 							style="
 								cursor: pointer;
 								border: 1px solid var(--border);
@@ -64,37 +68,42 @@
 					</div>
 				</header>
 
-				<nav class="tabs">
-					<button data-tab="inicio" class="active">
-						<span class="emoji">🏕️</span>Início
+				<nav class="tabs" role="tablist" aria-label="Abas de estudo">
+					<button data-tab="inicio" class="active" role="tab" aria-selected="true" aria-label="Início" title="Visão geral do módulo">
+						<span class="emoji" aria-hidden="true">🏕️</span>Início
 					</button>
-					<button data-tab="aprender">
-						<span class="emoji">📖</span>Aprender
+					<button data-tab="aprender" role="tab" aria-selected="false" aria-label="Aprender" title="Ver um conceito novo">
+						<span class="emoji" aria-hidden="true">📖</span>Aprender
 					</button>
-					<button data-tab="explicar">
-						<span class="emoji">🗣️</span>Explicar<span
+					<button data-tab="explicar" role="tab" aria-selected="false" aria-label="Explicar" title="Explicar com suas palavras">
+						<span class="emoji" aria-hidden="true">🗣️</span>Explicar<span
 							class="badge-dot"
 							id="due-badge"
 							style="display: none"
+							aria-label="pendentes"
 							>0</span
 						>
 					</button>
-					<button data-tab="revisar">
-						<span class="emoji">🔁</span>Revisar
+					<button data-tab="revisar" role="tab" aria-selected="false" aria-label="Revisar" title="Flashcards rápidos">
+						<span class="emoji" aria-hidden="true">🔁</span>Revisar
 					</button>
-					<button data-tab="progresso">
-						<span class="emoji">📊</span>Progresso
+					<button data-tab="progresso" role="tab" aria-selected="false" aria-label="Progresso" title="Estatísticas e plano">
+						<span class="emoji" aria-hidden="true">📊</span>Progresso
 					</button>
 					<button
 						data-tab="quiz"
 						class="tab-secondary"
-						title="Modo leve, opcional"
+						role="tab"
+						aria-selected="false"
+						aria-label="Quiz (modo complementar)"
+						title="Quiz de múltipla escolha — modo complementar"
 					>
-						<span class="emoji">🎯</span>Quiz
+						<span class="emoji" aria-hidden="true">🎯</span>Quiz
 					</button>
 				</nav>
 
-				<section id="tab-inicio" class="tab-content">
+				<div id="main-content">
+				<section id="tab-inicio" class="tab-content" role="tabpanel" aria-label="Início">
 					<div class="panel">
 						<h2 class="section-title">🌱 Bem-vindo(a)</h2>
 						<div class="lead" id="home-intro-text"></div>
@@ -139,11 +148,13 @@
 							enunciou o mecanismo ou apenas citou os elementos — e é ela que
 							decide quando o conceito volta.<br /><br />
 							<b>3. Explicar de novo</b> — o conceito reaparece em intervalos
-							calculados pelo FSRS. Explicação fraca traz o conceito de volta
+							calculados pelo algoritmo FSRS (<em>Free Spaced Repetition Scheduler</em>),
+							que adapta os intervalos de revisão com base na qualidade das suas
+							explicações. Explicação fraca traz o conceito de volta
 							logo; explicação sólida afasta a próxima cobrança.<br /><br />
 							<span style="opacity: 0.75"
 								>O <b>Quiz</b> e a <b>Revisão rápida</b> continuam disponíveis
-								como modo leve, para quando não houver energia de escrever — mas
+								como modo complementar, para quando não houver energia de escrever — mas
 								reconhecer uma alternativa certa é bem mais fácil do que
 								explicar, e por isso não são o caminho principal.</span
 							>
@@ -151,23 +162,23 @@
 					</div>
 				</section>
 
-				<section id="tab-aprender" class="tab-content" style="display: none">
+				<section id="tab-aprender" class="tab-content" style="display: none" role="tabpanel" aria-label="Aprender">
 					<div class="panel" id="learn-panel"></div>
 				</section>
 
-				<section id="tab-revisar" class="tab-content" style="display: none">
+				<section id="tab-revisar" class="tab-content" style="display: none" role="tabpanel" aria-label="Revisar">
 					<div class="panel" id="review-panel"></div>
 				</section>
 
-				<section id="tab-explicar" class="tab-content" style="display: none">
+				<section id="tab-explicar" class="tab-content" style="display: none" role="tabpanel" aria-label="Explicar">
 					<div class="panel" id="explain-panel"></div>
 				</section>
 
-				<section id="tab-quiz" class="tab-content" style="display: none">
+				<section id="tab-quiz" class="tab-content" style="display: none" role="tabpanel" aria-label="Quiz">
 					<div class="panel" id="quiz-panel"></div>
 				</section>
 
-				<section id="tab-progresso" class="tab-content" style="display: none">
+				<section id="tab-progresso" class="tab-content" style="display: none" role="tabpanel" aria-label="Progresso">
 					<div class="panel">
 						<h2 class="section-title">💎 Plano</h2>
 						<div class="grid2">
@@ -227,7 +238,7 @@
 						</p>
 						<div class="grid2">
 							<div class="stat-card">
-								<div class="label">Novos conceitos por dia</div>
+								<label for="setting-new-limit" class="label">Novos conceitos por dia</label>
 								<input
 									type="number"
 									id="setting-new-limit"
@@ -238,9 +249,9 @@
 								/>
 							</div>
 							<div class="stat-card">
-								<div class="label">
+								<label for="setting-review-limit" class="label">
 									Limite de revisões por dia (0 = sem limite)
-								</div>
+								</label>
 								<input
 									type="number"
 									id="setting-review-limit"
@@ -301,11 +312,6 @@
 					</div>
 
 					<div class="panel">
-						<h2 class="section-title">🏆 Conquistas</h2>
-						<div class="badges-grid" id="badges-grid"></div>
-					</div>
-
-					<div class="panel">
 						<h2 class="section-title">🗂️ Conceitos deste módulo</h2>
 						<div id="concept-list"></div>
 					</div>
@@ -316,6 +322,7 @@
 						</button>
 					</div>
 				</section>
+				</div><!-- /#main-content -->
 
 				<footer class="credit" id="footer-credit"></footer>
 			</div>
@@ -329,13 +336,6 @@
 		<script src="assets/storage.js"></script>
 		<script src="assets/engine.js"></script>
 		<script>
-			// A2-09: onAuthStateChanged (window.AppAuth.onChange, chamado dentro de
-			// initAuthGate em auth-ui.js) pode disparar mais de uma vez pro mesmo
-			// usuário — não só no primeiro login/logout, mas em qualquer reavaliação
-			// do estado de auth. Sem essa guarda, cada disparo repetia boot() inteiro:
-			// registrava os mesmos event listeners de novo (então um clique passava a
-			// disparar a mesma ação várias vezes) e recarregava o módulo do zero.
-			// Mesmo padrão já usado em leitor.html (ver variável didBoot lá).
 			let didBoot = false;
 			async function boot() {
 				if (didBoot) return;
@@ -371,9 +371,6 @@
 							sourceMaterialId: userMod.sourceMaterialId || null,
 						};
 
-						// Etapa 3 — anotações feitas no leitor de PDF e vinculadas a um
-						// conceito deste módulo específico. Nunca deve travar o carregamento
-						// do módulo: se falhar, o módulo abre normalmente, só sem as notas.
 						if (
 							moduleData.sourceMaterialId &&
 							window.AppDB &&
@@ -414,7 +411,6 @@
 						moduleData = await contentRes.json();
 					}
 
-					// Registra o handler global usado pelos botões inline do catálogo/telas
 					window.switchTab = switchTab;
 					document
 						.getElementById('cta-explain')
@@ -456,10 +452,6 @@
 				}
 			}
 
-			// Mantido igual aos limites reais em api/_lib/usage.js — usado só para exibição
-			// (o controle de verdade acontece no servidor a cada chamada de IA).
-			// Espelha PLAN_LIMITS de api/_lib/usage.js — só para exibição; quem decide de
-			// verdade é o servidor. Se mudar lá, mudar aqui.
 			const PLAN_LIMITS_DISPLAY = {
 				free: { explain: 300, generate: 60 },
 				premium: { explain: 3000, generate: 600 },
@@ -493,8 +485,6 @@
 				}
 
 				const limits = PLAN_LIMITS_DISPLAY[plan] || PLAN_LIMITS_DISPLAY.free;
-				// A barra acompanha as explicações: é o uso do dia a dia. As gerações de
-				// conteúdo aparecem ao lado, em texto.
 				const pct = Math.min(
 					100,
 					Math.round((explainCount / limits.explain) * 100),

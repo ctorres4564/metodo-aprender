@@ -14,6 +14,8 @@
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+<!-- UX: skip-link -->
+<a class="skip-link" href="#reader-shell">Pular para o leitor de PDF</a>
 <div class="reader-wrap">
 
   <div id="auth-gate"></div>
@@ -22,7 +24,7 @@
 
     <header class="topbar" style="position:static;">
       <div class="brand">
-        <a class="back" href="biblioteca.html" title="Voltar à Biblioteca">←</a>
+        <a class="back" href="biblioteca.html" title="Voltar à Biblioteca" aria-label="Voltar à Biblioteca">←</a>
         <div class="logo">📖</div>
         <div>
           <h1 id="reader-title">Leitor de PDF</h1>
@@ -31,6 +33,7 @@
       </div>
       <div class="stats">
         <span class="pill" id="user-email"></span>
+        <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);" aria-label="Sair da conta">🚪 Sair</button>
       </div>
     </header>
 
@@ -44,29 +47,30 @@
     <div id="reader-shell" class="reader-shell" style="display:none;">
       <div class="reader-toolbar">
         <div class="toolbar-group">
-          <button class="btn ghost" id="prev-page-btn" title="Página anterior">◀</button>
-          <span class="page-indicator" id="page-indicator">Página 1 de 1</span>
-          <button class="btn ghost" id="next-page-btn" title="Próxima página">▶</button>
+          <button class="btn ghost" id="prev-page-btn" title="Página anterior" aria-label="Página anterior">◀</button>
+          <span class="page-indicator" id="page-indicator" aria-live="polite">Página 1 de 1</span>
+          <button class="btn ghost" id="next-page-btn" title="Próxima página" aria-label="Próxima página">▶</button>
         </div>
         <div class="toolbar-group">
-          <input type="number" id="goto-page-input" class="page-input" min="1" value="1">
-          <button class="btn ghost" id="goto-page-btn">Ir</button>
+          <label for="goto-page-input" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Ir para página</label>
+          <input type="number" id="goto-page-input" class="page-input" min="1" value="1" aria-label="Número da página">
+          <button class="btn ghost" id="goto-page-btn" aria-label="Ir para a página">Ir</button>
         </div>
         <div class="toolbar-group">
-          <button class="btn ghost" id="zoom-out-btn" title="Diminuir zoom">−</button>
-          <button class="btn ghost" id="zoom-in-btn" title="Aumentar zoom">+</button>
-          <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura">↔ Largura</button>
-          <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura">↕ Altura</button>
+          <button class="btn ghost" id="zoom-out-btn" title="Diminuir zoom" aria-label="Diminuir zoom">−</button>
+          <button class="btn ghost" id="zoom-in-btn" title="Aumentar zoom" aria-label="Aumentar zoom">+</button>
+          <button class="btn ghost" id="fit-width-btn" title="Ajustar à largura" aria-label="Ajustar à largura">↔ Largura</button>
+          <button class="btn ghost" id="fit-height-btn" title="Ajustar à altura" aria-label="Ajustar à altura">↕ Altura</button>
         </div>
         <div class="toolbar-group">
-          <button class="btn ghost" id="dark-mode-btn" title="Ativar modo escuro do PDF">🌙 Escuro</button>
+          <button class="btn ghost" id="dark-mode-btn" title="Ativar modo escuro do PDF" aria-label="Alternar modo escuro">🌙 Escuro</button>
         </div>
       </div>
 
       <div class="reader-main">
-        <div class="pdf-viewer" id="pdf-viewer">
+        <div class="pdf-viewer" id="pdf-viewer" role="document" aria-label="Visualizador de PDF">
           <div class="pdf-page-container" id="pdf-page-container">
-            <canvas id="pdf-canvas"></canvas>
+            <canvas id="pdf-canvas" aria-label="Página do PDF"></canvas>
           </div>
         </div>
       </div>
@@ -85,17 +89,6 @@
   window.pdfjsLib = pdfjsLib;
 </script>
 <script>
-/* =====================================================================
-   LEITOR DE PDF — versão simplificada (só visualização)
-   =====================================================================
-   Destaques, anotações, seleção de texto e o modo Expandir foram
-   removidos de propósito: essa combinação (TextLayer do PDF.js +
-   destaques sobrepostos + tela cheia) se mostrou frágil demais entre
-   diferentes PDFs/navegadores para manter no produto agora. O leitor
-   faz só o essencial, de forma confiável: abre o PDF, navega entre
-   páginas, e ajusta o zoom.
-   ===================================================================== */
-
 let materialId = null;
 let material = null;
 let pdfDoc = null;
@@ -126,9 +119,6 @@ async function waitForPdfjs(timeoutMs){
   return true;
 }
 
-/* =====================================================================
-   RENDERIZAÇÃO DA PÁGINA
-   ===================================================================== */
 async function renderPage(num){
   const page = await pdfDoc.getPage(num);
   const viewport = page.getViewport({ scale: currentScale });
@@ -148,16 +138,6 @@ async function renderPage(num){
   scheduleRecordRead();
 }
 
-/* =====================================================================
-   HISTÓRICO DE LEITURA (Etapa 2)
-   ===================================================================== */
-// Registra "esteve aqui" (materialId + página atual) no material, pra
-// biblioteca.html poder mostrar "última leitura". Debounced: cada
-// renderPage() reagenda o envio pra ~2.5s depois da última mudança de
-// página, em vez de escrever no Firestore a cada página passada — evita
-// gastar escrita em cada página de uma rolagem rápida, só registra onde
-// o usuário efetivamente parou. Falha de rede aqui nunca deve travar a
-// leitura, por isso só um console.warn em caso de erro.
 let recordReadTimer = null;
 function scheduleRecordRead(){
   if(!materialId) return;
@@ -184,9 +164,6 @@ async function goToPage(n){
   await renderPage(n);
 }
 
-/* =====================================================================
-   ZOOM
-   ===================================================================== */
 async function computeFitWidthScale(){
   const page = await pdfDoc.getPage(currentPage);
   const unscaled = page.getViewport({ scale: 1 });
@@ -218,18 +195,12 @@ document.getElementById("fit-height-btn").addEventListener("click", async ()=>{
   await renderPage(currentPage);
 });
 
-/* =====================================================================
-   MODO ESCURO (inverte as cores do PDF pra leitura noturna)
-   ===================================================================== */
-// Inverter cores é um truque puramente visual (filter CSS no canvas) —
-// não muda em nada o que é desenhado, então não tem nenhum risco de
-// quebrar renderização/zoom/navegação. Preferência salva no localStorage
-// (por navegador, não por conta) pra continuar valendo na próxima visita.
 const DARK_MODE_KEY = "leitor_pdf_dark_mode";
 function applyDarkMode(on){
   document.getElementById("pdf-page-container").classList.toggle("pdf-dark", on);
   const btn = document.getElementById("dark-mode-btn");
   btn.textContent = on ? "☀️ Claro" : "🌙 Escuro";
+  btn.setAttribute("aria-label", on ? "Voltar ao modo claro" : "Ativar modo escuro");
   btn.title = on ? "Voltar ao modo claro do PDF" : "Ativar modo escuro do PDF";
 }
 document.getElementById("dark-mode-btn").addEventListener("click", ()=>{
@@ -239,9 +210,6 @@ document.getElementById("dark-mode-btn").addEventListener("click", ()=>{
 });
 applyDarkMode(localStorage.getItem(DARK_MODE_KEY) === "1");
 
-/* =====================================================================
-   NAVEGAÇÃO
-   ===================================================================== */
 document.getElementById("prev-page-btn").addEventListener("click", ()=> goToPage(currentPage - 1));
 document.getElementById("next-page-btn").addEventListener("click", ()=> goToPage(currentPage + 1));
 document.getElementById("goto-page-btn").addEventListener("click", ()=>{
@@ -255,14 +223,6 @@ document.getElementById("goto-page-input").addEventListener("keydown", (ev)=>{
   }
 });
 
-// Rolar a roda do mouse (ou gesto de rolagem do trackpad) sobre o PDF troca
-// de página, sem precisar tocar na toolbar. Enquanto a página atual ainda
-// tem conteúdo pra rolar (comum com zoom alto, onde a página fica mais alta
-// que a área visível), a rolagem continua normal, revelando o resto da
-// página — só troca de página quando o usuário já está no topo/fim dela e
-// continua rolando na mesma direção. Um cooldown curto evita pular várias
-// páginas de uma vez com um gesto forte de trackpad (que dispara muitos
-// eventos "wheel" seguidos).
 let wheelPageChangeCooldown = false;
 document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
   const el = ev.currentTarget;
@@ -283,16 +243,8 @@ document.getElementById("pdf-viewer").addEventListener("wheel", (ev)=>{
     goToPage(currentPage - 1).then(()=>{ el.scrollTop = 0; });
     setTimeout(()=>{ wheelPageChangeCooldown = false; }, 450);
   }
-  // Nos demais casos (ainda há conteúdo pra rolar na direção pedida),
-  // não faz nada especial — deixa o navegador rolar normalmente dentro
-  // da página, sem interferir.
 }, { passive: false });
 
-// Navegação por teclado: setas/PageUp/PageDown trocam de página, Home/End
-// vão pro início/fim do livro. Ignorado quando o foco está num campo de
-// texto/número (ex: o campo "ir para a página", que já tem seu próprio
-// atalho de Enter) — senão, digitar um número ali disparava troca de
-// página ao mesmo tempo.
 document.addEventListener("keydown", (ev)=>{
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if(tag === "INPUT" || tag === "TEXTAREA") return;
@@ -313,10 +265,6 @@ document.addEventListener("keydown", (ev)=>{
   }
 });
 
-// Navegação por gesto (swipe) em telas de toque: arrastar o dedo na
-// horizontal troca de página (esquerda = próxima, direita = anterior) —
-// só quando o movimento é predominantemente horizontal, pra não atrapalhar
-// a rolagem vertical normal dentro de uma página com zoom.
 let touchStartX = 0, touchStartY = 0;
 document.getElementById("pdf-viewer").addEventListener("touchstart", (ev)=>{
   if(ev.touches.length !== 1) return;
@@ -336,15 +284,6 @@ document.getElementById("pdf-viewer").addEventListener("touchend", (ev)=>{
   else goToPage(currentPage - 1);
 }, { passive: true });
 
-/* =====================================================================
-   BOOT
-   ===================================================================== */
-// window.AppAuth.onChange() (initAuthGate) pode disparar mais de uma vez
-// com um usuário autenticado (ex.: primeiro com o usuário em cache,
-// depois de novo após o Firebase revalidar a sessão) — sem essa proteção,
-// boot() rodava duas vezes em paralelo, e as duas chamadas a
-// page.render() disputavam o mesmo <canvas>, uma delas lançando "Cannot
-// use the same canvas during multiple render() operations".
 let didBoot = false;
 async function boot(){
   if(didBoot) return;
@@ -373,40 +312,19 @@ async function boot(){
 
     document.getElementById("reader-title").textContent = material.title || "Leitor de PDF";
 
-    // Baixa o PDF autenticado como ArrayBuffer (AppStorage.getMaterialPdfBytes,
-    // via getBytes() do SDK do Firebase) em vez de pedir uma URL de download
-    // e deixar o PDF.js buscá-la sozinho. Motivo: getDocument({url}) faz o
-    // PDF.js emitir requisições HTTP com cabeçalho Range direto pro domínio
-    // firebasestorage.googleapis.com — cross-origin a partir deste app — e
-    // esse tipo de requisição exige CORS configurado no bucket (não
-    // configurado neste projeto); sem isso o navegador bloqueia com
-    // "Failed to fetch". getBytes() evita isso: a requisição é feita pelo
-    // canal autenticado do próprio SDK, sem depender de Range/CORS.
     const pdfBytes = await window.AppStorage.getMaterialPdfBytes(material.storagePath);
 
     const ready = await waitForPdfjs(5000);
     if(!ready) throw new Error("Leitor de PDF não carregou. Verifique sua conexão e tente novamente.");
 
-    // data (ArrayBuffer) em vez de url: o PDF.js abre o documento inteiro a
-    // partir dos bytes já em memória, sem nenhuma requisição de rede extra.
-    // A renderização em si continua página a página (só a página atual é
-    // desenhada no canvas).
     pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     totalPages = pdfDoc.numPages;
 
-    // Etapa 2 — "voltar ao trecho original": leitor.html?...&page=N abre
-    // direto na página N (usado pelo link de origem de um conceito em
-    // assets/engine.js, e também pelo botão "Continuar leitura" da
-    // Biblioteca, que já manda &page=<lastPageRead>). Sem o parâmetro (ex.:
-    // abrir o leitor direto pelo botão "Abrir PDF", sem passar por um link
-    // que já informe a página), cai de volta pra material.lastPageRead —
-    // mesmo campo que a Biblioteca usa pra mostrar "última leitura" — pra
-    // retomar de onde parou em vez de sempre reabrir na página 1.
     const pageParam = parseInt(params.get("page"), 10);
     const lastRead = (typeof material.lastPageRead === "number" && material.lastPageRead > 0) ? material.lastPageRead : null;
     const fallbackPage = (lastRead && lastRead <= totalPages) ? lastRead : 1;
     const startPage = (!isNaN(pageParam) && pageParam >= 1 && pageParam <= totalPages) ? pageParam : fallbackPage;
-    currentPage = startPage; // computeFitWidthScale() usa currentPage pra medir a página certa
+    currentPage = startPage;
 
     document.getElementById("reader-loading").style.display = "none";
     document.getElementById("reader-shell").style.display = "flex";

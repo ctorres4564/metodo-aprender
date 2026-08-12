@@ -29,7 +29,7 @@
 
     <header class="topbar">
       <div class="brand">
-        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <a class="back" href="index.html" title="Voltar ao catálogo" aria-label="Voltar ao catálogo">←</a>
         <div class="logo">👤</div>
         <div>
           <h1>Minha Conta</h1>
@@ -38,6 +38,7 @@
       </div>
       <div class="stats">
         <span class="pill" id="user-email"></span>
+        <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);" aria-label="Sair da conta">🚪 Sair</button>
       </div>
     </header>
 
@@ -60,7 +61,7 @@
           <strong>não pode ser desfeita</strong>.
         </p>
         <p class="lead">Para confirmar, digite seu e-mail (<code id="confirm-email-hint"></code>) abaixo:</p>
-        <input type="email" id="delete-confirm-input" class="auth-input" placeholder="Digite seu e-mail para confirmar">
+        <input type="email" id="delete-confirm-input" class="auth-input" placeholder="Digite seu e-mail para confirmar" aria-label="Digite seu e-mail para confirmar a exclusão">
         <div id="delete-feedback"></div>
         <button class="btn" id="delete-account-btn" style="margin-top:10px; background:var(--danger); border-color:var(--danger);" disabled>
           🗑️ Excluir minha conta permanentemente

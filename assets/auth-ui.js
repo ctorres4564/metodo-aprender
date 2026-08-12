@@ -19,7 +19,7 @@ function initAuthGate(onReady){
   // carregado também na tela de login (index.html), onde confiar numa
   // função definida mais tarde seria frágil. Mesmo conjunto de caracteres
   // das demais páginas — ver security-hardening.test.js.
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
   function showLoading(msg){
     gate.style.display = "block";
@@ -44,10 +44,13 @@ function initAuthGate(onReady){
         <h2 class="section-title">${titles[mode]}</h2>
         ${errorMsg ? `<div class="feedback bad" style="margin-bottom:10px;">${errorMsg}</div>` : ""}
         ${mode !== "reset" ? `
-          <input id="auth-email" type="email" placeholder="E-mail" class="auth-input">
-          <input id="auth-password" type="password" placeholder="Senha (mínimo 6 caracteres)" class="auth-input" style="margin-top:8px;">
+          <label for="auth-email" style="display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">E-mail</label>
+          <input id="auth-email" type="email" placeholder="seu@email.com" class="auth-input">
+          <label for="auth-password" style="display:block; font-size:11.5px; color:var(--text-dim); margin:10px 0 4px;">Senha (mínimo 6 caracteres)</label>
+          <input id="auth-password" type="password" placeholder="******" class="auth-input">
         ` : `
-          <input id="auth-email" type="email" placeholder="E-mail" class="auth-input">
+          <label for="auth-email" style="display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:4px;">E-mail</label>
+          <input id="auth-email" type="email" placeholder="seu@email.com" class="auth-input">
         `}
         <button class="btn" id="auth-primary-btn" style="width:100%; margin-top:12px;">
           ${mode === "login" ? "Entrar" : mode === "signup" ? "Criar conta" : "Enviar e-mail de recuperação"}
@@ -89,7 +92,8 @@ function initAuthGate(onReady){
       });
     }
 
-    document.getElementById("auth-primary-btn").addEventListener("click", async ()=>{
+    // UX: função reutilizável para submeter o formulário
+    async function submitForm(){
       const email = document.getElementById("auth-email").value.trim();
       const password = mode !== "reset" ? document.getElementById("auth-password").value : null;
       const msgBox = document.getElementById("auth-msg");
@@ -125,7 +129,19 @@ function initAuthGate(onReady){
         console.error(e);
         renderForm(mode, traduzErroFirebase(e.code));
       }
+    }
+
+    document.getElementById("auth-primary-btn").addEventListener("click", submitForm);
+
+    // UX: ENTER nos campos de e-mail e senha submetem o formulário
+    document.getElementById("auth-email").addEventListener("keydown", function(e){
+      if(e.key === "Enter") submitForm();
     });
+    if(mode !== "reset"){
+      document.getElementById("auth-password").addEventListener("keydown", function(e){
+        if(e.key === "Enter") submitForm();
+      });
+    }
 
     if(mode === "login"){
       document.getElementById("auth-go-signup").addEventListener("click", (e)=>{ e.preventDefault(); renderForm("signup"); });
@@ -228,6 +244,9 @@ function bindLogoutButton(){
   const btn = document.getElementById("logout-btn");
   if(!btn) return;
   btn.addEventListener("click", async ()=>{
+    // UX: confirmação antes de encerrar a sessão (toque acidental pode custar contexto)
+    if(!confirm("Tem certeza que deseja sair da sua conta? Seu progresso está salvo, mas você precisará entrar novamente.")) return;
+
     if(window.AppAuth){
       await window.AppAuth.signOutUser();
       // SEGURANÇA (SEC-06): remove os dados locais do app (progresso em

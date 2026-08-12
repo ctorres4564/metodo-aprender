@@ -18,6 +18,16 @@
   .hero h1{ margin: 6px 0 2px; font-size:22px; }
   .hero p{ margin:0; color:var(--text-dim); font-size:13.5px; }
   .locked-msg{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+  /* UX: skeleton loader enquanto carrega módulos do Firestore */
+  .skeleton-card {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px; height: 160px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+  }
 </style>
 </head>
 <body>
@@ -30,9 +40,9 @@
   <div class="hero" style="position:relative;">
     <div style="position:absolute; right:0; top:0; display:flex; gap:8px; align-items:center;">
       <span class="pill" id="user-email" title="Conta conectada"></span>
-      <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);">🚪 Sair</button>
+      <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);" aria-label="Sair da conta">🚪 Sair</button>
     </div>
-    <div class="ic">🧠</div>
+    <div class="ic" aria-hidden="true">🧠</div>
     <h1 id="collection-title">Método Aprender</h1>
     <p id="collection-subtitle">Crie e estude qualquer assunto com repetição espaçada, gamificação e IA</p>
   </div>
@@ -46,21 +56,27 @@
 
   <div id="subscription-feedback"></div>
 
-  <div class="panel">
+  <div class="panel" id="catalog-section">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <h2 class="section-title" style="margin:0;">🗂️ Meus Módulos</h2>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <div id="onboarding-actions-row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="biblioteca.html" style="text-decoration:none;">📚 Minha Biblioteca</a>
         <a class="btn secondary" href="busca.html" style="text-decoration:none;">🔎 Buscar</a>
-        <a class="btn secondary" href="importar-livro.html" style="text-decoration:none;">📖 Importar de um livro</a>
-        <a class="btn" href="criar-modulo.html" style="text-decoration:none;">➕ Criar novo módulo</a>
+        <a class="btn secondary" href="importar-livro.html" style="text-decoration:none;">📖 Importar livro</a>
+        <a class="btn" href="criar-modulo.html" style="text-decoration:none;">➕ Criar módulo</a>
       </div>
     </div>
     <p class="lead" style="margin-top:6px;">
       Monte sua própria trilha sobre qualquer assunto — cole um PDF/artigo e deixe a IA sugerir as fichas,
       ou envie um livro e peça módulos parte por parte, sob demanda. Sem código, sem precisar de ninguém além de você.
     </p>
-    <div class="catalog-grid" id="user-modules-grid" style="margin-top:12px;"></div>
+    <!-- UX: skeleton loader aparece enquanto os dados carregam -->
+    <div class="catalog-grid" id="user-modules-skeleton" style="margin-top:12px;">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+    <div class="catalog-grid" id="user-modules-grid" style="margin-top:12px; display:none;"></div>
     <p id="user-modules-empty" style="display:none; color:var(--text-dim); font-size:13px; margin-top:8px;">
       Você ainda não criou nenhum módulo. Clique em "Criar novo módulo" para montar sua primeira trilha.
     </p>
@@ -85,11 +101,12 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/pwa.js"></script>
+<script src="assets/onboarding-wizard.js"></script>
 <script>
 // Dados de módulos do usuário (Firestore) são interpolados em innerHTML
 // abaixo — escape obrigatório antes de qualquer interpolação (SEC-03).
 function escapeHtml(s){
-  return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  return String(s).replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 }
 async function init(){
   try{
@@ -113,8 +130,9 @@ async function init(){
       card.className = "module-card";
       if(!isReady) card.style.opacity = "0.55";
 
+      // UX: emojis como decorativos — não devem ser lidos por leitores de ecrã
       card.innerHTML = `
-        <div class="ic">${escapeHtml(m.icon || "📘")}</div>
+        <div class="ic" aria-hidden="true">${escapeHtml(m.icon || "📘")}</div>
         <h3>${escapeHtml(m.title || "")}</h3>
         <p>${escapeHtml(m.subtitle || "")}</p>
         <div class="meta">
@@ -131,19 +149,43 @@ async function init(){
 
 async function loadUserModules(){
   const grid = document.getElementById("user-modules-grid");
+  const skeleton = document.getElementById("user-modules-skeleton");
   const empty = document.getElementById("user-modules-empty");
+  const actionsRow = document.getElementById("onboarding-actions-row");
+
   if(!window.AppDB || !window.AppDB.listUserModules){
+    skeleton.style.display = "none";
+    grid.style.display = "block";
     empty.style.display = "block";
     return;
   }
   try{
     const modules = await window.AppDB.listUserModules();
+    // UX: esconde skeleton e mostra grid real
+    skeleton.style.display = "none";
+    grid.style.display = "block";
     grid.innerHTML = "";
+
     if(!modules || modules.length === 0){
-      empty.style.display = "block";
+      // UX: wizard de onboarding para usuários novos (sem módulos)
+      if(window.OnboardingWizard && window.OnboardingWizard.shouldShow(0)){
+        window.OnboardingWizard.render(grid);
+        // Esconde linha de botões — wizard guia para a ação certa
+        if(actionsRow) actionsRow.style.display = "none";
+        // Esconde texto "você ainda não criou..."
+        empty.style.display = "none";
+      } else {
+        // Usuário que já viu o wizard mas ainda não criou — fallback
+        empty.style.display = "block";
+        if(actionsRow) actionsRow.style.display = "flex";
+      }
       return;
     }
+
+    // Usuário com módulos → comportamento normal
     empty.style.display = "none";
+    if(actionsRow) actionsRow.style.display = "flex";
+
     modules.forEach(m=>{
       const cfg = m.config || {};
       const card = document.createElement("div");
@@ -152,7 +194,7 @@ async function loadUserModules(){
       const count = (m.concepts || []).length;
       card.innerHTML = `
         <a href="app.html?m=${encodeURIComponent(m.id)}&src=user" style="text-decoration:none; color:inherit; display:block;">
-          <div class="ic">${escapeHtml(cfg.logoEmoji || "📘")}</div>
+          <div class="ic" aria-hidden="true">${escapeHtml(cfg.logoEmoji || "📘")}</div>
           <h3>${escapeHtml(cfg.appTitle || "Sem título")}</h3>
           <p>${escapeHtml(cfg.appSubtitle || "")}</p>
           <div class="meta">
@@ -172,7 +214,7 @@ async function loadUserModules(){
         ev.preventDefault();
         const id = btn.dataset.id;
         const title = btn.dataset.title;
-        if(!confirm(`Excluir "${title}"? Isso também apaga seu progresso nesse módulo. Essa ação não pode ser desfeita.`)) return;
+        if(!confirm(`Excluir \"${title}\"? Isso também apaga seu progresso nesse módulo. Essa ação não pode ser desfeita.`)) return;
         btn.disabled = true;
         btn.textContent = "Excluindo...";
         try{
@@ -187,6 +229,8 @@ async function loadUserModules(){
     });
   }catch(e){
     console.error(e);
+    skeleton.style.display = "none";
+    grid.style.display = "block";
     empty.style.display = "block";
   }
 }
@@ -206,6 +250,31 @@ function showSubscriptionFeedback(){
   const cleanUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
   window.history.replaceState({}, "", cleanUrl);
 }
+
+// UX: restaura posição de scroll ao voltar ao catálogo (evita re-trabalho)
+(function restoreScrollOnBack(){
+  try{
+    const saved = sessionStorage.getItem("ma_catalog_scroll");
+    if(saved){
+      const y = parseInt(saved, 10);
+      if(!isNaN(y)){
+        // Restaura após a página carregar completamente
+        window.addEventListener("load", ()=>{ window.scrollTo(0, y); }, {once: true});
+      }
+    }
+    // Salva posição ao sair
+    window.addEventListener("beforeunload", ()=>{
+      sessionStorage.setItem("ma_catalog_scroll", String(window.scrollY));
+    });
+    // Salva posição ao clicar em links (capture phase)
+    document.addEventListener("click", (e)=>{
+      const link = e.target.closest("a");
+      if(link && link.href && !link.href.startsWith("#") && !link.target){
+        sessionStorage.setItem("ma_catalog_scroll", String(window.scrollY));
+      }
+    }, true);
+  }catch(e){ /* ignora — não essencial */ }
+})();
 
 initAuthGate(()=>{
   bindLogoutButton();

@@ -50,7 +50,7 @@
 
     <header class="topbar">
       <div class="brand">
-        <a class="back" href="index.html" title="Voltar ao catálogo">←</a>
+        <a class="back" href="index.html" title="Voltar ao catálogo" aria-label="Voltar ao catálogo">←</a>
         <div class="logo">🔎</div>
         <div>
           <h1>Buscar</h1>
@@ -59,15 +59,16 @@
       </div>
       <div class="stats">
         <span class="pill" id="user-email"></span>
+        <button class="pill" id="logout-btn" style="cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,0.04);" aria-label="Sair da conta">🚪 Sair</button>
       </div>
     </header>
 
     <div class="panel">
       <div class="search-box">
-        <input type="text" id="search-input" placeholder="Digite pelo menos 2 letras para buscar..." autocomplete="off" disabled>
+        <input type="text" id="search-input" placeholder="Digite pelo menos 2 letras para buscar..." autocomplete="off" disabled aria-label="Campo de busca">
       </div>
       <div class="search-filters">
-        <button class="search-filter active" data-filter="all">Tudo</button>
+        <button class="search-filter active" data-filter="all" aria-pressed="true">Tudo</button>
         <button class="search-filter" data-filter="modules">🧠 Conceitos</button>
         <button class="search-filter" data-filter="pages">📄 Páginas</button>
         <button class="search-filter" data-filter="highlights">🖍️ Destaques</button>
@@ -105,20 +106,9 @@ let notesByMaterial = {};
 let currentFilter = "all";
 let indexReady = false;
 
-// T1 (desempenho/custo): "pages" é, de longe, a maior fonte de leituras
-// Firestore da busca (é o texto extraído de livro inteiro, página por
-// página) e a maioria das buscas não chega a precisar dele (filtra por
-// conceitos/destaques/anotações, ou a pessoa nem chega a digitar nada).
-// Por isso "pages" só é buscado quando o filtro "Páginas" (ou "Tudo",
-// que também busca em páginas) realmente entra em uso — carregado uma
-// única vez e reaproveitado enquanto esta aba ficar aberta.
 let pagesLoaded = false;
 let pagesLoadPromise = null;
 
-// Extrai um trecho de contexto ao redor da primeira ocorrência de "qLower"
-// dentro de "text", com a parte encontrada destacada em <mark>. Feito em
-// cima do texto original (não já escapado) — a escapagem acontece aqui
-// mesmo, nos três pedaços (antes/match/depois), pra nunca injetar HTML.
 function makeSnippet(text, qLower, radius){
   radius = radius || 70;
   const str = String(text || "");
@@ -135,11 +125,6 @@ function makeSnippet(text, qLower, radius){
   return (start > 0 ? "…" : "") + before + `<mark>${match}</mark>` + after + (end < str.length ? "…" : "");
 }
 
-// Constrói o índice em memória: busca, pra cada material pronto, seus
-// destaques e anotações — em paralelo, uma vez só por carregamento da
-// página. Uma falha em UM material não impede os outros de serem
-// indexados (fica sem resultado só pra aquele). "pages" (texto extraído
-// das páginas) NÃO é carregado aqui de propósito — ver ensurePagesLoaded.
 async function buildSearchIndex(){
   const statusEl = document.getElementById("search-status");
   materials = (await window.AppDB.listMaterials()).filter(m => m.status === "ready");
@@ -172,11 +157,6 @@ async function buildSearchIndex(){
   indexReady = true;
 }
 
-// Carrega "pages" de todos os materiais, uma única vez — chamada só
-// quando uma busca realmente precisa (filtro "Páginas" ou "Tudo"). Se já
-// estiver carregado, não faz nada; se já estiver carregando, devolve a
-// mesma promise em andamento (evita disparar a mesma carga em duplicidade
-// se a pessoa digitar/trocar de filtro várias vezes rapidamente).
 async function ensurePagesLoaded(){
   if(pagesLoaded) return;
   if(pagesLoadPromise) return pagesLoadPromise;
@@ -218,10 +198,6 @@ function runSearch(qRaw){
   }
   hintEl.style.display = "none";
 
-  // T1: só carrega "pages" quando o filtro atual realmente precisa dele.
-  // Enquanto carrega, mostra um status e reexecuta esta mesma busca assim
-  // que terminar — só se a pessoa não tiver mudado o texto digitado nesse
-  // meio-tempo (senão a busca antiga sobrescreveria um resultado mais novo).
   const needsPages = (currentFilter === "all" || currentFilter === "pages");
   if(needsPages && !pagesLoaded){
     emptyEl.style.display = "none";
@@ -303,8 +279,6 @@ function runSearch(qRaw){
     });
   }
 
-  // Limite de segurança pra não travar a tela com milhares de resultados
-  // de uma vez (ex.: buscar uma palavra muito comum num livro grande).
   const truncated = results.length > 150;
   results = results.slice(0, 150);
 
@@ -335,8 +309,12 @@ document.getElementById("search-input").addEventListener("input", (ev)=>{
 
 document.querySelectorAll(".search-filter").forEach(btn=>{
   btn.addEventListener("click", ()=>{
-    document.querySelectorAll(".search-filter").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".search-filter").forEach(b => {
+      b.classList.remove("active");
+      b.setAttribute("aria-pressed", "false");
+    });
     btn.classList.add("active");
+    btn.setAttribute("aria-pressed", "true");
     currentFilter = btn.dataset.filter;
     if(indexReady) runSearch(document.getElementById("search-input").value);
   });
