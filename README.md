@@ -19,6 +19,7 @@ O projeto é uma aplicação HTML/CSS/JavaScript sem bundler. O frontend é est�
 - Planos Free e Premium, checkout e gerenciamento de assinatura pela Stripe.
 - Lembretes diários por e-mail via Resend e Vercel Cron.
 - PWA instalável e monitoramento server-side com Sentry.
+- Wizard de onboarding para novos usuários, guiando para o caminho de criação mais adequado.
 
 ## Arquitetura
 
@@ -45,6 +46,7 @@ O projeto é uma aplicação HTML/CSS/JavaScript sem bundler. O frontend é est�
 │   ├── ocr.js                 OCR com Tesseract.js
 │   ├── material-limits.js     limites espelhados no cliente
 │   ├── pwa.js                 registro do service worker
+│   ├── onboarding-wizard.js   wizard de onboarding para novos usuários
 │   └── styles.css             estilos compartilhados
 ├── content/
 │   ├── catalog.json           catálogo oficial
@@ -67,6 +69,8 @@ O projeto é uma aplicação HTML/CSS/JavaScript sem bundler. O frontend é est�
 │   ├── e2e/                   fluxos completos com Playwright
 │   ├── helpers/ e mocks/
 │   └── *.test.js              testes unitários e de segurança
+├── docs/
+│   └── security-known-risks.md
 ├── firestore.rules.txt
 ├── storage.rules.txt
 ├── firebase.json
@@ -108,6 +112,15 @@ Cada módulo contém uma configuração e uma lista de conceitos:
 ```
 
 `storageKey` e os IDs dos conceitos precisam ser estáveis para preservar o progresso existente.
+
+### Onboarding de novos usuários
+
+Quando um usuário entra pela primeira vez e ainda não tem módulos, um wizard (`assets/onboarding-wizard.js`) substitui os botões de ação por duas opções guiadas:
+
+- **Tenho um PDF ou texto**: redireciona para `criar-modulo.html#import-ai`, com scroll automático para a seção de geração por IA.
+- **Sei o que quero estudar**: abre o editor manual em `criar-modulo.html`.
+
+Uma terceira opção secundária — **Quero importar um livro grande** — leva a `importar-livro.html`. O wizard só aparece na primeira visita; depois de visto, os botões de ação padrão são exibidos normalmente.
 
 ### Módulos criados pelo usuário
 
