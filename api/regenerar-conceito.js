@@ -17,6 +17,7 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { cleanStr } from "./_lib/sanitize.js";
 import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -45,7 +46,7 @@ async function handler(req, res) {
   if (!uid) return;
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
-  const cleanInstruction = typeof instruction === "string" ? instruction.trim().slice(0, 300) : "";
+  const cleanInstruction = cleanStr(instruction, 300);
 
   const systemPrompt = `Você ajuda a melhorar UMA ficha de estudo (conceito) de um módulo de repetição espaçada. Vai receber a ficha atual e deve devolver uma versão melhorada dela, em português.
 
@@ -99,11 +100,11 @@ Ficha atual:
     }
 
     const cleanConcept = {
-      tag: String(c.tag || "Geral").slice(0, 40),
-      title: String(c.title).slice(0, 120),
-      text: String(c.text).slice(0, 800),
-      q: String(c.q).slice(0, 240),
-      options: c.options.map(o => String(o).slice(0, 160)),
+      tag: cleanStr(c.tag || "Geral", 40),
+      title: cleanStr(c.title, 120),
+      text: cleanStr(c.text, 800),
+      q: cleanStr(c.q, 240),
+      options: c.options.map(o => cleanStr(o, 160)),
       correct: Math.min(3, Math.max(0, Math.round(c.correct)))
     };
 

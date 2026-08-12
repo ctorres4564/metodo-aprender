@@ -15,14 +15,10 @@
 // (não só "v4" especificamente), então essa troca de nome sozinha garante
 // que o cache antigo (com a lista de arquivos desatualizada) some na
 // próxima ativação, sem precisar listar versões antigas manualmente aqui.
-const CACHE_NAME = "metodo-aprender-shell-v6";
+const CACHE_NAME = "metodo-aprender-shell-v7";
 
-// V4: lista revisada — cada arquivo aqui precisa (a) existir de fato no
-// projeto e (b) ser local (same-origin). Nunca incluir PDFs, dados do
-// Firestore/Storage ou qualquer coisa cross-origin (SDK do Firebase via
-// gstatic, tesseract.js via cdnjs) — isso é dado privado ou de terceiros,
-// não faz parte do "shell" do app, e o filtro em "fetch" abaixo já
-// impediria esse tipo de coisa de ser cacheada de qualquer forma.
+// V7: adicionado assets/onboarding-wizard.js (adicionado em feat/ux).
+// V6->V7: sempre que criar um novo script em assets/, adicione-o aqui.
 const SHELL_FILES = [
   // Páginas
   "index.html",
@@ -38,10 +34,7 @@ const SHELL_FILES = [
   // Config/manifesto
   "manifest.json",
   "assets/styles.css",
-  // Scripts — antes desta correção, firebase-init.js e pwa.js (carregados
-  // por TODAS as páginas, incluindo index.html/login) e firebase-config.js
-  // (importado por firebase-init.js) não estavam na lista: o app não
-  // conseguia nem abrir a tela de login offline.
+  // Scripts
   "assets/firebase-init.js",
   "assets/firebase-config.js",
   "assets/pwa.js",
@@ -52,20 +45,14 @@ const SHELL_FILES = [
   "assets/ocr.js",
   "assets/material-limits.js",
   "assets/module-drafts.js",
-  // Ícones — apple-touch-icon.png é referenciado em <link> por várias
-  // páginas (ver <head>) e também estava faltando.
+  "assets/onboarding-wizard.js",
+  // Ícones
   "assets/icons/icon-192.png",
   "assets/icons/icon-512.png",
   "assets/icons/apple-touch-icon.png"
 ];
 
 self.addEventListener("install", (event) => {
-  // V4: cache.addAll() é tudo-ou-nada — se UM arquivo da lista falhar (ex.:
-  // renomeado, removido, ou um problema de rede pontual num item opcional),
-  // a instalação inteira falhava silenciosamente (o .catch(()=>{}) engolia
-  // o erro) e o cache ficava vazio, sem NENHUM arquivo do shell salvo.
-  // cache.put() individual por arquivo evita isso: um item que falhar fica
-  // só de fora (registrado no console), sem derrubar os outros.
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       Promise.allSettled(
@@ -97,13 +84,6 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
-  // SEGURANÇA/CACHE (A1-04 + A3-08): nunca cacheia chamadas de API (dados
-  // sempre precisam ser atuais), requisições que não sejam GET, nem nada
-  // fora do próprio domínio do app — antes disso, o filtro só excluía
-  // "/api/", o que deixava passar (e cachear) respostas de Firestore,
-  // Firebase Storage, o SDK do Firebase via gstatic, bibliotecas via
-  // cdnjs e chamadas à Stripe, todas cross-origin. Cache do "shell" deve
-  // cobrir só os arquivos estáticos do próprio app (ver SHELL_FILES acima).
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
@@ -112,10 +92,6 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(req)
       .then((res) => {
-        // Só grava no cache respostas de sucesso (res.ok) e "basic" (mesmo
-        // origin, sem redirecionar pra fora) — nunca respostas de erro
-        // (4xx/5xx, ex.: uma página 404) nem "opacas" (cross-origin em modo
-        // no-cors, status sempre 0, impossível saber se deu certo).
         if (res.ok && res.type === "basic") {
           const resClone = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone)).catch(() => {});
