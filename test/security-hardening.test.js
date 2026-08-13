@@ -101,7 +101,7 @@ describe("security hardening regressions", () => {
       const content = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
       const matches = content.matchAll(INLINE_SCRIPT_RE);
       for (const m of matches) {
-        const hash = "sha256-" + createHash("sha256").update(m[1], "utf8").digest("hex");
+        const hash = "'sha256-" + createHash("sha256").update(m[1], "utf8").digest("base64") + "'";
         uniqueHashes.add(hash);
         expect(tokens.has(hash), `${file}: hash do script inline ausente na CSP (${hash}). Atualize script-src em vercel.json.`).toBe(true);
       }

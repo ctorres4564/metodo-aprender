@@ -70,6 +70,11 @@ export async function callOpenRouter({ apiKey, model, messages, maxTokens, refer
         },
         body: JSON.stringify({
           model,
+          models: [
+            model,
+            "google/gemini-flash-1.5",
+            "meta-llama/llama-3-8b-instruct:free"
+          ],
           max_tokens: maxTokens,
           reasoning: { effort: "low", exclude: true },
           messages,

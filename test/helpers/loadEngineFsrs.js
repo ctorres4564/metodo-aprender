@@ -1,20 +1,20 @@
 /* =====================================================================
    Carrega assets/engine.js — SEM modificá-lo — pra testar as funções
-   FSRS de dentro dele.
-   =====================================================================
-   engine.js é um <script> comum (não um módulo ES: sem import/export),
-   carregado direto pelo navegador em app.html. Transformá-lo num módulo
-   só pra testar sairia do escopo de "escrever testes" (mudaria como o
-   app inteiro carrega o motor). Em vez disso, roda o arquivo de verdade
-   num contexto isolado do Node (vm), igual o navegador rodaria um
-   <script> comum: declarações "function" no topo do arquivo viram
-   propriedades do objeto global desse contexto, então dá pra pegar
-   fsrsUpdate/etc. depois de rodar o arquivo — sem precisar duplicar ou
-   reescrever a lógica aqui.
+   FSRS e de estado de dentro dele.
 
-   Seguro porque engine.js não tem NENHUM código que roda imediatamente
-   no carregamento (só declarações de função/variável — initApp() só é
-   chamada de fora, por app.html); nada aqui toca em `document`/`window`.
+   engine.js declara `let STATE = null` e `let CONCEPTS = []`. No
+   navegador, isso funciona porque são globais; no vm do Node, `let`
+   cria binding lexical (não vira propriedade do sandbox), então os
+   testes não conseguem injetar STATE/CONCEPTS. A solução: substituir
+   `let STATE` e `let CONCEPTS` por `var` no source antes de rodar —
+   `var` vira propriedade do sandbox, igual as functions.
+
+   loadEngineFsrsAndSetConcepts(concepts):
+     - Substitui `let CONCEPTS = []` pelos conceitos injetados
+     - Substitui `let STATE = null` por `var STATE = null`
+     - Substitui `let CONFIG = null` por `var CONFIG = null`
+     - Retorna o sandbox, onde engine.STATE / engine.conceptStatus
+       agora funcionam como esperado.
    ===================================================================== */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -29,5 +29,37 @@ export function loadEngineFsrs() {
   const sandbox = {};
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: "assets/engine.js" });
+  return sandbox;
+}
+
+/**
+ * Carrega o engine com CONCEPTS populada e STATE/var exposto ao sandbox.
+ */
+export function loadEngineFsrsAndSetConcepts(concepts) {
+  let engineSrc = readFileSync(ENGINE_PATH, "utf8");
+
+  // Substitui CONCEPTS pelos conceitos injetados
+  const conceptsJson = JSON.stringify(concepts);
+  engineSrc = engineSrc.replace(
+    "let CONCEPTS = [];",
+    `var CONCEPTS = ${conceptsJson};`
+  );
+
+  // Substitui let STATE = null por var STATE = null
+  // (var vira propriedade do sandbox; let não)
+  engineSrc = engineSrc.replace(
+    "let STATE = null;",
+    "var STATE = null;"
+  );
+
+  // CONFIG também é acessado por algumas funções
+  engineSrc = engineSrc.replace(
+    "let CONFIG = null;",
+    "var CONFIG = null;"
+  );
+
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(engineSrc, sandbox, { filename: "assets/engine.js" });
   return sandbox;
 }

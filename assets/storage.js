@@ -67,10 +67,15 @@ const StorageAdapter = {
   // antes disso, se algo chamar flush() (ver engine.js: visibilitychange,
   // troca de aba/saída da tela de estudo).
   DEBOUNCE_MS: 4000, // entre 3 e 5s pedidos
-  _pending: {},  // { [key]: data } — sempre a versão mais recente ainda não gravada no Firestore
-  _timers: {},   // { [key]: timeoutId }
-  _writing: {},  // { [key]: true } — já existe uma gravação desta key em andamento no Firestore
-  _dirty: {},    // { [key]: true } — chegou save() novo enquanto a gravação anterior ainda rodava
+  _pending: {},   // { [key]: data } — sempre a versão mais recente ainda não gravada no Firestore
+  _timers: {},    // { [key]: timeoutId }
+  // V4-C: fila serial por key — substitui _writing + _dirty (semáforo
+  // artesanal) por uma promise chain. Cada key tem sua própria fila;
+  // escritas na mesma key são serializadas automaticamente (a próxima só
+  // começa depois que a anterior terminar), sem os estados implícitos que
+  // podiam causar race conditions. Escritas em keys diferentes continuam
+  // concorrentes (não há razão para serializá-las entre si).
+  _queues: {},    // { [key]: Promise }
 
   async save(key, data){
     // localStorage: sempre imediato e síncrono — nunca espera o debounce
@@ -109,32 +114,26 @@ const StorageAdapter = {
     clearTimeout(this._timers[key]);
     delete this._timers[key];
 
-    if(!(key in this._pending)) return; // nada pendente — ou já foi gravado, ou nunca teve Firestore
+    if(!(key in this._pending)) return; // nada pendente
 
-    // Nunca duas gravações da MESMA key ao mesmo tempo no Firestore (isso
-    // poderia deixar uma escrita mais antiga terminar depois de uma mais
-    // nova e sobrescrever o estado mais recente). Se já tem uma rodando,
-    // só marca "dirty" — o próprio finally abaixo dispara a próxima
-    // gravação assim que a atual terminar, sempre com o pending mais
-    // recente naquele momento.
-    if(this._writing[key]){
-      this._dirty[key] = true;
-      return;
-    }
-
-    const data = this._pending[key];
-    delete this._pending[key];
-    this._writing[key] = true;
-    try{
-      await window.AppDB.saveProgress(key, data);
-    }catch(e){
-      console.warn("StorageAdapter: falha ao salvar no Firestore (localStorage já está atualizado):", e);
-    }finally{
-      this._writing[key] = false;
-      if(this._dirty[key]){
-        this._dirty[key] = false;
-        if(key in this._pending) this._flushKey(key);
+    // Fila serial: cada chamada encadeia na promise anterior da mesma key.
+    // Isso garante que duas escritas da mesma key nunca rodem ao mesmo tempo
+    // e que a mais recente (this._pending[key]) sempre seja a última a ser
+    // gravada — sem precisar dos flags _writing e _dirty do semáforo antigo.
+    const doWrite = async () => {
+      const data = this._pending[key];
+      if(!data) return; // foi consumido por outra gravação enquanto esperava na fila
+      delete this._pending[key];
+      try{
+        await window.AppDB.saveProgress(key, data);
+      }catch(e){
+        console.warn("StorageAdapter: falha ao salvar no Firestore (localStorage já está atualizado):", e);
       }
-    }
+    };
+
+    this._queues[key] = (this._queues[key] || Promise.resolve()).then(doWrite, doWrite);
+    // Deixa a fila limpar depois que terminar (evita acumular promises
+    // infinitamente pra keys que nunca mais são usadas).
+    this._queues[key] = this._queues[key].then(() => { delete this._queues[key]; });
   }
 };

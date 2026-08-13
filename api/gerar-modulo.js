@@ -33,6 +33,7 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { cleanStr } from "./_lib/sanitize.js";
 import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -133,7 +134,7 @@ Regras OBRIGATÓRIAS para cada conceito:
    - Devem ser sobre o MESMO assunto/categoria da resposta certa, nunca de um assunto claramente diferente.
    - Devem ser plausíveis para alguém que compreendeu o tema apenas parcialmente.
    - Evite distratores obviamente falsos, absurdos ou extremos.
-   - Evite pistas linguísticas como “sempre”, “nunca”, “completamente”, “exclusivamente”, salvo quando realmente necessárias pelo conteúdo.
+   - Evite pistas linguísticas como "sempre", "nunca", "completamente", "exclusivamente", salvo quando realmente necessárias pelo conteúdo.
    - Prefira distratores que representem confusão entre conceitos próximos, inversão de causa e efeito, aplicação incorreta de um princípio correto, conclusão parcialmente correta mas conceitualmente inadequada, ou diferença sutil relevante para o conteúdo.
    - Devem ter aproximadamente o mesmo tamanho, estrutura gramatical e nível de especificidade da resposta certa — nunca deixe a opção correta visivelmente mais longa, mais específica ou mais "bem escrita" que as outras (isso entrega a resposta).
    - A resposta correta não deve se destacar por repetir palavras ou expressões exclusivas usadas na explicação.
@@ -190,18 +191,16 @@ ${trimmedSource}
       .filter(c => c && c.title && c.text && c.q && Array.isArray(c.options) && c.options.length === 4 && typeof c.correct === "number")
       .slice(0, MAX_CONCEPTS)
       .map(c => ({
-        tag: String(c.tag || "Geral").slice(0, 40),
-        title: String(c.title).slice(0, 120),
-        text: String(c.text).slice(0, 800),
-        q: String(c.q).slice(0, 240),
-        options: c.options.map(o => String(o).slice(0, 160)),
+        tag: cleanStr(c.tag || "Geral", 40),
+        title: cleanStr(c.title, 120),
+        text: cleanStr(c.text, 800),
+        q: cleanStr(c.q, 240),
+        options: c.options.map(o => cleanStr(o, 160)),
         correct: Math.min(3, Math.max(0, Math.round(c.correct))),
         page: (typeof c.page === "number" && Number.isFinite(c.page) && c.page > 0) ? Math.round(c.page) : null
       }));
 
-    const resumo = typeof parsed.resumo === "string" ? parsed.resumo.trim().slice(0, 3000) : "";
-
-    res.status(200).json({ resumo, concepts: cleanConcepts });
+    res.status(200).json({ resumo: cleanStr(parsed.resumo, 3000), concepts: cleanConcepts });
   } catch (e) {
     await refundUsage(uid);
     if (e && e.code) {

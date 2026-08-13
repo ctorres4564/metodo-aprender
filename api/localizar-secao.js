@@ -28,6 +28,7 @@
    ===================================================================== */
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { cleanStr } from "./_lib/sanitize.js";
 import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -127,9 +128,9 @@ Responda SOMENTE em JSON válido, exatamente neste formato, sem nenhum texto ant
 
     res.status(200).json({
       found: true,
-      title: String(parsed.title || target).slice(0, 160),
-      startAnchor: String(parsed.startAnchor).slice(0, 300),
-      nextAnchor: parsed.nextAnchor ? String(parsed.nextAnchor).slice(0, 300) : ""
+      title: cleanStr(parsed.title || target, 160),
+      startAnchor: cleanStr(parsed.startAnchor, 300),
+      nextAnchor: parsed.nextAnchor ? cleanStr(parsed.nextAnchor, 300) : ""
     });
   } catch (e) {
     await refundUsage(uid);

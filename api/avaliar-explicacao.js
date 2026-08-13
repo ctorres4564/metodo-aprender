@@ -17,6 +17,7 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { cleanStr, cleanList } from "./_lib/sanitize.js";
 import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -145,9 +146,8 @@ ${studentText}
     // cliente. A saída do modelo é influenciada pelo texto enviado (prompt
     // injection via PDF) e esses campos são renderizados em HTML no cliente
     // — nunca repassar o JSON do modelo sem filtrar.
-    const cleanStr = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
-    const cleanList = (v, maxItems, maxLen) =>
-      (Array.isArray(v) ? v : []).filter(i => typeof i === "string").slice(0, maxItems).map(i => i.slice(0, maxLen));
+    // V3-C: cleanStr/cleanList agora vêm de api/_lib/sanitize.js (compartilhado
+    // com os outros endpoints de IA — antes estavam duplicados inline aqui).
 
     const notaRaw = Number(parsed.nota);
     let nota = Number.isFinite(notaRaw) ? Math.min(100, Math.max(0, Math.round(notaRaw))) : 0;

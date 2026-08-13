@@ -11,6 +11,7 @@
 
 import { requireUsageQuota, refundUsage } from "./_lib/usage.js";
 import { callOpenRouter, statusForOpenRouterError } from "./_lib/openrouter.js";
+import { cleanStr } from "./_lib/sanitize.js";
 import { withSentry } from "./_lib/sentry.js";
 
 const DEFAULT_MODEL = "openai/gpt-4o-mini";
@@ -70,7 +71,7 @@ ${referenceText}
       ]
     });
 
-    const analogia = typeof parsed.analogia === "string" ? parsed.analogia.slice(0, 900) : "";
+    const analogia = cleanStr(parsed.analogia, 900);
     if (!analogia) {
       // A1-03: resposta "vazia" da IA também é uma falha (nada útil foi
       // entregue) — estorna a cota consumida, igual às falhas de rede/parse.

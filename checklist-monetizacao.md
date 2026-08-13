@@ -14,9 +14,9 @@
 
 - [ ] Trocar `STRIPE_SECRET_KEY` de `sk_test_...` para `sk_live_...`
 - [ ] Criar webhook de produção na Stripe (URL de produção, eventos: checkout/subscription created/updated/deleted) e configurar `STRIPE_WEBHOOK_SECRET` de produção
-- [ ] Domínio próprio (em vez de `*.vercel.app`)
+- [x] Domínio próprio (em vez de `*.vercel.app`)
 - [ ] Verificar domínio na Resend (hoje os lembretes só chegam à própria caixa da conta Resend, modo sandbox)
-- [ ] Canal de suporte visível no app (e-mail de contato mínimo)
+- [x] Canal de suporte visível no app (e-mail de contato mínimo)
 
 ## Recomendado, não bloqueante
 
