@@ -53,6 +53,25 @@
     </div>
 
     <div class="panel">
+      <h2 class="section-title" style="margin:0 0 6px;">✉️ Suporte e Feedback</h2>
+      <p class="lead" style="margin-top:-2px;">
+        Tem alguma dúvida, encontrou um bug ou quer sugerir uma melhoria? Envie uma mensagem diretamente para nosso canal de suporte ou pelo e-mail <a href="mailto:ctorres4564@gmail.com">ctorres4564@gmail.com</a>.
+      </p>
+      <form id="support-form" style="margin-top:14px;">
+        <div style="margin-bottom:10px;">
+          <input type="text" id="support-subject" class="auth-input" placeholder="Assunto (ex: Dúvida sobre repetição espaçada)" required aria-label="Assunto da mensagem">
+        </div>
+        <div style="margin-bottom:10px;">
+          <textarea id="support-message" class="auth-input" placeholder="Escreva sua mensagem aqui..." style="height:120px; font-family:inherit; padding:12px; resize:vertical;" required aria-label="Conteúdo da mensagem"></textarea>
+        </div>
+        <div id="support-feedback"></div>
+        <button type="submit" class="btn" id="support-submit-btn" style="margin-top:10px;">
+          ✉️ Enviar Mensagem de Suporte
+        </button>
+      </form>
+    </div>
+
+    <div class="panel">
       <div class="danger-zone">
         <h3>⚠️ Excluir minha conta</h3>
         <p class="lead" style="margin-top:-2px;">
@@ -115,6 +134,50 @@ document.getElementById("delete-account-btn").addEventListener("click", async ()
     fb.className = "feedback bad";
     btn.disabled = false;
     btn.textContent = "🗑️ Excluir minha conta permanentemente";
+  }
+});
+
+document.getElementById("support-form").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const fb = document.getElementById("support-feedback");
+  const btn = document.getElementById("support-submit-btn");
+  const subjectInput = document.getElementById("support-subject");
+  const messageInput = document.getElementById("support-message");
+
+  const subject = subjectInput.value.trim();
+  const message = messageInput.value.trim();
+
+  if(subject.length < 3){
+    fb.innerHTML = `<div class="feedback bad">Assunto muito curto (mínimo de 3 caracteres).</div>`;
+    return;
+  }
+  if(message.length < 10){
+    fb.innerHTML = `<div class="feedback bad">Mensagem muito curta (mínimo de 10 caracteres).</div>`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  fb.innerHTML = "";
+
+  try{
+    const resp = await authedFetch("/api/suporte", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subject, message })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || "Não foi possível enviar a mensagem agora.");
+
+    fb.innerHTML = `<div class="feedback ok">Mensagem enviada com sucesso! Responderemos em breve.</div>`;
+    subjectInput.value = "";
+    messageInput.value = "";
+  }catch(err){
+    console.error(err);
+    fb.innerHTML = `<div class="feedback bad">${err.message || "Erro ao enviar mensagem."}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "✉️ Enviar Mensagem de Suporte";
   }
 });
 
