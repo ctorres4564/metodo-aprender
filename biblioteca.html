@@ -37,6 +37,11 @@
   .materials-grid{
     display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;
   }
+  .category-chip{
+    display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
+    background: var(--panel); border:1px solid var(--border); color: var(--text-dim); white-space:nowrap;
+  }
+  .category-filter{ margin-top:12px; }
 </style>
 </head>
 <body>
@@ -71,6 +76,12 @@
         Cada PDF ou texto que você importa fica salvo aqui. Clique em "Usar" para reabrir um material e pedir
         novos módulos (por parte, capítulo ou seção) sem enviar o arquivo de novo.
       </p>
+      <div class="category-filter">
+        <span class="field-label">Filtrar por categoria</span>
+        <select id="category-filter-select" class="auth-input" style="max-width:260px;">
+          <option value="">Todas as categorias</option>
+        </select>
+      </div>
       <div class="materials-grid" id="materials-grid" style="margin-top:12px;"></div>
       <p id="materials-empty" style="display:none; color:var(--text-dim); font-size:13px; margin-top:8px;">
         Você ainda não importou nenhum livro ou texto.
@@ -89,6 +100,7 @@
 <script type="module" src="assets/firebase-init.js"></script>
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
+<script src="assets/material-categories.js"></script>
 <script src="assets/pwa.js"></script>
 <script>
 function escapeHtml(value){
@@ -104,6 +116,31 @@ const STATUS_LABELS = {
   failed: "Falhou",
   deleting: "Excluindo..."
 };
+
+const CATEGORY_LIST = (window.MaterialCategories && window.MaterialCategories.LIST) || [];
+const CATEGORY_LABELS = Object.fromEntries(CATEGORY_LIST.map(c => [c.id, c.label]));
+const DEFAULT_CATEGORY = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "geral";
+
+function categoryLabel(m){
+  return CATEGORY_LABELS[m.category] || CATEGORY_LABELS[DEFAULT_CATEGORY] || "Geral";
+}
+
+let selectedCategory = "";
+let EMPTY_LIBRARY_HTML = "";
+
+function populateCategoryFilter(){
+  const select = document.getElementById("category-filter-select");
+  CATEGORY_LIST.forEach(c=>{
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.label;
+    select.appendChild(opt);
+  });
+  select.addEventListener("change", ()=>{
+    selectedCategory = select.value;
+    loadMaterials();
+  });
+}
 
 // T4 (materiais "zumbis"): extração/OCR acontece no navegador de quem
 // importou — se a aba fechar, a conexão cair, ou algo travar no meio do
@@ -149,11 +186,22 @@ async function loadMaterials(){
   }
 
   try{
-    const materials = await window.AppDB.listMaterials();
+    const allMaterials = await window.AppDB.listMaterials();
     loading.style.display = "none";
     grid.innerHTML = "";
 
-    if(!materials || materials.length === 0){
+    if(!allMaterials || allMaterials.length === 0){
+      empty.innerHTML = EMPTY_LIBRARY_HTML;
+      empty.style.display = "block";
+      return;
+    }
+
+    const materials = selectedCategory
+      ? allMaterials.filter(m => (m.category || DEFAULT_CATEGORY) === selectedCategory)
+      : allMaterials;
+
+    if(materials.length === 0){
+      empty.textContent = "Nenhum material nessa categoria.";
       empty.style.display = "block";
       return;
     }
@@ -177,6 +225,7 @@ async function loadMaterials(){
           <h3>${escapeHtml(m.title || "Sem título")}</h3>
           <span class="status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
         </div>
+        <div><span class="category-chip">${escapeHtml(categoryLabel(m))}</span></div>
         <div class="meta-line">${sourceLabel}${sizeInfo}${ocrInfo}</div>
         <div class="meta-line">${m.pageCount ? m.pageCount + " página(s) · " : ""}${moduleInfo}</div>
         <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
@@ -274,6 +323,8 @@ async function loadMaterials(){
 
 initAuthGate(()=>{
   bindLogoutButton();
+  EMPTY_LIBRARY_HTML = document.getElementById("materials-empty").innerHTML;
+  populateCategoryFilter();
   loadMaterials();
 });
 </script>

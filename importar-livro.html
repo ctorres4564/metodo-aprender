@@ -58,6 +58,8 @@
       </p>
       <span class="field-label">Título do livro (opcional, usado para nomear os módulos)</span>
       <input type="text" id="book-title" class="auth-input" placeholder="Ex: Manual de Psicologia Evolucionista">
+      <span class="field-label" style="margin-top:10px;">Categoria</span>
+      <select id="book-category" class="auth-input"></select>
       <div class="grid2" style="margin-top:10px;">
         <div>
           <span class="field-label">Arquivo PDF</span>
@@ -95,6 +97,7 @@
 <script src="assets/api-client.js"></script>
 <script src="assets/module-drafts.js"></script>
 <script src="assets/material-limits.js"></script>
+<script src="assets/material-categories.js"></script>
 <script src="assets/pwa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js" integrity="sha384-d8143753739d28e6f451ccf1aabe3523d52f664cebe15f47bfcb92ccc3190259a1b050a5bdd657e708b97c30b31beb4c" crossorigin="anonymous"></script>
 <script src="assets/ocr.js"></script>
@@ -382,11 +385,19 @@ function reconstructPagesFromDocs(pageDocs){
   return { fullText, pages };
 }
 
-async function createMaterialRecord({ sourceType, title, originalFileName, mimeType, fileSize }){
+function populateCategorySelect(){
+  const select = document.getElementById("book-category");
+  const categories = (window.MaterialCategories && window.MaterialCategories.LIST) || [];
+  select.innerHTML = categories.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}</option>`).join("");
+  select.value = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "geral";
+}
+populateCategorySelect();
+
+async function createMaterialRecord({ sourceType, title, originalFileName, mimeType, fileSize, category }){
   const resp = await authedFetch("/api/material", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "create", sourceType, title, originalFileName, mimeType, fileSize })
+    body: JSON.stringify({ action: "create", sourceType, title, originalFileName, mimeType, fileSize, category })
   });
   const data = await resp.json();
   if(!resp.ok) throw new Error(data.error || "Não foi possível iniciar o material.");
@@ -483,7 +494,8 @@ document.getElementById("load-btn").addEventListener("click", async ()=>{
       title,
       originalFileName: file ? file.name : null,
       mimeType: file ? (file.type || "application/pdf") : null,
-      fileSize: file ? file.size : null
+      fileSize: file ? file.size : null,
+      category: document.getElementById("book-category").value
     });
 
     if(file){
