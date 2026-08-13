@@ -15,7 +15,7 @@
    Recebe sempre: { action: "create"|"updateStatus"|"registerModule"|"recordRead"|"delete", ...demais campos por ação }
 
    action "create"         → cria o documento inicial de um material.
-     Recebe: { sourceType, title, originalFileName, mimeType, fileSize }
+     Recebe: { sourceType, title, originalFileName, mimeType, fileSize, category? }
      Retorna: { materialId }
 
    action "updateStatus"   → atualiza status e metadados de processamento.
@@ -42,6 +42,7 @@
 import { verifyUserFromRequest, getUserPlan } from "./_lib/usage.js";
 import { adminDb, adminStorage } from "./_lib/firebaseAdmin.js";
 import { MATERIAL_LIMITS } from "./_lib/materialLimits.js";
+import { MATERIAL_CATEGORY_IDS, DEFAULT_MATERIAL_CATEGORY } from "./_lib/materialCategories.js";
 import { withSentry } from "./_lib/sentry.js";
 
 // Materiais que ainda contam pra cota (exclui "failed" — upload que não deu
@@ -69,7 +70,7 @@ async function activeMaterialCount(uid) {
 
 /* ---- action: create ----------------------------------------------- */
 async function handleCreate(req, res, user) {
-  const { sourceType, title, originalFileName, mimeType, fileSize } = req.body || {};
+  const { sourceType, title, originalFileName, mimeType, fileSize, category } = req.body || {};
 
   if (sourceType !== "pdf" && sourceType !== "text") {
     res.status(400).json({ error: "sourceType inválido (use 'pdf' ou 'text')." });
@@ -79,6 +80,9 @@ async function handleCreate(req, res, user) {
     res.status(400).json({ error: "Informe um título para o material." });
     return;
   }
+  // Categoria é sempre uma das opções fixas — qualquer valor fora da lista
+  // (nunca enviado, digitado à mão via DevTools, etc.) cai no padrão.
+  const resolvedCategory = MATERIAL_CATEGORY_IDS.includes(category) ? category : DEFAULT_MATERIAL_CATEGORY;
   if (sourceType === "pdf" && typeof fileSize === "number" && fileSize > MATERIAL_LIMITS.maxPdfSizeBytes) {
     res.status(400).json({ error: `Arquivo maior que o limite permitido (${Math.round(MATERIAL_LIMITS.maxPdfSizeBytes / 1024 / 1024)} MB).` });
     return;
@@ -97,6 +101,7 @@ async function handleCreate(req, res, user) {
     const data = {
       ownerId: user.uid,
       sourceType,
+      category: resolvedCategory,
       title: String(title).trim().slice(0, 200),
       originalFileName: sourceType === "pdf" ? String(originalFileName || "").slice(0, 200) : null,
       storagePath: null,
