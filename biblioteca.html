@@ -119,10 +119,10 @@ const STATUS_LABELS = {
 
 const CATEGORY_LIST = (window.MaterialCategories && window.MaterialCategories.LIST) || [];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORY_LIST.map(c => [c.id, c.label]));
-const DEFAULT_CATEGORY = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "geral";
+const DEFAULT_CATEGORY = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "outros";
 
 function categoryLabel(m){
-  return CATEGORY_LABELS[m.category] || CATEGORY_LABELS[DEFAULT_CATEGORY] || "Geral";
+  return CATEGORY_LABELS[m.category] || CATEGORY_LABELS[DEFAULT_CATEGORY] || "Outros";
 }
 
 let selectedCategory = "";

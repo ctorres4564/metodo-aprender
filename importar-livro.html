@@ -389,7 +389,7 @@ function populateCategorySelect(){
   const select = document.getElementById("book-category");
   const categories = (window.MaterialCategories && window.MaterialCategories.LIST) || [];
   select.innerHTML = categories.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}</option>`).join("");
-  select.value = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "geral";
+  select.value = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "outros";
 }
 populateCategorySelect();
 
