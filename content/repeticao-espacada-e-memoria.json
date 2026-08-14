@@ -1,0 +1,152 @@
+{
+  "config": {
+    "appTitle": "Ciência do Estudo",
+    "appSubtitle": "Como Funciona a Repetição Espaçada",
+    "logoEmoji": "🧠",
+    "homeIntro": "Este módulo explica, com base em pesquisa consolidada de psicologia cognitiva, por que a repetição espaçada e a recuperação ativa funcionam melhor do que reler ou grifar textos — o mesmo princípio por trás do motor de estudo do Método Aprender.",
+    "sourceCredit": "Conteúdo baseado em achados amplamente replicados de psicologia cognitiva (curva do esquecimento de Ebbinghaus, efeito de teste, efeito de espaçamento e dificuldades desejáveis). Resumido e reformulado para fins didáticos.",
+    "storageKey": "estudo_ciencia_repeticao_espacada_v1"
+  },
+  "concepts": [
+    {
+      "id": "curva-esquecimento",
+      "tag": "Fundamentos",
+      "title": "A curva do esquecimento de Ebbinghaus",
+      "text": "No fim do século XIX, Hermann Ebbinghaus mostrou que esquecemos informação nova de forma acelerada logo após aprendê-la, e depois cada vez mais devagar. Sem nenhuma revisão, boa parte do que se aprende pode ser esquecido já nas primeiras horas ou dias.",
+      "q": "O que a curva do esquecimento de Ebbinghaus descreve?",
+      "options": [
+        "Que esquecemos tudo de forma constante e linear ao longo do tempo",
+        "Que a perda de informação é rápida logo após o aprendizado e depois desacelera",
+        "Que informações memorizadas nunca são esquecidas",
+        "Que o esquecimento só ocorre após meses sem revisão"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "efeito-espacamento",
+      "tag": "Fundamentos",
+      "title": "O efeito de espaçamento",
+      "text": "Estudar o mesmo conteúdo em sessões espaçadas ao longo do tempo produz memórias mais duradouras do que concentrar toda a revisão em uma única sessão (o famoso 'virar a noite estudando'), mesmo quando o tempo total de estudo é igual.",
+      "q": "Segundo o efeito de espaçamento, o que produz memórias mais duradouras?",
+      "options": [
+        "Estudar tudo de uma vez, em uma sessão longa e intensa",
+        "Distribuir o estudo do mesmo conteúdo em sessões espaçadas no tempo",
+        "Estudar apenas quando o esquecimento ainda não começou",
+        "O tempo total de estudo, independente de como é distribuído"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "intervalos-crescentes",
+      "tag": "Repetição espaçada",
+      "title": "Por que os intervalos aumentam a cada revisão",
+      "text": "Sistemas de repetição espaçada aumentam o intervalo entre revisões cada vez que você acerta um conceito: primeiro em um dia, depois alguns dias, depois semanas. A lógica é revisar um pouco antes de esquecer — reforçando a memória no momento mais eficiente.",
+      "q": "Por que sistemas de repetição espaçada aumentam o intervalo entre revisões conforme você acerta?",
+      "options": [
+        "Para reduzir o número total de revisões, mesmo perdendo eficácia",
+        "Porque revisar bem antes de esquecer reforça a memória no momento mais eficiente",
+        "Porque intervalos maiores são mais fáceis de programar no sistema",
+        "Para forçar o esquecimento total antes de cada revisão"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "efeito-teste",
+      "tag": "Recuperação ativa",
+      "title": "O efeito de teste (testing effect)",
+      "text": "Tentar recuperar uma informação da memória — por exemplo, respondendo uma pergunta sobre ela — fortalece essa memória mais do que simplesmente reler o material. Esse fenômeno é chamado de efeito de teste ou prática de recuperação (retrieval practice).",
+      "q": "O que é o efeito de teste (testing effect)?",
+      "options": [
+        "O fato de que fazer provas piora a memorização por causar ansiedade",
+        "O fortalecimento da memória ao tentar recuperar ativamente uma informação, em vez de só reler",
+        "A ideia de que só testes escritos ajudam a memorizar",
+        "Um efeito que só funciona para conteúdos matemáticos"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "releitura-passiva",
+      "tag": "Recuperação ativa",
+      "title": "Por que reler e grifar enganam",
+      "text": "Reler um texto ou grifar trechos cria uma sensação de familiaridade que é facilmente confundida com aprendizado real. Essa fluência de reconhecimento não significa que a informação poderá ser lembrada depois, sem o texto na frente.",
+      "q": "Por que reler e grifar podem dar uma falsa sensação de domínio do conteúdo?",
+      "options": [
+        "Porque geram familiaridade com o texto, que é confundida com memorização real",
+        "Porque sempre aumentam a nota em provas",
+        "Porque exigem mais esforço do que testar a si mesmo",
+        "Porque são técnicas proibidas em ambientes acadêmicos"
+      ],
+      "correct": 0
+    },
+    {
+      "id": "dificuldades-desejaveis",
+      "tag": "Conceitos avançados",
+      "title": "Dificuldades desejáveis",
+      "text": "Certas dificuldades durante o estudo — como esperar até quase esquecer para revisar, ou testar a si mesmo em vez de reler — tornam o aprendizado mais lento e desconfortável no curto prazo, mas produzem memórias muito mais fortes e duradouras no longo prazo.",
+      "q": "O que caracteriza uma 'dificuldade desejável' no aprendizado?",
+      "options": [
+        "Qualquer dificuldade, mesmo que atrapalhe a memorização a longo prazo",
+        "Uma dificuldade que torna o estudo mais difícil no curto prazo, mas fortalece a memória a longo prazo",
+        "Estudar em ambientes barulhentos de propósito",
+        "Evitar qualquer forma de esforço durante o estudo"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "intercalacao",
+      "tag": "Conceitos avançados",
+      "title": "Intercalação (interleaving)",
+      "text": "Em vez de estudar um tópico inteiro antes de passar ao próximo (estudo em blocos), intercalar diferentes tópicos ou tipos de problema na mesma sessão exige mais esforço mental, mas melhora a capacidade de diferenciar e aplicar cada conceito corretamente depois.",
+      "q": "O que é a técnica de intercalação (interleaving) no estudo?",
+      "options": [
+        "Estudar um único assunto por várias horas seguidas, sem pausas",
+        "Alternar entre diferentes tópicos ou tipos de problema numa mesma sessão de estudo",
+        "Ler o material em ordem alfabética",
+        "Estudar sempre no mesmo horário do dia"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "consolidacao-sono",
+      "tag": "Consolidação",
+      "title": "O papel do sono na consolidação da memória",
+      "text": "Durante o sono, o cérebro reativa e reorganiza memórias formadas durante o dia, um processo chamado consolidação. Dormir mal ou pouco após uma sessão de estudo prejudica a retenção do que foi aprendido, mesmo que o estudo em si tenha sido de qualidade.",
+      "q": "Qual é o papel do sono na memorização, segundo a consolidação da memória?",
+      "options": [
+        "O sono não tem relação alguma com a memória",
+        "Durante o sono, o cérebro reativa e reorganiza memórias formadas durante o dia",
+        "Dormir apaga memórias recentes para abrir espaço para novas",
+        "Só o sono profundo antes do estudo importa, nunca depois"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "algoritmos-adaptativos",
+      "tag": "Aplicação prática",
+      "title": "Algoritmos de repetição espaçada",
+      "text": "Aplicativos de estudo modernos usam algoritmos (como variações do SM-2 ou sistemas mais recentes baseados em modelos de esquecimento, como o FSRS) para calcular, individualmente para cada pessoa e cada conceito, o melhor momento para a próxima revisão — sem precisar planejar isso manualmente.",
+      "q": "Para que servem algoritmos como o SM-2 ou o FSRS em apps de estudo?",
+      "options": [
+        "Para escolher aleatoriamente quais conceitos revisar",
+        "Para calcular, de forma individualizada, o melhor momento para revisar cada conceito",
+        "Para substituir completamente a necessidade de revisão",
+        "Para aumentar artificialmente a dificuldade das perguntas"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "gamificacao-consistencia",
+      "tag": "Aplicação prática",
+      "title": "Por que a consistência importa mais que a intensidade",
+      "text": "Como o efeito de espaçamento depende de revisões distribuídas no tempo, sessões curtas e frequentes ao longo de semanas produzem retenção muito melhor do que sessões longas e esporádicas — mesmo que o tempo total investido seja parecido.",
+      "q": "Por que sessões curtas e frequentes tendem a superar sessões longas e esporádicas?",
+      "options": [
+        "Porque sessões curtas exigem menos concentração",
+        "Porque a distribuição das revisões no tempo é o que fortalece a memória, não só o tempo total",
+        "Porque sessões longas sempre causam mais estresse",
+        "Não há diferença real entre as duas abordagens"
+      ],
+      "correct": 1
+    }
+  ]
+}
