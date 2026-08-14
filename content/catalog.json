@@ -10,6 +10,15 @@
       "conceptCount": 18,
       "contentFile": "content/capitulo-1-1-fundamentos-evolucao-comportamento.json",
       "plan": "free"
+    },
+    {
+      "id": "repeticao-espacada-memoria",
+      "title": "Como Funciona a Repetição Espaçada",
+      "subtitle": "A ciência por trás do esquecimento e da memorização eficiente — curva de Ebbinghaus, efeito de teste e mais",
+      "icon": "🧠",
+      "conceptCount": 10,
+      "contentFile": "content/repeticao-espacada-e-memoria.json",
+      "plan": "free"
     }
   ]
 }
