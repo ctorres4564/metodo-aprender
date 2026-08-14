@@ -3,12 +3,12 @@
   "collectionSubtitle": "Crie e estude qualquer assunto com repetição espaçada, gamificação e IA",
   "modules": [
     {
-      "id": "cap1-1-fundamentos",
-      "title": "Fundamentos da Evolução do Comportamento",
-      "subtitle": "Etologia, seleção natural, altruísmo e plasticidade comportamental — Manual de Psicologia Evolucionista",
-      "icon": "🧬",
-      "conceptCount": 18,
-      "contentFile": "content/capitulo-1-1-fundamentos-evolucao-comportamento.json",
+      "id": "metacognicao-aprender-aprender",
+      "title": "Metacognição: Aprender a Aprender",
+      "subtitle": "Como monitorar e ajustar sua própria forma de estudar — julgamentos de aprendizagem, calibração e autoteste",
+      "icon": "🪞",
+      "conceptCount": 10,
+      "contentFile": "content/metacognicao-aprender-a-aprender.json",
       "plan": "free"
     },
     {
