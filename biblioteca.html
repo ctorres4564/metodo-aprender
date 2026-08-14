@@ -37,9 +37,10 @@
   .materials-grid{
     display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;
   }
-  .category-chip{
-    display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
-    background: var(--panel); border:1px solid var(--border); color: var(--text-dim); white-space:nowrap;
+  .category-select{
+    font-size:11px; font-weight:600; padding:3px 8px; border-radius:999px;
+    background: var(--panel); border:1px solid var(--border); color: var(--text-dim);
+    max-width:100%;
   }
   .category-filter{ margin-top:12px; }
 </style>
@@ -118,12 +119,7 @@ const STATUS_LABELS = {
 };
 
 const CATEGORY_LIST = (window.MaterialCategories && window.MaterialCategories.LIST) || [];
-const CATEGORY_LABELS = Object.fromEntries(CATEGORY_LIST.map(c => [c.id, c.label]));
-const DEFAULT_CATEGORY = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "geral";
-
-function categoryLabel(m){
-  return CATEGORY_LABELS[m.category] || CATEGORY_LABELS[DEFAULT_CATEGORY] || "Geral";
-}
+const DEFAULT_CATEGORY = (window.MaterialCategories && window.MaterialCategories.DEFAULT) || "outros";
 
 let selectedCategory = "";
 let EMPTY_LIBRARY_HTML = "";
@@ -225,7 +221,11 @@ async function loadMaterials(){
           <h3>${escapeHtml(m.title || "Sem título")}</h3>
           <span class="status-chip ${statusClass}">${escapeHtml(statusLabel)}</span>
         </div>
-        <div><span class="category-chip">${escapeHtml(categoryLabel(m))}</span></div>
+        <div>
+          <select class="category-select" data-id="${escapeHtml(m.id)}" data-current="${escapeHtml(m.category || DEFAULT_CATEGORY)}" title="Alterar categoria">
+            ${CATEGORY_LIST.map(c => `<option value="${escapeHtml(c.id)}" ${(m.category || DEFAULT_CATEGORY) === c.id ? "selected" : ""}>${escapeHtml(c.label)}</option>`).join("")}
+          </select>
+        </div>
         <div class="meta-line">${sourceLabel}${sizeInfo}${ocrInfo}</div>
         <div class="meta-line">${m.pageCount ? m.pageCount + " página(s) · " : ""}${moduleInfo}</div>
         <div class="meta-line">Importado em ${formatDate(m.createdAt)}</div>
@@ -255,6 +255,31 @@ async function loadMaterials(){
       btn.addEventListener("click", ()=>{
         fb.innerHTML = "";
         loadMaterials();
+      });
+    });
+
+    grid.querySelectorAll(".category-select").forEach(select=>{
+      select.addEventListener("change", async ()=>{
+        const id = select.dataset.id;
+        const previousValue = select.dataset.current || select.value;
+        select.disabled = true;
+        try{
+          const resp = await authedFetch("/api/material", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "updateCategory", materialId: id, category: select.value })
+          });
+          const data = await resp.json().catch(()=>({}));
+          if(!resp.ok) throw new Error(data.error || "Falha ao atualizar a categoria.");
+          select.dataset.current = select.value;
+          if(selectedCategory && selectedCategory !== select.value) loadMaterials();
+        }catch(e){
+          console.error(e);
+          fb.innerHTML = `<div class="feedback bad" style="margin-bottom:12px;">${escapeHtml(e.message || "Não foi possível atualizar a categoria agora. Tente novamente.")}</div>`;
+          select.value = previousValue;
+        }finally{
+          select.disabled = false;
+        }
       });
     });
 

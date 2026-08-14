@@ -12,7 +12,7 @@
    regras de negócio, tratamento de erros e respostas HTTP — só a forma
    de roteamento mudou (era por URL, agora é por `action`).
 
-   Recebe sempre: { action: "create"|"updateStatus"|"registerModule"|"recordRead"|"delete", ...demais campos por ação }
+   Recebe sempre: { action: "create"|"updateStatus"|"updateCategory"|"registerModule"|"recordRead"|"delete", ...demais campos por ação }
 
    action "create"         → cria o documento inicial de um material.
      Recebe: { sourceType, title, originalFileName, mimeType, fileSize, category? }
@@ -21,6 +21,10 @@
    action "updateStatus"   → atualiza status e metadados de processamento.
      Recebe: { materialId, status, storagePath?, pageCount?, extractionMethod?,
                usedOcr?, ocrPageCount?, ocrLimitReached?, processingError? }
+     Retorna: { ok: true }
+
+   action "updateCategory" → reclassifica um material já existente.
+     Recebe: { materialId, category }
      Retorna: { ok: true }
 
    action "registerModule" → registra o módulo salvo e incrementa o contador
@@ -237,6 +241,42 @@ async function handleUpdateStatus(req, res, user) {
   }
 }
 
+/* ---- action: updateCategory ------------------------------------------
+   Reclassificação de um material já existente (Biblioteca). Ação separada
+   de updateStatus porque é chamada pelo dono a qualquer momento, sobre
+   qualquer status, sem relação com o pipeline de processamento. */
+async function handleUpdateCategory(req, res, user) {
+  const { materialId, category } = req.body || {};
+
+  if (!materialId || typeof materialId !== "string") {
+    res.status(400).json({ error: "materialId é obrigatório." });
+    return;
+  }
+  if (!MATERIAL_CATEGORY_IDS.includes(category)) {
+    res.status(400).json({ error: "Categoria inválida." });
+    return;
+  }
+
+  try {
+    const ref = adminDb().collection("materials").doc(materialId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Material não encontrado." });
+      return;
+    }
+    if (snap.data().ownerId !== user.uid) {
+      res.status(403).json({ error: "Você não tem permissão para alterar este material." });
+      return;
+    }
+
+    await ref.update({ category, updatedAt: Date.now() });
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error("Erro ao atualizar categoria do material:", e);
+    res.status(500).json({ error: "Não foi possível atualizar a categoria agora." });
+  }
+}
+
 /* ---- action: registerModule ----------------------------------------- */
 async function handleRegisterModule(req, res, user) {
   const { materialId, moduleId } = req.body || {};
@@ -436,6 +476,8 @@ async function handler(req, res) {
       return handleCreate(req, res, user);
     case "updateStatus":
       return handleUpdateStatus(req, res, user);
+    case "updateCategory":
+      return handleUpdateCategory(req, res, user);
     case "registerModule":
       return handleRegisterModule(req, res, user);
     case "recordRead":
@@ -443,7 +485,7 @@ async function handler(req, res) {
     case "delete":
       return handleDelete(req, res, user);
     default:
-      res.status(400).json({ error: "action inválida (use 'create', 'updateStatus', 'registerModule', 'recordRead' ou 'delete')." });
+      res.status(400).json({ error: "action inválida (use 'create', 'updateStatus', 'updateCategory', 'registerModule', 'recordRead' ou 'delete')." });
   }
 }
 

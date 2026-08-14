@@ -7,13 +7,18 @@
    neste projeto, que não usa bundler).
    ===================================================================== */
 export const MATERIAL_CATEGORIES = [
-  { id: "faculdade", label: "🎓 Faculdade" },
+  { id: "historia", label: "📜 História" },
+  { id: "sociologia", label: "👥 Sociologia" },
+  { id: "filosofia", label: "🧠 Filosofia" },
+  { id: "ciencias", label: "🔬 Ciências" },
+  { id: "matematica", label: "➗ Matemática" },
+  { id: "portugues", label: "📖 Português/Literatura" },
+  { id: "geografia", label: "🌍 Geografia" },
   { id: "concursos", label: "📝 Concursos" },
-  { id: "trabalho", label: "💼 Trabalho" },
   { id: "idiomas", label: "🌐 Idiomas" },
-  { id: "geral", label: "📁 Geral" }
+  { id: "outros", label: "📁 Outros" }
 ];
 
-export const DEFAULT_MATERIAL_CATEGORY = "geral";
+export const DEFAULT_MATERIAL_CATEGORY = "outros";
 
 export const MATERIAL_CATEGORY_IDS = MATERIAL_CATEGORIES.map((c) => c.id);

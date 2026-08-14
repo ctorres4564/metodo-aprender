@@ -4,11 +4,16 @@
    ===================================================================== */
 window.MaterialCategories = {
   LIST: [
-    { id: "faculdade", label: "🎓 Faculdade" },
+    { id: "historia", label: "📜 História" },
+    { id: "sociologia", label: "👥 Sociologia" },
+    { id: "filosofia", label: "🧠 Filosofia" },
+    { id: "ciencias", label: "🔬 Ciências" },
+    { id: "matematica", label: "➗ Matemática" },
+    { id: "portugues", label: "📖 Português/Literatura" },
+    { id: "geografia", label: "🌍 Geografia" },
     { id: "concursos", label: "📝 Concursos" },
-    { id: "trabalho", label: "💼 Trabalho" },
     { id: "idiomas", label: "🌐 Idiomas" },
-    { id: "geral", label: "📁 Geral" }
+    { id: "outros", label: "📁 Outros" }
   ],
-  DEFAULT: "geral"
+  DEFAULT: "outros"
 };
