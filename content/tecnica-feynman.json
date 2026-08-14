@@ -1,0 +1,152 @@
+{
+  "config": {
+    "appTitle": "Ciência do Estudo",
+    "appSubtitle": "A Técnica Feynman",
+    "logoEmoji": "🗣️",
+    "homeIntro": "Este módulo explica a Técnica Feynman — um método de estudo baseado em explicar conceitos com palavras simples para expor e corrigir lacunas de compreensão — e por que ela funciona segundo a psicologia cognitiva.",
+    "sourceCredit": "Conteúdo baseado na abordagem de ensino do físico Richard Feynman (conhecido como 'O Grande Explicador') e na formalização posterior dessa abordagem em um método de estudo por educadores e autores. Resumido e reformulado para fins didáticos.",
+    "storageKey": "estudo_tecnica_feynman_v1"
+  },
+  "concepts": [
+    {
+      "id": "origem-feynman",
+      "tag": "Origem",
+      "title": "Quem foi Richard Feynman",
+      "text": "Richard Feynman (1918–1988) foi um físico americano, ganhador do Prêmio Nobel de Física de 1965, famoso não só por suas contribuições científicas, mas também por sua habilidade de explicar ideias complexas de forma simples e acessível — o que lhe rendeu o apelido de 'O Grande Explicador'.",
+      "q": "Por que Richard Feynman ficou conhecido como 'O Grande Explicador'?",
+      "options": [
+        "Por ter escrito o maior número de livros de física da história",
+        "Por sua habilidade de explicar ideias complexas de forma simples e acessível",
+        "Por ter sido o primeiro físico a ganhar um Prêmio Nobel",
+        "Por dar aulas exclusivamente para o público infantil"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "origem-tecnica",
+      "tag": "Origem",
+      "title": "De onde vem a 'Técnica Feynman'",
+      "text": "A 'Técnica Feynman', como método estruturado de estudo, não foi escrita pelo próprio Feynman como uma lista de passos formais — ela foi sistematizada depois por educadores e autores, inspirados na sua filosofia de aprendizado: entender de verdade é conseguir explicar sem depender de jargão.",
+      "q": "A Técnica Feynman, como método de passos formais, foi:",
+      "options": [
+        "Escrita literalmente por Feynman em um artigo científico",
+        "Sistematizada depois por educadores/autores, inspirada na filosofia de ensino de Feynman",
+        "Criada por uma universidade antes de Feynman nascer",
+        "Um nome aleatório sem relação com o físico Richard Feynman"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "passo-1-escolher-explicar",
+      "tag": "Os passos",
+      "title": "Passo 1: escolher um conceito e explicá-lo",
+      "text": "O primeiro passo é escolher um conceito que você quer aprender e tentar explicá-lo com suas próprias palavras, como se estivesse ensinando para alguém que não sabe nada sobre o assunto — por exemplo, uma criança.",
+      "q": "Qual é o primeiro passo da Técnica Feynman?",
+      "options": [
+        "Reler o material várias vezes até decorar",
+        "Explicar o conceito com palavras próprias, como se ensinasse para um iniciante",
+        "Fazer um resumo copiando trechos do livro-texto",
+        "Assistir a uma videoaula sobre o tema"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "porque-crianca",
+      "tag": "Os passos",
+      "title": "Por que explicar 'como para uma criança'",
+      "text": "Explicar como se fosse para uma criança obriga a evitar jargão técnico e frases decoradas. Isso força o uso de linguagem simples e analogias — e qualquer parte da explicação que fica confusa ou incompleta revela exatamente o que ainda não foi bem compreendido.",
+      "q": "Qual é a vantagem de explicar um conceito 'como para uma criança'?",
+      "options": [
+        "Torna a explicação mais longa e detalhada",
+        "Obriga a evitar jargão e expõe as partes que ainda não foram bem compreendidas",
+        "É a única forma de explicar algo corretamente",
+        "Substitui a necessidade de estudar o conteúdo original"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "passo-2-identificar-lacunas",
+      "tag": "Os passos",
+      "title": "Passo 2: identificar as lacunas",
+      "text": "Ao tentar explicar, é comum travar em certos pontos, recorrer a termos técnicos sem defini-los, ou perceber que uma parte do raciocínio não faz sentido. Esses momentos de trava são as lacunas reais de compreensão — o que a releitura passiva raramente revela.",
+      "q": "O que revela as lacunas de compreensão na Técnica Feynman?",
+      "options": [
+        "O tempo total gasto estudando o assunto",
+        "Os momentos em que a explicação trava, usa jargão sem definir, ou não faz sentido",
+        "A quantidade de páginas grifadas no material",
+        "A opinião de outras pessoas sobre o quanto você sabe"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "passo-3-revisar-fonte",
+      "tag": "Os passos",
+      "title": "Passo 3: voltar à fonte para preencher as lacunas",
+      "text": "Depois de identificar onde a explicação falhou, o próximo passo é voltar ao material original — livro, aula, artigo — especificamente para entender e preencher aquela lacuna, em vez de reestudar o assunto inteiro do zero.",
+      "q": "O que fazer depois de identificar uma lacuna de compreensão?",
+      "options": [
+        "Ignorar a lacuna e seguir para o próximo assunto",
+        "Reestudar todo o material do início, sem foco específico",
+        "Voltar à fonte original, focando especificamente na lacuna identificada",
+        "Explicar a mesma lacuna de novo sem consultar nenhuma fonte"
+      ],
+      "correct": 2
+    },
+    {
+      "id": "passo-4-simplificar",
+      "tag": "Os passos",
+      "title": "Passo 4: simplificar e usar analogias",
+      "text": "Com a lacuna preenchida, a explicação é refeita, agora substituindo termos técnicos por linguagem simples e, quando possível, comparando o conceito a algo já familiar (uma analogia). O processo pode ser repetido até a explicação ficar clara e fluida.",
+      "q": "O que caracteriza o passo final da Técnica Feynman?",
+      "options": [
+        "Adicionar mais termos técnicos à explicação para parecer mais precisa",
+        "Refazer a explicação com linguagem simples e analogias, repetindo até ficar clara",
+        "Memorizar a explicação original palavra por palavra",
+        "Parar de estudar o assunto depois da primeira tentativa"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "ilusao-profundidade",
+      "tag": "Por que funciona",
+      "title": "A ilusão de profundidade explicativa",
+      "text": "Pesquisas em psicologia cognitiva mostram que as pessoas costumam superestimar o quanto entendem algo até tentarem explicá-lo em detalhes — fenômeno chamado de 'ilusão de profundidade explicativa'. Reconhecer termos e acompanhar uma aula não é o mesmo que conseguir reconstruir a explicação sozinho.",
+      "q": "O que é a 'ilusão de profundidade explicativa'?",
+      "options": [
+        "A tendência de subestimar o próprio conhecimento sobre um assunto",
+        "A tendência de superestimar o quanto se entende algo, até tentar explicá-lo em detalhes",
+        "Um efeito que só ocorre em assuntos de física",
+        "A crença de que explicações longas são sempre melhores que curtas"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "relacao-recuperacao-ativa",
+      "tag": "Por que funciona",
+      "title": "Relação com a recuperação ativa",
+      "text": "Explicar um conceito de memória, sem consultar o material, exige reconstruir ativamente o conhecimento — o mesmo princípio por trás do efeito de teste (testing effect). Por isso a Técnica Feynman tende a ser mais eficaz do que reler ou grifar passivamente.",
+      "q": "Por que a Técnica Feynman se conecta com o efeito de teste (testing effect)?",
+      "options": [
+        "Porque ambos envolvem decorar informações sem entender",
+        "Porque explicar de memória exige reconstruir ativamente o conhecimento, como ao responder um teste",
+        "Porque os dois métodos recomendam evitar qualquer tipo de revisão",
+        "Não existe relação entre os dois conceitos"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "aplicacao-pratica",
+      "tag": "Aplicação prática",
+      "title": "Como aplicar a técnica no dia a dia de estudo",
+      "text": "Na prática, a Técnica Feynman pode ser usada com papel e caneta, em voz alta, ou até escrevendo uma explicação curta como se fosse ensinar um colega — de forma parecida com escrever a explicação de um conceito num cartão de estudo, que depois pode ser revisado com repetição espaçada.",
+      "q": "Como a Técnica Feynman pode se combinar com a repetição espaçada?",
+      "options": [
+        "As duas técnicas são incompatíveis e não devem ser usadas juntas",
+        "Escrevendo explicações simples dos conceitos, que depois são revisadas em intervalos espaçados",
+        "A repetição espaçada substitui completamente a necessidade de explicar algo",
+        "Só é possível aplicar a Técnica Feynman em conteúdos de exatas"
+      ],
+      "correct": 1
+    }
+  ]
+}
