@@ -19,6 +19,15 @@
       "conceptCount": 10,
       "contentFile": "content/repeticao-espacada-e-memoria.json",
       "plan": "free"
+    },
+    {
+      "id": "tecnica-feynman",
+      "title": "A Técnica Feynman",
+      "subtitle": "Aprenda explicando com palavras simples — como o físico Richard Feynman abordava o entendimento profundo",
+      "icon": "🗣️",
+      "conceptCount": 10,
+      "contentFile": "content/tecnica-feynman.json",
+      "plan": "free"
     }
   ]
 }
