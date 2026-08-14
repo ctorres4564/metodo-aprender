@@ -1,0 +1,152 @@
+{
+  "config": {
+    "appTitle": "Ciência do Estudo",
+    "appSubtitle": "Metacognição: Aprender a Aprender",
+    "logoEmoji": "🪞",
+    "homeIntro": "Este módulo explica a metacognição — a capacidade de monitorar e ajustar a própria forma de aprender — e por que ela é a base que sustenta técnicas como repetição espaçada e a Técnica Feynman.",
+    "sourceCredit": "Conteúdo baseado em achados consolidados de psicologia cognitiva sobre metacognição, julgamentos de aprendizagem (judgments of learning) e calibração entre confiança e desempenho real. Resumido e reformulado para fins didáticos.",
+    "storageKey": "estudo_metacognicao_v1"
+  },
+  "concepts": [
+    {
+      "id": "definicao-metacognicao",
+      "tag": "Fundamentos",
+      "title": "O que é metacognição",
+      "text": "Metacognição é, de forma simples, 'pensar sobre o próprio pensamento' — a capacidade de observar, entender e ajustar os próprios processos mentais. No contexto de estudo, é a diferença entre simplesmente estudar e saber avaliar se você está realmente aprendendo.",
+      "q": "Como a metacognição pode ser resumida?",
+      "options": [
+        "A capacidade de memorizar grandes quantidades de informação rapidamente",
+        "A capacidade de pensar sobre o próprio pensamento e ajustar os próprios processos mentais",
+        "Um sinônimo técnico para inteligência geral",
+        "A habilidade de explicar qualquer assunto para outras pessoas"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "conhecimento-vs-regulacao",
+      "tag": "Fundamentos",
+      "title": "Dois componentes: conhecimento e regulação",
+      "text": "A metacognição costuma ser dividida em duas partes: conhecimento metacognitivo (saber como você aprende melhor, quais estratégias funcionam para você) e regulação metacognitiva (planejar, monitorar e avaliar o próprio processo de estudo enquanto ele acontece).",
+      "q": "Quais são os dois componentes geralmente usados para descrever a metacognição?",
+      "options": [
+        "Memória de curto prazo e memória de longo prazo",
+        "Conhecimento metacognitivo e regulação metacognitiva",
+        "Inteligência fluida e inteligência cristalizada",
+        "Atenção seletiva e atenção dividida"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "julgamentos-aprendizagem",
+      "tag": "Autoavaliação",
+      "title": "Julgamentos de aprendizagem (JOLs)",
+      "text": "Um 'julgamento de aprendizagem' é a previsão que uma pessoa faz sobre o quanto vai lembrar de algo no futuro. Pesquisas mostram que esses julgamentos são frequentemente imprecisos — as pessoas tendem a superestimar o que vão conseguir lembrar depois.",
+      "q": "O que é um 'julgamento de aprendizagem' (judgment of learning)?",
+      "options": [
+        "A nota final obtida em uma prova",
+        "A previsão que uma pessoa faz sobre o quanto vai lembrar algo no futuro",
+        "Um teste padronizado de inteligência",
+        "A opinião de um professor sobre o desempenho do aluno"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "calibracao",
+      "tag": "Autoavaliação",
+      "title": "Calibração entre confiança e desempenho real",
+      "text": "Calibração é o quanto a confiança de uma pessoa sobre o que sabe combina com seu desempenho real em um teste. Um estudante bem calibrado se sente inseguro exatamente nos pontos em que erra, e confiante nos pontos em que acerta — o que raramente acontece sem prática de autoavaliação.",
+      "q": "O que significa estar 'bem calibrado' em relação ao próprio aprendizado?",
+      "options": [
+        "Sentir-se sempre confiante, independente do desempenho real",
+        "A confiança sobre o que se sabe corresponder de perto ao desempenho real em testes",
+        "Nunca errar uma questão em uma avaliação",
+        "Estudar por um número fixo de horas todos os dias"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "ilusao-fluencia",
+      "tag": "Armadilhas comuns",
+      "title": "A ilusão da fluência",
+      "text": "Reler um texto familiar 'flui' facilmente, e essa sensação de facilidade é confundida com domínio do conteúdo. Esse é um dos motivos pelos quais a releitura passiva gera julgamentos de aprendizagem inflados — a pessoa se sente pronta sem realmente estar.",
+      "q": "Por que a facilidade ao reler um texto pode enganar a autoavaliação?",
+      "options": [
+        "Porque reler sempre aumenta o conhecimento real do assunto",
+        "Porque a sensação de fluência é confundida com domínio real do conteúdo",
+        "Porque textos fáceis de ler são sempre mais curtos",
+        "Porque a releitura é tecnicamente impossível de repetir"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "autoteste-monitoramento",
+      "tag": "Como melhorar a calibração",
+      "title": "Autoteste como ferramenta de monitoramento",
+      "text": "Testar a si mesmo — respondendo perguntas sem consultar o material — fornece um retorno mais confiável do que a sensação subjetiva de 'já sei isso'. É uma forma direta de corrigir julgamentos de aprendizagem excessivamente otimistas antes de uma prova real.",
+      "q": "Por que se testar é uma forma eficaz de monitorar o próprio aprendizado?",
+      "options": [
+        "Porque substitui a necessidade de estudar o conteúdo",
+        "Porque fornece um retorno mais confiável do que a sensação subjetiva de já saber algo",
+        "Porque provas são sempre mais fáceis do que parecem",
+        "Porque só funciona para conteúdos de exatas"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "planejamento",
+      "tag": "Regulação do estudo",
+      "title": "Planejar antes de estudar",
+      "text": "A regulação metacognitiva começa antes mesmo de abrir o material: definir o que se quer aprender, escolher uma estratégia adequada ao tipo de conteúdo (decorar fórmulas exige algo diferente de entender um processo histórico) e estimar quanto tempo será necessário.",
+      "q": "O que envolve a etapa de planejamento na regulação metacognitiva?",
+      "options": [
+        "Escolher a estratégia de estudo sem considerar o tipo de conteúdo",
+        "Definir o que aprender, escolher uma estratégia adequada ao conteúdo e estimar o tempo necessário",
+        "Estudar sem nenhum objetivo definido, só para 'passar os olhos'",
+        "Decidir a nota que se quer tirar antes da prova"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "monitoramento-durante",
+      "tag": "Regulação do estudo",
+      "title": "Monitorar durante o estudo",
+      "text": "Enquanto estuda, um bom monitoramento envolve parar de tempos em tempos e perguntar: 'eu realmente entendo isso ou só reconheço as palavras?'. Perceber confusão ou dificuldade de resumir um trecho sem olhar o texto é um sinal direto de que aquele ponto precisa de mais atenção.",
+      "q": "O que caracteriza um bom monitoramento durante o estudo?",
+      "options": [
+        "Ler o material do início ao fim sem interrupções",
+        "Parar periodicamente para verificar se o conteúdo foi realmente compreendido, não só reconhecido",
+        "Evitar qualquer pausa até terminar o material inteiro",
+        "Confiar sempre na primeira impressão sobre o próprio entendimento"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "avaliacao-apos",
+      "tag": "Regulação do estudo",
+      "title": "Avaliar depois de estudar",
+      "text": "Depois de uma sessão de estudo (ou de uma prova), refletir sobre o que funcionou e o que não funcionou fecha o ciclo da regulação metacognitiva. Essa avaliação melhora a estratégia usada da próxima vez — não é sobre o conteúdo em si, mas sobre como você estuda.",
+      "q": "Qual é o papel da etapa de avaliação, depois de uma sessão de estudo?",
+      "options": [
+        "Decidir se o assunto deve ser abandonado definitivamente",
+        "Refletir sobre o que funcionou ou não, melhorando a estratégia de estudo usada da próxima vez",
+        "Repetir exatamente a mesma estratégia, independente do resultado",
+        "Substituir a necessidade de qualquer teste futuro"
+      ],
+      "correct": 1
+    },
+    {
+      "id": "metacognicao-app",
+      "tag": "Aplicação prática",
+      "title": "Por que apps de estudo externalizam o monitoramento",
+      "text": "Como a autoavaliação subjetiva costuma ser pouco confiável, ferramentas de estudo baseadas em evidências — como perguntas de múltipla escolha após cada conceito e agendamento automático de revisões — funcionam como um monitoramento externo, mais preciso do que confiar só na sensação pessoal de 'já sei isso'.",
+      "q": "Por que recursos como perguntas após cada conceito e agendamento automático de revisão são úteis?",
+      "options": [
+        "Porque tornam o app mais bonito visualmente",
+        "Porque funcionam como um monitoramento externo mais confiável que a autoavaliação subjetiva",
+        "Porque eliminam completamente a necessidade de estudar o conteúdo",
+        "Porque são exigência legal em aplicativos educacionais"
+      ],
+      "correct": 1
+    }
+  ]
+}
