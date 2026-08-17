@@ -76,8 +76,8 @@ const LEVELS = [
   {min:660, name:"Avançado(a)"},
   {min:900, name:"Especialista"},
   {min:1180, name:"Referência no Tema"},
-  {min:1500, name:"Mestre(a)"},
-  {min:1900, name:"Autoridade Consolidada"}
+  {min:1500, name:"Prática Extensa"},
+  {min:1900, name:"Prática Contínua"}
 ];
 
 const BADGES = [
@@ -87,12 +87,16 @@ const BADGES = [
   {id:"streak3", ic:"🔥", name:"Sequência de 3 dias", desc:"Estude 3 dias seguidos", check: s => s.streak >= 3},
   {id:"streak7", ic:"🌟", name:"Sequência de 7 dias", desc:"Estude 7 dias seguidos", check: s => s.streak >= 7},
   {id:"quiz_perfect", ic:"🎯", name:"Mira Perfeita", desc:"Acerte 100% em um Quiz", check: s => s.quiz.best >= CONCEPTS.length},
-  {id:"mastered5", ic:"🧱", name:"Bases Sólidas", desc:"Domine 5 conceitos", check: s => Object.values(s.cards).filter(c=>c.reps>=3).length >= 5},
-  {id:"mastered_all", ic:"🏆", name:"Mestre(a) do Tema", desc:"Domine todos os conceitos", check: s => Object.values(s.cards).filter(c=>c.reps>=3).length >= CONCEPTS.length},
+  {id:"retained5", ic:"🧱", name:"Retenção Verificada", desc:"Demonstre recuperação e explicação em 5 conceitos", check: s => Object.values(s.cards).filter(hasRetentionEvidence).length >= 5},
+  {id:"retained_all", ic:"🏆", name:"Evidências em Todo o Tema", desc:"Demonstre recuperação e explicação em todos os conceitos", check: s => Object.values(s.cards).filter(hasRetentionEvidence).length >= CONCEPTS.length},
   {id:"feynman_first", ic:"🗣️", name:"Primeira Explicação", desc:"Explique 1 conceito no modo Feynman", check: s => Object.values(s.cards).some(c=>c.explainCount>0)},
-  {id:"feynman5", ic:"🎤", name:"Mestre da Explicação", desc:"Explique 5 conceitos com nota 80+ no modo Feynman", check: s => Object.values(s.cards).filter(c=>c.lastExplainScore!=null && c.lastExplainScore>=80).length >= 5},
+  {id:"feynman5", ic:"🎤", name:"Explicador(a) Experiente", desc:"Explique 5 conceitos com nota 80+ no modo Feynman", check: s => Object.values(s.cards).filter(c=>c.lastExplainScore!=null && c.lastExplainScore>=80).length >= 5},
   {id:"calibrated10", ic:"🎯", name:"Bem Calibrado(a)", desc:"Acerte sua autoavaliação de confiança 10 vezes", check: s => s.calibration.aligned >= 10}
 ];
+
+const EXPLANATION_PASS_SCORE = 70;
+const RETRIEVAL_PASS_QUALITY = 4;
+const LEGACY_CONTRADICTORY_BADGES = new Set(["mastered5", "mastered_all"]);
 
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function addDays(dateStr, n){
@@ -113,7 +117,8 @@ function defaultState(){
     cards[c.id] = {
       stability:null, difficulty:null, lastReviewDate:null,
       ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null,
-      explainCount:0, lastExplainScore:null, analogy:null
+      explainCount:0, lastExplainScore:null, analogy:null,
+      retrievalPassedAt:null, explanationPassedAt:null, applicationPassedAt:null
     };
   });
   return {
@@ -128,12 +133,24 @@ async function loadState(){
   const parsed = await StorageAdapter.load(CONFIG.storageKey);
   const base = defaultState();
   if(parsed){
-    // Object.assign preserva campos novos (ex: explainCount) mesmo em progresso salvo antes deles existirem
-    CONCEPTS.forEach(c=>{ if(parsed.cards && parsed.cards[c.id]) base.cards[c.id] = Object.assign({}, base.cards[c.id], parsed.cards[c.id]); });
+    // Normaliza progresso legado sem fabricar recuperação/aplicação a partir
+    // de reps ou lastQuality. Uma explicação antiga com nota suficiente é a
+    // única evidência que pode ser migrada com segurança, pois sua origem é inequívoca.
+    CONCEPTS.forEach(c=>{
+      if(parsed.cards && parsed.cards[c.id]){
+        const legacy = parsed.cards[c.id];
+        base.cards[c.id] = Object.assign({}, base.cards[c.id], legacy);
+        if(!base.cards[c.id].explanationPassedAt && legacy.lastExplainScore >= EXPLANATION_PASS_SCORE){
+          base.cards[c.id].explanationPassedAt = legacy.lastReviewDate || "legacy";
+        }
+        base.cards[c.id].retrievalPassedAt = legacy.retrievalPassedAt || null;
+        base.cards[c.id].applicationPassedAt = legacy.applicationPassedAt || null;
+      }
+    });
     base.xp = parsed.xp||0;
     base.streak = parsed.streak||0;
     base.lastStudyDate = parsed.lastStudyDate||null;
-    base.badges = parsed.badges||[];
+    base.badges = (parsed.badges||[]).filter(id => !LEGACY_CONTRADICTORY_BADGES.has(id));
     base.reviewSessions = parsed.reviewSessions||0;
     base.quiz = Object.assign({}, base.quiz, parsed.quiz||{});
     base.settings = Object.assign({}, base.settings, parsed.settings||{});
@@ -141,6 +158,42 @@ async function loadState(){
     base.calibration = Object.assign({}, base.calibration, parsed.calibration||{});
   }
   return base;
+}
+
+function recordRetrievalEvidence(cardState, passed, source, quality){
+  if(!passed) return false;
+  cardState.retrievalPassedAt = todayStr();
+  cardState.lastRetrievalSource = source;
+  cardState.lastRetrievalQuality = quality;
+  return true;
+}
+
+function recordExplanationEvidence(cardState, score){
+  if(score < EXPLANATION_PASS_SCORE) return false;
+  cardState.explanationPassedAt = todayStr();
+  return true;
+}
+
+function evaluateConceptEvidence(cardState){
+  const retrievalVerified = Boolean(cardState && cardState.retrievalPassedAt);
+  const explanationVerified = Boolean(cardState && cardState.explanationPassedAt);
+  const applicationVerified = Boolean(cardState && cardState.applicationPassedAt);
+  return {
+    retrievalVerified,
+    explanationVerified,
+    applicationVerified,
+    retentionVerified: retrievalVerified && explanationVerified
+  };
+}
+
+function hasRetentionEvidence(cardState){
+  return evaluateConceptEvidence(cardState).retentionVerified;
+}
+
+function retentionEvidencePercentage(cards, conceptCount){
+  if(!conceptCount) return 0;
+  const retained = Object.values(cards || {}).filter(hasRetentionEvidence).length;
+  return Math.round((retained / conceptCount) * 100);
 }
 async function saveState(){ await StorageAdapter.save(CONFIG.storageKey, STATE); }
 
@@ -315,9 +368,14 @@ function shuffle(arr){
 function conceptStatus(c){
   const s = STATE.cards[c.id];
   if(!s.seen) return {label:"Novo", cls:"chip-new"};
-  if(s.reps >= 3) return {label:"Dominado", cls:"chip-mastered"};
-  if(s.reps >= 1) return {label:`Revisão ${s.reps}`, cls:"chip-review"};
-  return {label:"Aprendendo", cls:"chip-learning"};
+  const evidence = evaluateConceptEvidence(s);
+  if(evidence.retentionVerified){
+    return {label:"Retido — transferência não verificada", cls:"chip-retained"};
+  }
+  if(evidence.retrievalVerified || evidence.explanationVerified){
+    return {label:"Em prática", cls:"chip-practice"};
+  }
+  return {label:"Apresentado", cls:"chip-presented"};
 }
 function dueCards(){
   const t = todayStr();
@@ -405,11 +463,11 @@ function renderLearnCard(){
       <div class="empty-state">
         <div class="big">🌤️</div>
         <h2 class="section-title" style="justify-content:center;">Meta diária concluída!</h2>
-        <p class="lead">Você já aprendeu <b>${STATE.dailyProgress.newCount}</b> conceito(s) novo(s) hoje — sua meta é ${dailyLimit} por dia
-        (dá pra mudar isso na aba Progresso). Assimilar aos poucos ajuda a memória a fixar melhor do que aprender tudo de uma vez.</p>
+        <p class="lead">Você já estudou <b>${STATE.dailyProgress.newCount}</b> conceito(s) novo(s) hoje — sua meta é ${dailyLimit} por dia
+        (dá pra mudar isso na aba Progresso). Estudar aos poucos ajuda a memória mais do que apresentar tudo de uma vez.</p>
         <div style="margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-          <button class="btn" onclick="switchTab('revisar')">🔁 Revisar o que já aprendi</button>
-          <button class="btn secondary" id="learn-override-btn">Continuar aprendendo mesmo assim</button>
+          <button class="btn" onclick="switchTab('revisar')">🔁 Revisar o que já estudei</button>
+          <button class="btn secondary" id="learn-override-btn">Continuar estudando mesmo assim</button>
         </div>
       </div>`;
     const overrideBtn = document.getElementById("learn-override-btn");
@@ -551,7 +609,7 @@ function renderReviewCard(){
         <div class="empty-state">
           <div class="big">📭</div>
           <h2 class="section-title" style="justify-content:center;">Nada para revisar ainda</h2>
-          <p class="lead">Você ainda não aprendeu nenhum conceito. Comece pela aba <b>Aprender</b>.</p>
+          <p class="lead">Você ainda não estudou nenhum conceito. Comece pela aba <b>Aprender</b>.</p>
           <button class="btn" style="margin-top:10px;" onclick="switchTab('aprender')">📖 Começar a aprender</button>
         </div>`;
       return;
@@ -657,6 +715,7 @@ function renderReviewCard(){
       const cardState = STATE.cards[c.id];
       cardState.lastConfidence = confidence;
       fsrsUpdate(cardState, q);
+      recordRetrievalEvidence(cardState, q >= RETRIEVAL_PASS_QUALITY, "review", q);
       touchStreak();
       STATE.dailyProgress.reviewCount += 1;
       const xpGain = q===1?2:(q===3?5:(q===4?8:10));
@@ -875,6 +934,7 @@ async function applyExplainResultToState(c, nota, quality, previousScore){
   const cardState = STATE.cards[c.id];
   cardState.explainCount = (cardState.explainCount || 0) + 1;
   cardState.lastExplainScore = nota;
+  recordExplanationEvidence(cardState, nota);
   fsrsUpdate(cardState, quality);
   touchStreak();
   // XP premia demonstração de entendimento e progresso real entre tentativas.
@@ -928,8 +988,8 @@ function renderQuizStart(){
 
     <div class="concept-card" style="margin-bottom:14px;">
       <div class="concept-title" style="font-size:15px;">🧠 Quiz Adaptativo</div>
-      <p class="lead" style="margin-top:-2px;">Foca nos conceitos que você ainda não domina bem — prioriza os que erraram
-      recentemente, têm poucas repetições ou estão com revisão vencida. ${seenCount > 0
+      <p class="lead" style="margin-top:-2px;">Foca nos conceitos que ainda precisam de prática — prioriza os que erraram
+      recentemente, tiveram pouca prática ou estão com revisão vencida. ${seenCount > 0
         ? `${adaptiveN} pergunta(s), sua melhor pontuação: <b>${STATE.quiz.bestAdaptive || 0}/${adaptiveN || "-"}</b>.`
         : "Aprenda ao menos 1 conceito para liberar este modo."}</p>
       <button class="btn" id="start-quiz-adaptive" ${seenCount === 0 ? "disabled" : ""}>🎯 Iniciar Quiz Adaptativo</button>
@@ -998,7 +1058,10 @@ async function handleQuizAnswer(c, isCorrect, btnEl, optsWrap){
   if(isCorrect) quizState.correct++;
 
   const cardState = STATE.cards[c.id];
-  if(cardState.seen){ fsrsUpdate(cardState, isCorrect ? 5 : 2); }
+  if(cardState.seen){
+    fsrsUpdate(cardState, isCorrect ? 5 : 2);
+    recordRetrievalEvidence(cardState, isCorrect, "quiz", isCorrect ? 5 : 2);
+  }
   await saveState();
 
   const fb = document.getElementById("quiz-feedback");
@@ -1047,7 +1110,7 @@ function renderProgress(){
   // Progresso deixou de ser pontuação e passou a ser capacidade de explicar:
   // quantos conceitos você já conseguiu enunciar bem, e quantos estão devendo.
   const explained = Object.values(STATE.cards).filter(c => c.lastExplainScore != null);
-  const solid = explained.filter(c => c.lastExplainScore >= 70).length;
+  const solid = explained.filter(c => c.lastExplainScore >= EXPLANATION_PASS_SCORE).length;
   const shaky = explained.length - solid;
   const neverExplained = Object.values(STATE.cards).filter(c => c.seen && c.lastExplainScore == null).length;
   const solidPct = CONCEPTS.length ? Math.round((solid / CONCEPTS.length) * 100) : 0;
@@ -1063,12 +1126,14 @@ function renderProgress(){
       : `${shaky} explicação(ões) ainda fraca(s) e ${neverExplained} conceito(s) vistos que você nunca tentou explicar.`;
   }
 
-  const mastered = Object.values(STATE.cards).filter(c=>c.reps>=3).length;
-  const masteryPct = CONCEPTS.length ? Math.round((mastered/CONCEPTS.length)*100) : 0;
-  const masteryEl = document.getElementById("prog-mastery");
-  if(masteryEl) masteryEl.textContent = masteryPct + "%";
-  const masteryBarEl = document.getElementById("prog-mastery-bar");
-  if(masteryBarEl) masteryBarEl.style.width = masteryPct + "%";
+  const retained = Object.values(STATE.cards).filter(hasRetentionEvidence).length;
+  const retentionEvidencePct = retentionEvidencePercentage(STATE.cards, CONCEPTS.length);
+  const retentionEl = document.getElementById("prog-retention");
+  if(retentionEl) retentionEl.textContent = retentionEvidencePct + "%";
+  const retentionBarEl = document.getElementById("prog-retention-bar");
+  if(retentionBarEl) retentionBarEl.style.width = retentionEvidencePct + "%";
+  const retentionTextEl = document.getElementById("prog-retention-text");
+  if(retentionTextEl) retentionTextEl.textContent = `${retained} de ${CONCEPTS.length} com recuperação e explicação verificadas. A transferência prática ainda não foi verificada.`;
 
   // Badges saíram da interface junto com a gamificação.
   const badgesGrid = document.getElementById("badges-grid");

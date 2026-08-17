@@ -237,9 +237,9 @@ button.btn:disabled{ opacity:.4; cursor:not-allowed; }
 }
 .status-chip{ font-size:11px; padding:3px 8px; border-radius:999px; font-weight:700; white-space:nowrap; }
 .chip-new{ background:rgba(255,255,255,0.08); color: var(--text-dim); }
-.chip-learning{ background:rgba(244,185,66,0.18); color: var(--accent-2); }
-.chip-review{ background:rgba(79,163,209,0.18); color: var(--accent-3); }
-.chip-mastered{ background:rgba(111,207,125,0.18); color: var(--ok); }
+.chip-presented{ background:rgba(244,185,66,0.18); color: var(--accent-2); }
+.chip-practice{ background:rgba(79,163,209,0.18); color: var(--accent-3); }
+.chip-retained{ background:rgba(111,207,125,0.18); color: var(--ok); }
 
 .badges-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap:10px; }
 .badge-item{ background: var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:12px 8px; text-align:center; font-size:11.5px; }
