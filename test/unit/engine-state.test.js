@@ -277,9 +277,112 @@ describe("apresentação e compreensão", () => {
     expect(engine.markConceptPresented(card)).toBe(false);
     expect(card.presentedAt).toBe(first);
   });
+
+  function preparePersistence(card){
+    let saves = 0;
+    engine.STATE = { cards:{ c1:card } };
+    engine.CONFIG = { storageKey:"test" };
+    engine.StorageAdapter = { save:async()=>{ saves += 1; } };
+    return ()=>saves;
+  }
+
+  it("persiste no_issue_detected sem transformar percepção em evidência", async () => {
+    const card = engine.defaultCardState();
+    const saves = preparePersistence(card);
+    await engine.recordComprehensionStatus(card, "no_issue_detected", "texto ignorado");
+    expect(card.comprehensionStatus).toBe("no_issue_detected");
+    expect(card.comprehensionIssue).toBeNull();
+    expect(saves()).toBe(1);
+    expect(card.retrievalPassedAt).toBeNull();
+    expect(card.explanationPassedAt).toBeNull();
+    expect(card.applicationPassedAt).toBeNull();
+  });
+
+  it("doubt_reported e blocked aceitam descrição opcional", async () => {
+    const card = engine.defaultCardState();
+    preparePersistence(card);
+    await engine.recordComprehensionStatus(card, "doubt_reported", "Não entendi a relação causal");
+    expect(card.comprehensionIssue).toBe("Não entendi a relação causal");
+    await engine.recordComprehensionStatus(card, "blocked", "Falta um pré-requisito");
+    expect(card.comprehensionStatus).toBe("blocked");
+    expect(card.comprehensionIssue).toBe("Falta um pré-requisito");
+  });
+
+  it("rejeita status inválido", async () => {
+    const card = engine.defaultCardState();
+    preparePersistence(card);
+    await expect(engine.recordComprehensionStatus(card, "comprovado", null)).rejects.toThrow(/Status de compreensão inválido/);
+  });
+
+  it("alterar compreensão não modifica FSRS nem evidências", async () => {
+    const card = Object.assign(engine.defaultCardState(), {
+      retrievalPassedAt:"2026-08-01", explanationPassedAt:"2026-08-02", applicationPassedAt:null,
+      stability:20, difficulty:4, nextReview:"2026-08-20", reps:7
+    });
+    preparePersistence(card);
+    const before = {
+      retrievalPassedAt:card.retrievalPassedAt, explanationPassedAt:card.explanationPassedAt,
+      applicationPassedAt:card.applicationPassedAt, stability:card.stability,
+      difficulty:card.difficulty, nextReview:card.nextReview, reps:card.reps
+    };
+    await engine.recordComprehensionStatus(card, "blocked", "Ainda confuso");
+    await engine.recordComprehensionStatus(card, "no_issue_detected", null);
+    expect(card.comprehensionStatus).toBe("no_issue_detected");
+    expect(card.comprehensionIssue).toBeNull();
+    expect({
+      retrievalPassedAt:card.retrievalPassedAt, explanationPassedAt:card.explanationPassedAt,
+      applicationPassedAt:card.applicationPassedAt, stability:card.stability,
+      difficulty:card.difficulty, nextReview:card.nextReview, reps:card.reps
+    }).toEqual(before);
+  });
+
+  it("conceptStatus permanece independente da autopercepção", () => {
+    for(const comprehensionStatus of ["no_issue_detected", "doubt_reported", "blocked"]){
+      engine.STATE = { cards:cardsWith({ c1:{ seen:true, comprehensionStatus } }) };
+      expect(engine.conceptStatus({ id:"c1" }).label).toBe("Apresentado");
+    }
+  });
 });
 
 describe("histórico de recuperação", () => {
+  function runScheduledAttempt(card, passed, quality, confidence){
+    const elapsedDays = engine.elapsedDaysSinceLastReview(card);
+    engine.fsrsUpdate(card, quality);
+    engine.recordRetrievalEvidence(card, passed, "review", quality, confidence, elapsedDays);
+    return card.retrievalAttempts.at(-1);
+  }
+
+  it("primeira tentativa registra intervalDays null", () => {
+    const card = engine.defaultCardState();
+    const attempt = runScheduledAttempt(card, true, 4, 2);
+    expect(attempt.intervalDays).toBeNull();
+  });
+
+  it("tentativa após 3 dias registra exatamente 3 dias", () => {
+    const card = Object.assign(engine.defaultCardState(), {
+      seen:true, stability:12, difficulty:5, lastReviewDate:engine.addDays(engine.todayStr(), -3), interval:12
+    });
+    const attempt = runScheduledAttempt(card, true, 4, 2);
+    expect(attempt.intervalDays).toBe(3);
+  });
+
+  it("não confunde dias transcorridos com o novo intervalo futuro do FSRS", () => {
+    const card = Object.assign(engine.defaultCardState(), {
+      seen:true, stability:100, difficulty:3, lastReviewDate:engine.addDays(engine.todayStr(), -3), interval:100
+    });
+    const attempt = runScheduledAttempt(card, true, 5, 3);
+    expect(attempt.intervalDays).toBe(3);
+    expect(attempt.intervalDays).not.toBe(card.interval);
+  });
+
+  it("falha e acerto usam o mesmo intervalo transcorrido", () => {
+    const makeCard = ()=>Object.assign(engine.defaultCardState(), {
+      seen:true, stability:10, difficulty:5, lastReviewDate:engine.addDays(engine.todayStr(), -3), interval:10
+    });
+    expect(runScheduledAttempt(makeCard(), false, 1, 3).intervalDays).toBe(3);
+    expect(runScheduledAttempt(makeCard(), true, 4, 2).intervalDays).toBe(3);
+  });
+
   it("registra aprovação e reprovação, confiança e intervalo", () => {
     const card = engine.defaultCardState();
     engine.recordRetrievalEvidence(card, true, "review", 4, 3, 10);

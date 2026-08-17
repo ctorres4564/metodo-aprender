@@ -25,3 +25,11 @@ Módulos existentes mantêm a chave atual. Uma mudança futura de `storageKey` e
 ## Limites de histórico
 
 `retrievalAttempts`, `applicationAttempts` e `errorHistory` guardam no máximo os 50 registros mais recentes por conceito. Evidência positiva resumida não é apagada por uma falha posterior.
+
+## Semântica de recuperação
+
+`retrievalAttempts[].intervalDays` registra os dias transcorridos desde a tentativa ou revisão anterior até a tentativa atual. A primeira tentativa pode ter `null`. Esse campo não representa o intervalo futuro agendado pelo FSRS em `card.interval`/`nextReview`.
+
+## Autopercepção de compreensão
+
+`comprehensionStatus` é uma autodeclaração metacognitiva feita na etapa Aprender. `no_issue_detected` significa somente que a pessoa declarou não perceber dificuldade naquele momento. Não constitui evidência comprovada de aprendizagem, recuperação, explicação, aplicação, retenção, domínio ou consolidação e não promove `conceptStatus()`.

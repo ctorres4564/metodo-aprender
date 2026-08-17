@@ -119,6 +119,11 @@ function daysBetween(a,b){
   return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00")) / 86400000);
 }
 
+function elapsedDaysSinceLastReview(cardState, currentDate){
+  if(!cardState || !cardState.lastReviewDate) return null;
+  return Math.max(0, daysBetween(cardState.lastReviewDate, currentDate || todayStr()));
+}
+
 function defaultCardState(){
   return {
     pedagogyVersion:PEDAGOGY_VERSION,
@@ -262,6 +267,53 @@ function markConceptPresented(cardState){
   cardState.seen = true;
   cardState.presentedAt = new Date().toISOString();
   return true;
+}
+
+async function recordComprehensionStatus(cardState, status, issue){
+  if(!COMPREHENSION_STATUSES.includes(status)){
+    throw new Error(`Status de compreensão inválido: ${status}`);
+  }
+  cardState.comprehensionStatus = status;
+  cardState.comprehensionIssue = (status === "no_issue_detected" || status === "not_assessed") ? null : (String(issue || "").trim() || null);
+  await saveState();
+  return { status:cardState.comprehensionStatus, issue:cardState.comprehensionIssue };
+}
+
+function comprehensionControlsHtml(cardState){
+  const labels = {
+    not_assessed:"Ainda não avaliado",
+    no_issue_detected:"Entendi sem dificuldade",
+    doubt_reported:"Ainda tenho dúvida",
+    blocked:"Não consegui compreender"
+  };
+  return `
+    <div class="comprehension-check" style="margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:10px;">
+      <div class="qtext" style="margin-bottom:8px;">Como ficou este conceito para você?</div>
+      <p class="lead" style="margin:0 0 8px; font-size:11.5px;">Esta é apenas sua percepção atual; não comprova retenção ou aprendizagem.</p>
+      <div style="display:flex; gap:7px; flex-wrap:wrap;">
+        <button class="btn ghost comprehension-option" type="button" data-status="no_issue_detected">Entendi sem dificuldade</button>
+        <button class="btn ghost comprehension-option" type="button" data-status="doubt_reported">Ainda tenho dúvida</button>
+        <button class="btn ghost comprehension-option" type="button" data-status="blocked">Não consegui compreender</button>
+      </div>
+      <div class="comprehension-feedback lead" style="margin:8px 0 0; font-size:11.5px;">Atual: ${escapeHtml(labels[cardState.comprehensionStatus] || labels.not_assessed)}${cardState.comprehensionIssue ? ` — ${escapeHtml(cardState.comprehensionIssue)}` : ""}</div>
+    </div>`;
+}
+
+function bindComprehensionControls(container, concept){
+  const cardState = STATE.cards[concept.id];
+  const labels = { no_issue_detected:"Entendi sem dificuldade", doubt_reported:"Ainda tenho dúvida", blocked:"Não consegui compreender" };
+  container.querySelectorAll(".comprehension-option").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const status = btn.dataset.status;
+      let issue = null;
+      if(status === "doubt_reported") issue = window.prompt("Qual é sua dúvida? (opcional)", "");
+      if(status === "blocked") issue = window.prompt("O que impediu você de compreender? (opcional)", "");
+      if((status === "doubt_reported" || status === "blocked") && issue === null) return;
+      await recordComprehensionStatus(cardState, status, issue);
+      const feedback = container.querySelector(".comprehension-feedback");
+      if(feedback) feedback.textContent = `Atual: ${labels[status]}${cardState.comprehensionIssue ? ` — ${cardState.comprehensionIssue}` : ""}`;
+    };
+  });
 }
 
 function reportContentProblem(cardState, reason){
@@ -615,6 +667,7 @@ function renderLearnCard(){
       <div id="analogy-box">
         ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
       </div>
+      ${comprehensionControlsHtml(cardState)}
       ${contentReportHtml()}
       <div class="quiz-q">
         <div class="qtext">✅ Checagem rápida: ${escapeHtml(c.q)}</div>
@@ -636,6 +689,7 @@ function renderLearnCard(){
 
   const analogyBtn = document.getElementById("analogy-btn");
   if(analogyBtn) analogyBtn.onclick = ()=> loadAnalogy(c);
+  bindComprehensionControls(panel, c);
   bindContentReport(panel, c);
 }
 
@@ -833,8 +887,9 @@ function renderReviewCard(){
       const q = parseInt(btn.dataset.q,10);
       const cardState = STATE.cards[c.id];
       cardState.lastConfidence = confidence;
+      const elapsedDays = elapsedDaysSinceLastReview(cardState);
       fsrsUpdate(cardState, q);
-      recordRetrievalEvidence(cardState, q >= RETRIEVAL_PASS_QUALITY, "review", q, confidence, cardState.interval);
+      recordRetrievalEvidence(cardState, q >= RETRIEVAL_PASS_QUALITY, "review", q, confidence, elapsedDays);
       touchStreak();
       STATE.dailyProgress.reviewCount += 1;
       const xpGain = q===1?2:(q===3?5:(q===4?8:10));
@@ -1181,8 +1236,9 @@ async function handleQuizAnswer(c, isCorrect, btnEl, optsWrap){
 
   const cardState = STATE.cards[c.id];
   if(cardState.seen){
+    const elapsedDays = elapsedDaysSinceLastReview(cardState);
     fsrsUpdate(cardState, isCorrect ? 5 : 2);
-    recordRetrievalEvidence(cardState, isCorrect, "quiz", isCorrect ? 5 : 2, null, cardState.interval);
+    recordRetrievalEvidence(cardState, isCorrect, "quiz", isCorrect ? 5 : 2, null, elapsedDays);
   }
   await saveState();
 
