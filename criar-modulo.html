@@ -145,6 +145,7 @@
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
 <script src="assets/module-drafts.js"></script>
+<script src="assets/concept-identity.js"></script>
 <script src="assets/pwa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/7.0.0/tesseract.min.js" integrity="sha384-d8143753739d28e6f451ccf1aabe3523d52f664cebe15f47bfcb92ccc3190259a1b050a5bdd657e708b97c30b31beb4c" crossorigin="anonymous"></script>
 <script src="assets/ocr.js"></script>
@@ -175,12 +176,14 @@ function showDraftSavedIndicator() {
 
 function conceptTemplate(idx, data){
   data = data || {};
+  const stableId = data.id || ConceptIdentity.generateConceptId();
   const opts = data.options || ["", "", "", ""];
   const correct = typeof data.correct === "number" ? data.correct : 0;
   const wrap = document.createElement("div");
   wrap.className = "concept-editor";
   wrap.dataset.idx = idx;
-  if(data.id) wrap.dataset.origId = data.id;
+  wrap.dataset.origId = stableId;
+  if(data.replacesConceptId) wrap.dataset.replacesConceptId = data.replacesConceptId;
   if(data.sourcePage != null) wrap.dataset.sourcePage = String(data.sourcePage);
   if(data.sourceExcerpt) wrap.dataset.sourceExcerpt = data.sourceExcerpt;
 
@@ -190,6 +193,7 @@ function conceptTemplate(idx, data){
   wrap.innerHTML = `
     <span class="num-badge">Conceito ${idx + 1}</span>
     <button class="remove-concept" type="button" aria-label="Remover conceito ${idx + 1}">🗑️ Remover</button>
+    <button class="btn ghost replace-concept-btn" type="button" style="margin-left:8px; padding:5px 8px; font-size:11px;">♻️ Substituir conceito</button>
     <label class="field-label required" for="${uid}-tag">Categoria (etiqueta curta)</label>
     <input type="text" class="auth-input c-tag" id="${uid}-tag" placeholder="Ex: Vocabulário" value="${escapeAttr(data.tag||"")}" required aria-required="true">
     <label class="field-label required" for="${uid}-title">Título do conceito</label>
@@ -212,6 +216,15 @@ function conceptTemplate(idx, data){
     <div class="regen-feedback"></div>
   `;
   wrap.querySelector(".remove-concept").addEventListener("click", ()=>{ wrap.remove(); scheduleDraftSave(); });
+  wrap.querySelector(".replace-concept-btn").addEventListener("click", ()=>{
+    if(!window.confirm("Substituir cria uma nova identidade e não transfere progresso, FSRS ou evidências do conceito anterior. Continuar?")) return;
+    const previousId = wrap.dataset.origId;
+    wrap.dataset.origId = ConceptIdentity.generateConceptId();
+    if(previousId) wrap.dataset.replacesConceptId = previousId;
+    wrap.querySelector(".regen-feedback").className = "regen-feedback ok";
+    wrap.querySelector(".regen-feedback").textContent = "Nova identidade criada. O progresso anterior não será herdado.";
+    scheduleDraftSave();
+  });
   wrap.querySelector(".regen-concept-btn").addEventListener("click", ()=> regenerateConcept(wrap));
   return wrap;
 }
@@ -306,6 +319,7 @@ function partialConcepts(){
     };
     if(card.dataset.sourcePage) concept.sourcePage = parseInt(card.dataset.sourcePage, 10);
     if(card.dataset.sourceExcerpt) concept.sourceExcerpt = card.dataset.sourceExcerpt;
+    if(card.dataset.replacesConceptId) concept.replacesConceptId = card.dataset.replacesConceptId;
     return concept;
   });
 }
@@ -392,12 +406,13 @@ function collectConcepts(){
     const sourcePage = card.dataset.sourcePage ? parseInt(card.dataset.sourcePage, 10) : null;
     const sourceExcerpt = card.dataset.sourceExcerpt || null;
     const concept = {
-      id: origId || (slugify(title) + "-" + i),
+      id: origId || ConceptIdentity.generateConceptId(),
       tag: tag || "Geral",
       title, text, q, options, correct
     };
     if(sourcePage != null) concept.sourcePage = sourcePage;
     if(sourceExcerpt) concept.sourceExcerpt = sourceExcerpt;
+    if(card.dataset.replacesConceptId) concept.replacesConceptId = card.dataset.replacesConceptId;
     concepts.push(concept);
   });
   return { concepts, errors };
@@ -556,6 +571,10 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
   }
 
   const id = (activeDraft && activeDraft.moduleId) || editingId || generateModuleId(title);
+  const originalData = (activeDraft && activeDraft.moduleData) || editingOriginalMod;
+  const persistentStorageKey = originalData && originalData.config && originalData.config.storageKey
+    ? originalData.config.storageKey
+    : `estudo_${id}_v1`;
   const moduleData = {
     config: {
       appTitle: title,
@@ -563,11 +582,10 @@ document.getElementById("save-module-btn").addEventListener("click", async ()=>{
       logoEmoji: icon,
       homeIntro: summary || `Módulo criado por você: ${title}.`,
       sourceCredit: source || "Módulo criado no app.",
-      storageKey: `estudo_${id}_v1`
+      storageKey: persistentStorageKey
     },
     concepts
   };
-  const originalData = (activeDraft && activeDraft.moduleData) || editingOriginalMod;
   if(originalData){
     if(originalData.sourceMaterialId) moduleData.sourceMaterialId = originalData.sourceMaterialId;
     if(originalData.sourceMaterialTitle) moduleData.sourceMaterialTitle = originalData.sourceMaterialTitle;

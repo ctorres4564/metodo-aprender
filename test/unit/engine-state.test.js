@@ -92,6 +92,17 @@ describe("defaultState", () => {
       expect(card.retrievalPassedAt).toBeNull();
       expect(card.explanationPassedAt).toBeNull();
       expect(card.applicationPassedAt).toBeNull();
+      expect(card.pedagogyVersion).toBe(1);
+      expect(card.presentedAt).toBeNull();
+      expect(card.comprehensionStatus).toBe("not_assessed");
+      expect(card.comprehensionIssue).toBeNull();
+      expect(card.retrievalAttempts).toEqual([]);
+      expect(card.applicationLevel).toBe(0);
+      expect(card.applicationAttempts).toEqual([]);
+      expect(card.calibrationStatus).toBe("insufficient_data");
+      expect(card.lastErrorType).toBeNull();
+      expect(card.errorHistory).toEqual([]);
+      expect(card.contentQuality).toEqual({ status: "ok", reason: null, reportedAt: null });
     }
   });
 
@@ -106,6 +117,7 @@ describe("defaultState", () => {
     expect(state.calibration.aligned).toBe(0);
     expect(state.calibration.overconfident).toBe(0);
     expect(state.calibration.underconfident).toBe(0);
+    expect(state.schemaVersion).toBe(1);
   });
 
   it("inicializa configurações padrão", () => {
@@ -248,6 +260,107 @@ describe("evidências de conceito", () => {
   });
 });
 
+describe("apresentação e compreensão", () => {
+  it("primeira apresentação define seen/presentedAt sem inferir compreensão", () => {
+    const card = engine.defaultCardState();
+    expect(engine.markConceptPresented(card)).toBe(true);
+    expect(card.seen).toBe(true);
+    expect(card.presentedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(card.comprehensionStatus).toBe("not_assessed");
+    expect(card.comprehensionIssue).toBeNull();
+  });
+
+  it("apresentações posteriores preservam a data original", () => {
+    const card = engine.defaultCardState();
+    engine.markConceptPresented(card);
+    const first = card.presentedAt;
+    expect(engine.markConceptPresented(card)).toBe(false);
+    expect(card.presentedAt).toBe(first);
+  });
+});
+
+describe("histórico de recuperação", () => {
+  it("registra aprovação e reprovação, confiança e intervalo", () => {
+    const card = engine.defaultCardState();
+    engine.recordRetrievalEvidence(card, true, "review", 4, 3, 10);
+    engine.recordRetrievalEvidence(card, false, "quiz", 2, null, 1);
+    expect(card.retrievalAttempts).toHaveLength(2);
+    expect(card.retrievalAttempts[0]).toMatchObject({ source:"review", passed:true, quality:4, confidence:3, intervalDays:10 });
+    expect(card.retrievalAttempts[1]).toMatchObject({ source:"quiz", passed:false, quality:2, confidence:null, intervalDays:1 });
+    expect(card.retrievalPassedAt).not.toBeNull();
+  });
+
+  it("falha posterior não apaga evidência positiva", () => {
+    const card = engine.defaultCardState();
+    engine.recordRetrievalEvidence(card, true, "quiz", 5, null, 30);
+    const passedAt = card.retrievalPassedAt;
+    engine.recordRetrievalEvidence(card, false, "review", 1, 3, 1);
+    expect(card.retrievalPassedAt).toBe(passedAt);
+  });
+
+  it("mantém somente as 50 tentativas mais recentes", () => {
+    const card = engine.defaultCardState();
+    for(let i=0;i<55;i++) engine.recordRetrievalEvidence(card, i%2===0, "quiz", i, null, i);
+    expect(card.retrievalAttempts).toHaveLength(50);
+    expect(card.retrievalAttempts[0].quality).toBe(5);
+  });
+
+  it("aceita fonte futura construída e rejeita fontes não controladas", () => {
+    const card = engine.defaultCardState();
+    expect(()=>engine.recordRetrievalEvidence(card, true, "constructed_response", 4, 2, 3)).not.toThrow();
+    expect(()=>engine.recordRetrievalEvidence(card, true, "qualquer_coisa", 4, 2, 3)).toThrow(/Fonte de recuperação inválida/);
+  });
+});
+
+describe("calibração por conceito", () => {
+  const status = rows => engine.calculateCalibrationStatus(rows.map(([confidence, passed])=>({ confidence, passed })));
+  it("menos de 3 tentativas → insufficient_data", () => expect(status([[3,true],[3,false]])).toBe("insufficient_data"));
+  it("predomínio de excesso → overconfident", () => expect(status([[3,false],[3,false],[3,false],[1,false]])).toBe("overconfident"));
+  it("predomínio de subconfiança → underconfident", () => expect(status([[1,true],[1,true],[1,true],[3,true]])).toBe("underconfident"));
+  it("predomínio alinhado → calibrated", () => expect(status([[3,true],[1,false],[2,true],[3,true]])).toBe("calibrated"));
+  it("sem predomínio → mixed", () => expect(status([[3,false],[1,true],[3,true]])).toBe("mixed"));
+});
+
+describe("erros pedagógicos", () => {
+  it("falha de recuperação registra retrieval_failure", () => {
+    const card = engine.defaultCardState();
+    engine.recordRetrievalEvidence(card, false, "quiz", 2, null, 1);
+    expect(card.lastErrorType).toBe("retrieval_failure");
+  });
+
+  it("explicação incompleta e erro conceitual são distintos", () => {
+    const incomplete = engine.defaultCardState();
+    engine.recordExplanationOutcome(incomplete, 40, { pontosFaltando:["mecanismo"] });
+    expect(incomplete.lastErrorType).toBe("incomplete_explanation");
+    const conceptual = engine.defaultCardState();
+    engine.recordExplanationOutcome(conceptual, 30, { equivocos:["causa invertida"] });
+    expect(conceptual.lastErrorType).toBe("conceptual_error");
+  });
+
+  it("não cria erro conceitual sem equívoco explícito", () => {
+    const card = engine.defaultCardState();
+    engine.recordExplanationOutcome(card, 90, { equivocos:[] });
+    expect(card.lastErrorType).toBeNull();
+  });
+
+  it("histórico respeita o limite de 50", () => {
+    const card = engine.defaultCardState();
+    for(let i=0;i<55;i++) engine.recordError(card, "execution_error", "test", String(i));
+    expect(card.errorHistory).toHaveLength(50);
+    expect(card.errorHistory[0].detail).toBe("5");
+  });
+});
+
+describe("conteúdo problemático", () => {
+  it("marca conteúdo sem alterar evidências nem FSRS", () => {
+    const card = Object.assign(engine.defaultCardState(), { retrievalPassedAt:"2026-08-17", stability:12, difficulty:4, reps:8 });
+    const before = { retrievalPassedAt:card.retrievalPassedAt, stability:card.stability, difficulty:card.difficulty, reps:card.reps };
+    engine.reportContentProblem(card, "Pergunta ambígua");
+    expect(card.contentQuality).toMatchObject({ status:"reported", reason:"Pergunta ambígua" });
+    expect({ retrievalPassedAt:card.retrievalPassedAt, stability:card.stability, difficulty:card.difficulty, reps:card.reps }).toEqual(before);
+  });
+});
+
 describe("migração de evidências legadas", () => {
   it("não fabrica recuperação/aplicação a partir de reps e lastQuality", async () => {
     engine.CONFIG = { storageKey: "test" };
@@ -273,6 +386,18 @@ describe("migração de evidências legadas", () => {
     expect(state.cards.c1.explanationPassedAt).toBe("legacy");
     expect(state.cards.c1.retrievalPassedAt).toBeNull();
     expect(engine.evaluateConceptEvidence(state.cards.c1).retentionVerified).toBe(false);
+  });
+
+  it("preserva FSRS e é idempotente sem fabricar históricos", () => {
+    const legacy = { schemaVersion:0, cards:{ c1:{ seen:true, stability:18, difficulty:6, reps:9, nextReview:"2026-09-01", lastConfidence:3 } } };
+    const once = engine.migrateState(legacy);
+    const twice = engine.migrateState(once);
+    expect(twice.cards.c1).toEqual(once.cards.c1);
+    expect(once.cards.c1).toMatchObject({ stability:18, difficulty:6, reps:9, nextReview:"2026-09-01", lastConfidence:3 });
+    expect(once.cards.c1.retrievalAttempts).toEqual([]);
+    expect(once.cards.c1.applicationAttempts).toEqual([]);
+    expect(once.cards.c1.comprehensionStatus).toBe("not_assessed");
+    expect(once.cards.c1.applicationPassedAt).toBeNull();
   });
 });
 

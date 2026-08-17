@@ -96,6 +96,17 @@ const BADGES = [
 
 const EXPLANATION_PASS_SCORE = 70;
 const RETRIEVAL_PASS_QUALITY = 4;
+const STATE_SCHEMA_VERSION = 1;
+const PEDAGOGY_VERSION = 1;
+const HISTORY_LIMIT = 50;
+const COMPREHENSION_STATUSES = Object.freeze(["not_assessed", "no_issue_detected", "doubt_reported", "blocked"]);
+const CALIBRATION_STATUSES = Object.freeze(["insufficient_data", "calibrated", "overconfident", "underconfident", "mixed"]);
+const RETRIEVAL_SOURCES = Object.freeze(["review", "quiz", "constructed_response"]);
+const CONTENT_QUALITY_STATUSES = Object.freeze(["ok", "suspected", "reported"]);
+const ERROR_TYPES = Object.freeze([
+  "retrieval_failure", "conceptual_error", "incomplete_explanation", "misinterpretation",
+  "execution_error", "transfer_failure", "prerequisite_gap", "confidence_miscalibration", "content_problem"
+]);
 const LEGACY_CONTRADICTORY_BADGES = new Set(["mastered5", "mastered_all"]);
 
 function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -108,20 +119,91 @@ function daysBetween(a,b){
   return Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00")) / 86400000);
 }
 
+function defaultCardState(){
+  return {
+    pedagogyVersion:PEDAGOGY_VERSION,
+    seen:false, presentedAt:null,
+    comprehensionStatus:"not_assessed", comprehensionIssue:null,
+    retrievalPassedAt:null, lastRetrievalSource:null, lastRetrievalQuality:null, retrievalAttempts:[],
+    explainCount:0, lastExplainScore:null, explanationPassedAt:null,
+    applicationPassedAt:null, applicationLevel:0, applicationAttempts:[],
+    lastConfidence:null, calibrationStatus:"insufficient_data",
+    lastErrorType:null, errorHistory:[],
+    contentQuality:{ status:"ok", reason:null, reportedAt:null },
+    stability:null, difficulty:null, lastReviewDate:null, nextReview:null, reps:0,
+    ef:2.5, interval:0, lastQuality:null, analogy:null
+  };
+}
+
+function trimHistory(items){
+  return Array.isArray(items) ? items.slice(-HISTORY_LIMIT) : [];
+}
+
+function calculateCalibrationStatus(attempts){
+  const withConfidence = (attempts || []).filter(a => [1,2,3].includes(a.confidence));
+  if(withConfidence.length < 3) return "insufficient_data";
+  const counts = { overconfident:0, underconfident:0, calibrated:0 };
+  withConfidence.forEach(a=>{
+    if(a.confidence === 3 && !a.passed) counts.overconfident += 1;
+    else if(a.confidence === 1 && a.passed) counts.underconfident += 1;
+    else counts.calibrated += 1;
+  });
+  const threshold = Math.ceil(withConfidence.length * 0.6);
+  const ranked = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  return ranked[0][1] >= threshold && ranked[0][1] > ranked[1][1] ? ranked[0][0] : "mixed";
+}
+
+function normalizeCardState(legacy){
+  const normalized = Object.assign(defaultCardState(), legacy || {});
+  normalized.pedagogyVersion = PEDAGOGY_VERSION;
+  normalized.retrievalAttempts = trimHistory(legacy && legacy.retrievalAttempts);
+  normalized.applicationAttempts = trimHistory(legacy && legacy.applicationAttempts);
+  normalized.errorHistory = trimHistory(legacy && legacy.errorHistory);
+  normalized.contentQuality = Object.assign(defaultCardState().contentQuality, legacy && legacy.contentQuality || {});
+  if(!COMPREHENSION_STATUSES.includes(normalized.comprehensionStatus)) normalized.comprehensionStatus = "not_assessed";
+  if(!CONTENT_QUALITY_STATUSES.includes(normalized.contentQuality.status)) normalized.contentQuality.status = "ok";
+  if(!Number.isFinite(normalized.applicationLevel)) normalized.applicationLevel = 0;
+  normalized.calibrationStatus = calculateCalibrationStatus(normalized.retrievalAttempts);
+  if(!CALIBRATION_STATUSES.includes(normalized.calibrationStatus)) normalized.calibrationStatus = "insufficient_data";
+  return normalized;
+}
+
+function migrateState(parsed){
+  const base = defaultState();
+  if(!parsed) return base;
+  CONCEPTS.forEach(c=>{
+    const legacy = parsed.cards && parsed.cards[c.id];
+    if(!legacy) return;
+    base.cards[c.id] = normalizeCardState(legacy);
+    if(!base.cards[c.id].explanationPassedAt && legacy.lastExplainScore >= EXPLANATION_PASS_SCORE){
+      base.cards[c.id].explanationPassedAt = legacy.lastReviewDate || "legacy";
+    }
+    base.cards[c.id].retrievalPassedAt = legacy.retrievalPassedAt || null;
+    base.cards[c.id].applicationPassedAt = legacy.applicationPassedAt || null;
+  });
+  base.xp = parsed.xp||0;
+  base.streak = parsed.streak||0;
+  base.lastStudyDate = parsed.lastStudyDate||null;
+  base.badges = (parsed.badges||[]).filter(id => !LEGACY_CONTRADICTORY_BADGES.has(id));
+  base.reviewSessions = parsed.reviewSessions||0;
+  base.quiz = Object.assign({}, base.quiz, parsed.quiz||{});
+  base.settings = Object.assign({}, base.settings, parsed.settings||{});
+  base.dailyProgress = Object.assign({}, base.dailyProgress, parsed.dailyProgress||{});
+  base.calibration = Object.assign({}, base.calibration, parsed.calibration||{});
+  base.schemaVersion = STATE_SCHEMA_VERSION;
+  return base;
+}
+
 function defaultState(){
   const cards = {};
   CONCEPTS.forEach(c => {
     // Campos do FSRS (repetição espaçada) — stability/difficulty ficam null
     // até a primeira revisão. interval/ef são mantidos só por compatibilidade
     // com progresso salvo antes da migração do SM-2 para o FSRS.
-    cards[c.id] = {
-      stability:null, difficulty:null, lastReviewDate:null,
-      ef:2.5, interval:0, reps:0, nextReview: null, seen:false, lastQuality:null,
-      explainCount:0, lastExplainScore:null, analogy:null,
-      retrievalPassedAt:null, explanationPassedAt:null, applicationPassedAt:null
-    };
+    cards[c.id] = defaultCardState();
   });
   return {
+    schemaVersion:STATE_SCHEMA_VERSION,
     xp:0, streak:0, lastStudyDate:null, cards, badges:[], reviewSessions:0, quiz:{played:0, best:0, bestAdaptive:0},
     settings: { dailyNewLimit: 5, dailyReviewLimit: 0 }, // dailyReviewLimit 0 = sem limite
     dailyProgress: { date: null, newCount: 0, reviewCount: 0 },
@@ -131,47 +213,78 @@ function defaultState(){
 
 async function loadState(){
   const parsed = await StorageAdapter.load(CONFIG.storageKey);
-  const base = defaultState();
-  if(parsed){
-    // Normaliza progresso legado sem fabricar recuperação/aplicação a partir
-    // de reps ou lastQuality. Uma explicação antiga com nota suficiente é a
-    // única evidência que pode ser migrada com segurança, pois sua origem é inequívoca.
-    CONCEPTS.forEach(c=>{
-      if(parsed.cards && parsed.cards[c.id]){
-        const legacy = parsed.cards[c.id];
-        base.cards[c.id] = Object.assign({}, base.cards[c.id], legacy);
-        if(!base.cards[c.id].explanationPassedAt && legacy.lastExplainScore >= EXPLANATION_PASS_SCORE){
-          base.cards[c.id].explanationPassedAt = legacy.lastReviewDate || "legacy";
-        }
-        base.cards[c.id].retrievalPassedAt = legacy.retrievalPassedAt || null;
-        base.cards[c.id].applicationPassedAt = legacy.applicationPassedAt || null;
-      }
-    });
-    base.xp = parsed.xp||0;
-    base.streak = parsed.streak||0;
-    base.lastStudyDate = parsed.lastStudyDate||null;
-    base.badges = (parsed.badges||[]).filter(id => !LEGACY_CONTRADICTORY_BADGES.has(id));
-    base.reviewSessions = parsed.reviewSessions||0;
-    base.quiz = Object.assign({}, base.quiz, parsed.quiz||{});
-    base.settings = Object.assign({}, base.settings, parsed.settings||{});
-    base.dailyProgress = Object.assign({}, base.dailyProgress, parsed.dailyProgress||{});
-    base.calibration = Object.assign({}, base.calibration, parsed.calibration||{});
-  }
-  return base;
+  return migrateState(parsed);
 }
 
-function recordRetrievalEvidence(cardState, passed, source, quality){
-  if(!passed) return false;
-  cardState.retrievalPassedAt = todayStr();
+function recordError(cardState, type, source, detail){
+  if(!ERROR_TYPES.includes(type)) throw new Error(`Tipo de erro inválido: ${type}`);
+  const item = { at:new Date().toISOString(), type, source:source || null, detail:detail || null };
+  cardState.lastErrorType = type;
+  cardState.errorHistory = trimHistory([...(cardState.errorHistory || []), item]);
+  return item;
+}
+
+function recordRetrievalEvidence(cardState, passed, source, quality, confidence, intervalDays){
+  if(!RETRIEVAL_SOURCES.includes(source)) throw new Error(`Fonte de recuperação inválida: ${source}`);
+  const attempt = {
+    at:new Date().toISOString(), source, passed:Boolean(passed), quality,
+    confidence:confidence == null ? null : confidence,
+    intervalDays:intervalDays == null ? null : intervalDays
+  };
+  cardState.retrievalAttempts = trimHistory([...(cardState.retrievalAttempts || []), attempt]);
   cardState.lastRetrievalSource = source;
   cardState.lastRetrievalQuality = quality;
-  return true;
+  if(confidence != null) cardState.lastConfidence = confidence;
+  if(passed) cardState.retrievalPassedAt = todayStr();
+  if(!passed) recordError(cardState, "retrieval_failure", source, null);
+  cardState.calibrationStatus = calculateCalibrationStatus(cardState.retrievalAttempts);
+  return Boolean(passed);
 }
 
 function recordExplanationEvidence(cardState, score){
   if(score < EXPLANATION_PASS_SCORE) return false;
   cardState.explanationPassedAt = todayStr();
   return true;
+}
+
+function recordExplanationOutcome(cardState, score, resultData){
+  recordExplanationEvidence(cardState, score);
+  if(resultData && Array.isArray(resultData.equivocos) && resultData.equivocos.length > 0){
+    recordError(cardState, "conceptual_error", "explanation", resultData.equivocos.join("; "));
+  }else if(score < EXPLANATION_PASS_SCORE){
+    const detail = resultData && Array.isArray(resultData.pontosFaltando) ? resultData.pontosFaltando.join("; ") : null;
+    recordError(cardState, "incomplete_explanation", "explanation", detail);
+  }
+}
+
+function markConceptPresented(cardState){
+  if(cardState.seen) return false;
+  cardState.seen = true;
+  cardState.presentedAt = new Date().toISOString();
+  return true;
+}
+
+function reportContentProblem(cardState, reason){
+  cardState.contentQuality = { status:"reported", reason:reason || null, reportedAt:new Date().toISOString() };
+  recordError(cardState, "content_problem", "content_report", reason || null);
+  return cardState.contentQuality;
+}
+
+function contentReportHtml(){
+  return `<button class="btn ghost content-report-btn" type="button" style="margin-top:10px; font-size:11.5px;">⚑ Este conceito está confuso ou pode estar errado</button><div class="content-report-feedback"></div>`;
+}
+
+function bindContentReport(container, concept){
+  const reportBtn = container.querySelector(".content-report-btn");
+  if(!reportBtn) return;
+  reportBtn.onclick = async ()=>{
+    const reason = window.prompt("Motivo opcional: o que parece confuso ou incorreto?", "");
+    if(reason === null) return;
+    reportContentProblem(STATE.cards[concept.id], reason.trim());
+    await saveState();
+    const feedback = container.querySelector(".content-report-feedback");
+    if(feedback) feedback.innerHTML = '<div class="feedback ok" style="margin-top:8px;">Obrigado. O conteúdo foi marcado para revisão sem alterar seu progresso ou agendamento.</div>';
+  };
 }
 
 function evaluateConceptEvidence(cardState){
@@ -476,6 +589,11 @@ function renderLearnCard(){
   }
 
   const c = CONCEPTS[learnIndex];
+  const cardState = STATE.cards[c.id];
+  if(markConceptPresented(cardState)){
+    STATE.dailyProgress.newCount += 1;
+    saveState().catch(()=>{});
+  }
   let track = `<div class="track">`;
   CONCEPTS.forEach((cc,i)=>{
     let cls = "dot";
@@ -497,6 +615,7 @@ function renderLearnCard(){
       <div id="analogy-box">
         ${STATE.cards[c.id].analogy ? renderAnalogyHtml(STATE.cards[c.id].analogy) : `<button class="btn ghost" id="analogy-btn">💡 Ver explicação com analogia</button>`}
       </div>
+      ${contentReportHtml()}
       <div class="quiz-q">
         <div class="qtext">✅ Checagem rápida: ${escapeHtml(c.q)}</div>
         <div id="learn-opts"></div>
@@ -517,6 +636,7 @@ function renderLearnCard(){
 
   const analogyBtn = document.getElementById("analogy-btn");
   if(analogyBtn) analogyBtn.onclick = ()=> loadAnalogy(c);
+  bindContentReport(panel, c);
 }
 
 function renderAnalogyHtml(text){
@@ -553,10 +673,8 @@ async function handleLearnAnswer(isCorrect, btnEl, optsWrap){
 
   const c = CONCEPTS[learnIndex];
   const cardState = STATE.cards[c.id];
-  const wasNew = !cardState.seen;
   fsrsUpdate(cardState, isCorrect ? 4 : 2);
   touchStreak();
-  if(wasNew) STATE.dailyProgress.newCount += 1;
   addXP(isCorrect ? 10 : 4);
   await saveState();
 
@@ -675,7 +793,7 @@ function renderReviewCard(){
         </div>
       </div>
     </div>
-    <div style="text-align:center;">${sourceLinkHtml(c)}${linkedNotesHtml(c)}</div>
+    <div style="text-align:center;">${sourceLinkHtml(c)}${linkedNotesHtml(c)}${contentReportHtml()}</div>
     <div id="confidence-row">
       <p class="lead" style="text-align:center; margin-top:0;">Antes de ver a resposta: quão confiante você está de que lembra este conceito?</p>
       <div class="rate-row">
@@ -697,6 +815,7 @@ function renderReviewCard(){
   `;
 
   const flash = document.getElementById("flashcard");
+  bindContentReport(panel, c);
 
   document.querySelectorAll("#confidence-row .rate-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
@@ -715,7 +834,7 @@ function renderReviewCard(){
       const cardState = STATE.cards[c.id];
       cardState.lastConfidence = confidence;
       fsrsUpdate(cardState, q);
-      recordRetrievalEvidence(cardState, q >= RETRIEVAL_PASS_QUALITY, "review", q);
+      recordRetrievalEvidence(cardState, q >= RETRIEVAL_PASS_QUALITY, "review", q, confidence, cardState.interval);
       touchStreak();
       STATE.dailyProgress.reviewCount += 1;
       const xpGain = q===1?2:(q===3?5:(q===4?8:10));
@@ -727,6 +846,7 @@ function renderReviewCard(){
       let calibMsg = "";
       if(confidence === 3 && actuallyBad){
         STATE.calibration.overconfident += 1;
+        recordError(cardState, "confidence_miscalibration", "review", "Confiança alta após falha de recuperação.");
         calibMsg = `<div class="feedback bad">🔎 Você estava confiante, mas não lembrou — esse conceito merece atenção extra.</div>`;
       } else if(confidence === 1 && actuallyGood){
         STATE.calibration.underconfident += 1;
@@ -812,6 +932,7 @@ function renderExplainCard(){
         ? `<p class="lead" style="margin-top:-6px;">🗣️ Este conceito voltou hoje${cs.explainCount > 0 ? " porque a última explicação indicou que ele ainda não estava firme" : ""}. Faltam ${Math.max(0, dueForExplanation().length - 1)} depois deste.</p>`
         : `<p class="lead" style="margin-top:-6px;">✅ Nada vencido no momento — este é um treino extra, por sua conta.</p>`}
       <textarea id="explain-input" class="explain-textarea" rows="6" placeholder="Comece explicando aqui, com suas próprias palavras..."></textarea>
+      ${contentReportHtml()}
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:10px; flex-wrap:wrap;">
         <span class="lead" id="explain-charcount" style="margin:0; font-size:11.5px;">0 caracteres (mínimo 30)</span>
         <button class="btn" id="explain-submit" disabled>🎓 Avaliar explicação</button>
@@ -829,6 +950,7 @@ function renderExplainCard(){
     submitBtn.disabled = len < 30;
   });
   submitBtn.addEventListener("click", ()=> handleExplainSubmit(c, input.value.trim()));
+  bindContentReport(panel, c);
 }
 
 async function handleExplainSubmit(c, studentText){
@@ -922,7 +1044,7 @@ function renderExplainResult(c, data, previousScore){
     </div>
   `;
 
-  applyExplainResultToState(c, nota, quality, previousScore);
+  applyExplainResultToState(c, nota, quality, previousScore, data);
 
   document.getElementById("explain-next").onclick = ()=>{
     renderExplain();
@@ -930,11 +1052,11 @@ function renderExplainResult(c, data, previousScore){
   };
 }
 
-async function applyExplainResultToState(c, nota, quality, previousScore){
+async function applyExplainResultToState(c, nota, quality, previousScore, resultData){
   const cardState = STATE.cards[c.id];
   cardState.explainCount = (cardState.explainCount || 0) + 1;
   cardState.lastExplainScore = nota;
-  recordExplanationEvidence(cardState, nota);
+  recordExplanationOutcome(cardState, nota, resultData);
   fsrsUpdate(cardState, quality);
   touchStreak();
   // XP premia demonstração de entendimento e progresso real entre tentativas.
@@ -1060,7 +1182,7 @@ async function handleQuizAnswer(c, isCorrect, btnEl, optsWrap){
   const cardState = STATE.cards[c.id];
   if(cardState.seen){
     fsrsUpdate(cardState, isCorrect ? 5 : 2);
-    recordRetrievalEvidence(cardState, isCorrect, "quiz", isCorrect ? 5 : 2);
+    recordRetrievalEvidence(cardState, isCorrect, "quiz", isCorrect ? 5 : 2, null, cardState.interval);
   }
   await saveState();
 

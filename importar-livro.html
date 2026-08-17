@@ -96,6 +96,7 @@
 <script src="assets/auth-ui.js"></script>
 <script src="assets/api-client.js"></script>
 <script src="assets/module-drafts.js"></script>
+<script src="assets/concept-identity.js"></script>
 <script src="assets/material-limits.js"></script>
 <script src="assets/material-categories.js"></script>
 <script src="assets/pwa.js"></script>
@@ -699,7 +700,7 @@ document.getElementById("request-btn").addEventListener("click", async ()=>{
         // sourceExcerpt: trecho citável, extraído do texto real da página
         // (não escrito pela IA) — ver extractExcerpt().
         const excerpt = extractExcerpt(bookPages, validPage);
-        return Object.assign({ id: slugify(c.title) + "-" + i, sourcePage: validPage, sourceExcerpt: excerpt }, c);
+        return Object.assign({ id: ConceptIdentity.generateConceptId(), sourcePage: validPage, sourceExcerpt: excerpt }, c);
       }),
       sourceMaterialId: currentMaterialId || null,
       sourceMaterialTitle: currentMaterialTitle || null,
