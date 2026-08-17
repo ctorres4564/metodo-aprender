@@ -28,9 +28,9 @@ beforeEach(() => {
 // todo teste que monta STATE.cards manualmente parta de uma base completa.
 function cardsWith(overrides = {}) {
   return {
-    c1: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null },
-    c2: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null },
-    c3: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null },
+    c1: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null, retrievalPassedAt: null, explanationPassedAt: null, applicationPassedAt: null },
+    c2: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null, retrievalPassedAt: null, explanationPassedAt: null, applicationPassedAt: null },
+    c3: { seen: false, reps: 0, nextReview: null, explainCount: 0, lastExplainScore: null, lastQuality: null, retrievalPassedAt: null, explanationPassedAt: null, applicationPassedAt: null },
     ...overrides,
   };
 }
@@ -89,6 +89,9 @@ describe("defaultState", () => {
       expect(card.nextReview).toBeNull();
       expect(card.explainCount).toBe(0);
       expect(card.lastExplainScore).toBeNull();
+      expect(card.retrievalPassedAt).toBeNull();
+      expect(card.explanationPassedAt).toBeNull();
+      expect(card.applicationPassedAt).toBeNull();
     }
   });
 
@@ -173,24 +176,103 @@ describe("conceptStatus", () => {
     expect(engine.conceptStatus({ id: "c1" }).cls).toBe("chip-new");
   });
 
-  it("3+ reps → Dominado", () => {
-    engine.STATE = { cards: cardsWith({ c1: { seen: true, reps: 3 } }) };
-    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Dominado");
-    expect(engine.conceptStatus({ id: "c1" }).cls).toBe("chip-mastered");
+  it("qualquer quantidade de reps sem evidências → Apresentado", () => {
+    for (const reps of [0, 3, 100]) {
+      engine.STATE = { cards: cardsWith({ c1: { seen: true, reps } }) };
+      expect(engine.conceptStatus({ id: "c1" }).label).toBe("Apresentado");
+      expect(engine.conceptStatus({ id: "c1" }).cls).toBe("chip-presented");
+    }
   });
 
-  it("1-2 reps → Revisão N", () => {
-    engine.STATE = { cards: cardsWith({ c1: { seen: true, reps: 1 } }) };
-    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Revisão 1");
-
-    engine.STATE.cards.c1.reps = 2;
-    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Revisão 2");
+  it("somente recuperação ou somente explicação → Em prática", () => {
+    engine.STATE = { cards: cardsWith({ c1: { seen: true, retrievalPassedAt: "2026-08-17" } }) };
+    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Em prática");
+    engine.STATE = { cards: cardsWith({ c1: { seen: true, explanationPassedAt: "2026-08-17" } }) };
+    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Em prática");
   });
 
-  it("visto mas reps 0 → Aprendendo", () => {
-    engine.STATE = { cards: cardsWith({ c1: { seen: true, reps: 0 } }) };
-    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Aprendendo");
-    expect(engine.conceptStatus({ id: "c1" }).cls).toBe("chip-learning");
+  it("recuperação + explicação → Retido — transferência não verificada", () => {
+    engine.STATE = { cards: cardsWith({ c1: { seen: true, retrievalPassedAt: "2026-08-17", explanationPassedAt: "2026-08-17" } }) };
+    expect(engine.conceptStatus({ id: "c1" }).label).toBe("Retido — transferência não verificada");
+    expect(engine.conceptStatus({ id: "c1" }).cls).toBe("chip-retained");
+  });
+
+  it("não emite rótulos proibidos em nenhuma combinação de evidências", () => {
+    const combinations = [
+      { seen: false },
+      { seen: true },
+      { seen: true, reps: 100 },
+      { seen: true, retrievalPassedAt: "2026-08-17" },
+      { seen: true, explanationPassedAt: "2026-08-17" },
+      { seen: true, retrievalPassedAt: "2026-08-17", explanationPassedAt: "2026-08-17", applicationPassedAt: "2026-08-17" },
+    ];
+    for (const card of combinations) {
+      engine.STATE = { cards: cardsWith({ c1: card }) };
+      expect(engine.conceptStatus({ id: "c1" }).label).not.toMatch(/aprendido|dominado|consolidado/i);
+    }
+  });
+});
+
+describe("evidências de conceito", () => {
+  it("tentativas reprovadas não criam evidência positiva", () => {
+    const card = {};
+    expect(engine.recordRetrievalEvidence(card, false, "review", 1)).toBe(false);
+    expect(engine.recordExplanationEvidence(card, 69)).toBe(false);
+    expect(card.retrievalPassedAt).toBeUndefined();
+    expect(card.explanationPassedAt).toBeUndefined();
+  });
+
+  it("registra separadamente recuperação e explicação aprovadas", () => {
+    const card = {};
+    expect(engine.recordRetrievalEvidence(card, true, "quiz", 5)).toBe(true);
+    expect(engine.recordExplanationEvidence(card, 70)).toBe(true);
+    expect(engine.evaluateConceptEvidence(card).retentionVerified).toBe(true);
+    expect(engine.evaluateConceptEvidence(card).applicationVerified).toBe(false);
+  });
+
+  it("reps não participa da avaliação de retenção", () => {
+    expect(engine.evaluateConceptEvidence({ reps: 999 }).retentionVerified).toBe(false);
+  });
+
+  it("percentual não muda quando apenas reps aumenta", () => {
+    const cards = cardsWith({ c1: { seen: true, reps: 999 } });
+    expect(engine.retentionEvidencePercentage(cards, 3)).toBe(0);
+  });
+
+  it("percentual considera somente recuperação + explicação", () => {
+    const cards = cardsWith({
+      c1: { seen: true, retrievalPassedAt: "2026-08-17", explanationPassedAt: "2026-08-17" },
+      c2: { seen: true, retrievalPassedAt: "2026-08-17" },
+    });
+    expect(engine.retentionEvidencePercentage(cards, 3)).toBe(33);
+  });
+});
+
+describe("migração de evidências legadas", () => {
+  it("não fabrica recuperação/aplicação a partir de reps e lastQuality", async () => {
+    engine.CONFIG = { storageKey: "test" };
+    engine.StorageAdapter = {
+      load: async () => ({
+        cards: { c1: { seen: true, reps: 50, lastQuality: 5, lastExplainScore: null } },
+        badges: ["mastered5", "mastered_all"],
+      }),
+    };
+    const state = await engine.loadState();
+    expect(state.cards.c1.retrievalPassedAt).toBeNull();
+    expect(state.cards.c1.explanationPassedAt).toBeNull();
+    expect(state.cards.c1.applicationPassedAt).toBeNull();
+    expect(state.badges).toEqual([]);
+  });
+
+  it("migra apenas explicação antiga aprovada, sem inferir recuperação", async () => {
+    engine.CONFIG = { storageKey: "test" };
+    engine.StorageAdapter = {
+      load: async () => ({ cards: { c1: { seen: true, reps: 8, lastExplainScore: 85 } } }),
+    };
+    const state = await engine.loadState();
+    expect(state.cards.c1.explanationPassedAt).toBe("legacy");
+    expect(state.cards.c1.retrievalPassedAt).toBeNull();
+    expect(engine.evaluateConceptEvidence(state.cards.c1).retentionVerified).toBe(false);
   });
 });
 
@@ -288,7 +370,7 @@ describe("conceptWeakness", () => {
     expect(w).toBeGreaterThan(3); // base baixa + 3 por vencido
   });
 
-  it("conceito bem dominado tem fraqueza baixa", () => {
+  it("conceito com bons indicadores operacionais tem fraqueza baixa", () => {
     const future = engine.addDays(engine.todayStr(), 30);
     engine.STATE = { cards: cardsWith({ c1: { reps: 10, nextReview: future, lastExplainScore: 90, lastQuality: 5 } }) };
     const w = engine.conceptWeakness({ id: "c1" });
