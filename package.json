@@ -6,7 +6,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:emulator": "firebase emulators:exec --project demo-metodo-aprender --only firestore,storage,auth \"vitest run --config vitest.emulator.config.js\"",
-    "test:e2e": "firebase emulators:exec --project demo-metodo-aprender --only firestore,storage,auth \"playwright test\""
+    "test:e2e": "firebase emulators:exec --project demo-metodo-aprender --only firestore,storage,auth \"playwright test\"",
+    "benchmark:constructed-eval": "node test/benchmark/runConstructedEvaluationBenchmark.js",
+    "report:ai-agreement": "node scripts/reportAiAgreement.js"
   },
   "dependencies": {
     "@sentry/node": "^10.69.0",

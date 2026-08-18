@@ -1,0 +1,643 @@
+/* =====================================================================
+   DATASET — benchmark de qualidade pedagógica da avaliação semântica
+   (avaliação por IA de resposta construída, Prioridade 3).
+   =====================================================================
+   NÃO é enviado ao modelo como está: `rationale` existe só para
+   auditoria humana do próprio dataset (justificar por que o ground
+   truth é o que é) e NUNCA deve ser passado para
+   evaluateConstructedResponse — ver runConstructedEvaluationBenchmark.js
+   (buildEvaluationArgs só extrai prompt/referenceAnswer/studentAnswer).
+
+   `id`, `domain`, `caseType` e `boundary` também não são enviados ao
+   modelo — servem só para agregação e relatório do benchmark.
+
+   `source: "project"` = texto de referência tirado quase literalmente de
+   um conceito real do catálogo (content/*.json). `source: "general"` =
+   conhecimento geral, usado para caber os tipos de caso difíceis de
+   construir só com o catálogo atual (ex.: confusão entre dois conceitos
+   próximos, que pede um par de conceitos vizinhos e bem definidos).
+
+   `boundary` marca os casos mais difíceis, na fronteira entre duas
+   classes adjacentes — "correct_partial" ou "partial_incorrect" — úteis
+   para a seção "casos difíceis" do relatório.
+   ===================================================================== */
+
+export const DATASET_VERSION = "constructed-eval-benchmark-v1";
+
+export const DATASET = Object.freeze([
+  // ---------------------------------------------------------------
+  // Metacognição (content/metacognicao-aprender-a-aprender.json)
+  // ---------------------------------------------------------------
+  {
+    id: "meta-01", domain: "Metacognição", source: "project", caseType: "correct_literal", boundary: null,
+    prompt: "Como a metacognição pode ser resumida?",
+    referenceAnswer: "Metacognição é, de forma simples, 'pensar sobre o próprio pensamento' — a capacidade de observar, entender e ajustar os próprios processos mentais. No contexto de estudo, é a diferença entre simplesmente estudar e saber avaliar se você está realmente aprendendo.",
+    studentAnswer: "Metacognição é pensar sobre o próprio pensamento: observar, entender e ajustar os processos mentais, e saber se você está realmente aprendendo ou só estudando.",
+    expectedClassification: "correct",
+    rationale: "Reproduz quase literalmente a definição central sem alterar o sentido."
+  },
+  {
+    id: "meta-02", domain: "Metacognição", source: "project", caseType: "correct_paraphrase", boundary: null,
+    prompt: "O que é um 'julgamento de aprendizagem' (judgment of learning)?",
+    referenceAnswer: "Um 'julgamento de aprendizagem' é a previsão que uma pessoa faz sobre o quanto vai lembrar de algo no futuro. Pesquisas mostram que esses julgamentos são frequentemente imprecisos — as pessoas tendem a superestimar o que vão conseguir lembrar depois.",
+    studentAnswer: "É quando alguém tenta adivinhar, antes da prova, quanto vai conseguir lembrar depois — e geralmente essa estimativa é otimista demais.",
+    expectedClassification: "correct",
+    rationale: "Capta a ideia central (previsão sobre lembrança futura, tendência a superestimar) com palavras totalmente diferentes."
+  },
+  {
+    id: "meta-03", domain: "Metacognição", source: "project", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "O que significa estar 'bem calibrado' em relação ao próprio aprendizado?",
+    referenceAnswer: "Calibração é o quanto a confiança de uma pessoa sobre o que sabe combina com seu desempenho real em um teste. Um estudante bem calibrado se sente inseguro exatamente nos pontos em que erra, e confiante nos pontos em que acerta.",
+    studentAnswer: "Confiança bater com o desempenho real.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas captura exatamente o núcleo do conceito (confiança = desempenho real); fronteira com 'partial' porque é bem sucinta."
+  },
+  {
+    id: "meta-04", domain: "Metacognição", source: "project", caseType: "correct_extra_info", boundary: "correct_partial",
+    prompt: "Por que a facilidade ao reler um texto pode enganar a autoavaliação?",
+    referenceAnswer: "Reler um texto familiar 'flui' facilmente, e essa sensação de facilidade é confundida com domínio do conteúdo. Esse é um dos motivos pelos quais a releitura passiva gera julgamentos de aprendizagem inflados.",
+    studentAnswer: "Porque reler um texto que você já viu antes parece fácil e fluido, e o cérebro confunde essa fluência com realmente saber o conteúdo — isso é chamado de ilusão de fluência, e eu acho isso parecido com quando você assiste um filme dublado várias vezes e acha que entende o idioma original.",
+    expectedClassification: "correct",
+    rationale: "A analogia do filme dublado é irrelevante, mas não compromete nem contradiz a explicação correta do mecanismo (fluência confundida com domínio)."
+  },
+  {
+    id: "meta-05", domain: "Metacognição", source: "project", caseType: "partial_omission", boundary: null,
+    prompt: "Quais são os dois componentes geralmente usados para descrever a metacognição?",
+    referenceAnswer: "A metacognição costuma ser dividida em duas partes: conhecimento metacognitivo (saber como você aprende melhor) e regulação metacognitiva (planejar, monitorar e avaliar o próprio processo de estudo enquanto ele acontece).",
+    studentAnswer: "Um deles é saber monitorar e avaliar como você está estudando enquanto estuda.",
+    expectedClassification: "partial",
+    rationale: "Cobre apenas a regulação metacognitiva; omite completamente o conhecimento metacognitivo."
+  },
+  {
+    id: "meta-06", domain: "Metacognição", source: "project", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "Por que se testar é uma forma eficaz de monitorar o próprio aprendizado?",
+    referenceAnswer: "Testar a si mesmo — respondendo perguntas sem consultar o material — fornece um retorno mais confiável do que a sensação subjetiva de 'já sei isso'. É uma forma direta de corrigir julgamentos de aprendizagem excessivamente otimistas antes de uma prova real.",
+    studentAnswer: "Porque quando você se testa, você vê na hora se sabe ou não, o que é mais confiável do que só reler — embora releitura também ajude bastante a fixar o conteúdo.",
+    expectedClassification: "partial",
+    rationale: "Captura o mecanismo central corretamente, mas introduz uma imprecisão relevante ('releitura também ajuda bastante') que contraria o próprio ponto do material sobre fluência ilusória."
+  },
+  {
+    id: "meta-07", domain: "Metacognição", source: "project", caseType: "partial_split", boundary: null,
+    prompt: "Como a metacognição pode ser resumida?",
+    referenceAnswer: "Metacognição é 'pensar sobre o próprio pensamento' — observar, entender e ajustar os próprios processos mentais, e saber avaliar se você está realmente aprendendo.",
+    studentAnswer: "Metacognição é a capacidade de planejar o que vai estudar antes de começar.",
+    expectedClassification: "partial",
+    rationale: "Planejar é parte da regulação metacognitiva, mas a resposta reduz o conceito inteiro a só essa parte, sem mencionar observar/ajustar o pensamento nem avaliar se está aprendendo."
+  },
+  {
+    id: "meta-08", domain: "Metacognição", source: "project", caseType: "incorrect_conceptual", boundary: null,
+    prompt: "O que é um 'julgamento de aprendizagem' (judgment of learning)?",
+    referenceAnswer: "É a previsão que uma pessoa faz sobre o quanto vai lembrar de algo no futuro; esses julgamentos costumam superestimar o que será lembrado.",
+    studentAnswer: "Julgamento de aprendizagem é a nota que o professor dá para o aluno depois da prova.",
+    expectedClassification: "incorrect",
+    rationale: "Descreve avaliação externa (nota do professor), não a autopercepção da própria pessoa sobre quanto vai lembrar."
+  },
+  {
+    id: "meta-09", domain: "Metacognição", source: "project", caseType: "incorrect_keyword_wrong_relation", boundary: null,
+    prompt: "O que significa estar 'bem calibrado' em relação ao próprio aprendizado?",
+    referenceAnswer: "É quando a confiança da pessoa sobre o que sabe combina com seu desempenho real — sentir-se inseguro nos pontos que erra e confiante nos que acerta.",
+    studentAnswer: "Calibração é saber exatamente qual será a nota que você vai tirar na prova antes de fazer ela.",
+    expectedClassification: "incorrect",
+    rationale: "Usa os termos certos do domínio (confiança, desempenho, prova) mas descreve algo diferente — prever uma nota exata, não a relação entre confiança subjetiva e desempenho real."
+  },
+  {
+    id: "meta-10", domain: "Metacognição", source: "project", caseType: "incorrect_sophisticated", boundary: "partial_incorrect",
+    prompt: "Por que a facilidade ao reler um texto pode enganar a autoavaliação?",
+    referenceAnswer: "Reler um texto familiar 'flui' facilmente, e essa sensação de facilidade é confundida com domínio do conteúdo, gerando julgamentos de aprendizagem inflados.",
+    studentAnswer: "A ilusão de fluência ocorre porque, ao reler repetidamente um texto, o cérebro constrói novas conexões sinápticas mais fortes através da repetição espaçada, o que efetivamente consolida a informação na memória de longo prazo, tornando a releitura uma estratégia comprovadamente eficaz para reter conteúdo complexo.",
+    expectedClassification: "incorrect",
+    rationale: "Soa técnica e convincente, mas inverte o ponto do material: releitura NÃO consolida efetivamente e a fluência é enganosa, não uma prova de aprendizado real."
+  },
+  {
+    id: "meta-11", domain: "Metacognição", source: "project", caseType: "incorrect_cause_effect_inversion", boundary: null,
+    prompt: "Por que se testar é uma forma eficaz de monitorar o próprio aprendizado?",
+    referenceAnswer: "Testar a si mesmo fornece um retorno mais confiável do que a sensação subjetiva de 'já sei isso', corrigindo julgamentos de aprendizagem excessivamente otimistas antes de uma prova real.",
+    studentAnswer: "Se você já se sente confiante que sabe um assunto, isso é o que garante que vai se sair bem no teste — a confiança é o que causa o bom desempenho na hora de se testar.",
+    expectedClassification: "incorrect",
+    rationale: "Inverte a relação causal do material: o teste corrige julgamentos de confiança errados (o teste informa a confiança), não que a confiança prévia garanta o desempenho."
+  },
+  {
+    id: "meta-12", domain: "Metacognição", source: "project", caseType: "partial_example_without_explanation", boundary: "partial_incorrect",
+    prompt: "Como a metacognição pode ser resumida?",
+    referenceAnswer: "Metacognição é 'pensar sobre o próprio pensamento' — observar, entender e ajustar os próprios processos mentais, e saber avaliar se você está realmente aprendendo.",
+    studentAnswer: "É tipo quando você para no meio de estudar e pensa 'péra, eu realmente entendi isso ou só tô lendo?'.",
+    expectedClassification: "partial",
+    rationale: "Dá um exemplo correto e relevante (monitoramento durante o estudo), mas não define o conceito mais amplo nem menciona ajustar o processo — falta a explicação estrutural completa."
+  },
+
+  // ---------------------------------------------------------------
+  // Repetição espaçada e memória (content/repeticao-espacada-e-memoria.json)
+  // ---------------------------------------------------------------
+  {
+    id: "spac-01", domain: "Repetição espaçada", source: "project", caseType: "correct_literal", boundary: null,
+    prompt: "O que a curva do esquecimento de Ebbinghaus descreve?",
+    referenceAnswer: "No fim do século XIX, Hermann Ebbinghaus mostrou que esquecemos informação nova de forma acelerada logo após aprendê-la, e depois cada vez mais devagar. Sem nenhuma revisão, boa parte do que se aprende pode ser esquecido já nas primeiras horas ou dias.",
+    studentAnswer: "A curva do esquecimento mostra que a gente esquece rápido logo depois de aprender algo novo, e depois o esquecimento vai ficando mais lento — sem revisar, boa parte do conteúdo some já nos primeiros dias.",
+    expectedClassification: "correct",
+    rationale: "Reproduz de forma quase literal a taxa acelerada e depois desacelerada do esquecimento, e a perda rápida sem revisão."
+  },
+  {
+    id: "spac-02", domain: "Repetição espaçada", source: "project", caseType: "correct_paraphrase", boundary: null,
+    prompt: "O que é o efeito de teste (testing effect)?",
+    referenceAnswer: "Tentar recuperar uma informação da memória — por exemplo, respondendo uma pergunta sobre ela — fortalece essa memória mais do que simplesmente reler o material.",
+    studentAnswer: "Quando você tenta lembrar de algo de cabeça, respondendo uma pergunta sem olhar a resposta, isso grava a informação na memória com mais força do que só passar os olhos pelo texto de novo.",
+    expectedClassification: "correct",
+    rationale: "Paráfrase fiel: recuperação ativa > releitura para fortalecer a memória."
+  },
+  {
+    id: "spac-03", domain: "Repetição espaçada", source: "project", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "Por que sistemas de repetição espaçada aumentam o intervalo entre revisões conforme você acerta?",
+    referenceAnswer: "Sistemas de repetição espaçada aumentam o intervalo entre revisões cada vez que você acerta um conceito. A lógica é revisar um pouco antes de esquecer — reforçando a memória no momento mais eficiente.",
+    studentAnswer: "Porque revisar bem antes de esquecer é mais eficiente, então o intervalo cresce a cada acerto.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas cobre tanto a lógica (revisar antes de esquecer) quanto o gatilho (o intervalo cresce a cada acerto)."
+  },
+  {
+    id: "spac-04", domain: "Repetição espaçada", source: "project", caseType: "correct_extra_info", boundary: null,
+    prompt: "Por que reler e grifar podem dar uma falsa sensação de domínio do conteúdo?",
+    referenceAnswer: "Reler um texto ou grifar trechos cria uma sensação de familiaridade que é facilmente confundida com aprendizado real. Essa fluência de reconhecimento não significa que a informação poderá ser lembrada depois, sem o texto na frente.",
+    studentAnswer: "Reler e grifar dão uma sensação de familiaridade que a gente confunde com realmente saber o conteúdo, mas isso não garante que você vai lembrar depois sem o texto — é tipo quando você acha que sabe cantar uma música só porque reconhece ela tocando no rádio, mas não consegue cantar sozinho do zero.",
+    expectedClassification: "correct",
+    rationale: "A analogia da música é irrelevante para o julgamento, mas o mecanismo central está correto e completo."
+  },
+  {
+    id: "spac-05", domain: "Repetição espaçada", source: "project", caseType: "partial_omission", boundary: null,
+    prompt: "O que caracteriza uma 'dificuldade desejável' no aprendizado?",
+    referenceAnswer: "Certas dificuldades durante o estudo — como esperar até quase esquecer para revisar, ou testar a si mesmo em vez de reler — tornam o aprendizado mais lento e desconfortável no curto prazo, mas produzem memórias muito mais fortes e duradouras no longo prazo.",
+    studentAnswer: "Dificuldade desejável é quando o estudo fica mais difícil de propósito, tipo esperar mais tempo para revisar.",
+    expectedClassification: "partial",
+    rationale: "Menciona só um exemplo e diz que fica 'mais difícil de propósito', mas omite o ponto central de que isso produz memórias mais fortes no longo prazo apesar do desconforto no curto prazo."
+  },
+  {
+    id: "spac-06", domain: "Repetição espaçada", source: "project", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "Segundo o efeito de espaçamento, o que produz memórias mais duradouras?",
+    referenceAnswer: "Estudar o mesmo conteúdo em sessões espaçadas ao longo do tempo produz memórias mais duradouras do que concentrar toda a revisão em uma única sessão, mesmo quando o tempo total de estudo é igual.",
+    studentAnswer: "Estudar em sessões espaçadas ao longo de várias semanas cria memórias mais fortes do que estudar tudo de uma vez, principalmente porque você acaba estudando bem mais horas no total quando espalha as sessões.",
+    expectedClassification: "partial",
+    rationale: "Acerta a conclusão central (espaçado > concentrado), mas o material é explícito que o efeito ocorre mesmo com o MESMO tempo total de estudo, não porque haveria mais horas totais — imprecisão relevante."
+  },
+  {
+    id: "spac-07", domain: "Repetição espaçada", source: "project", caseType: "partial_split", boundary: null,
+    prompt: "O que a curva do esquecimento de Ebbinghaus descreve?",
+    referenceAnswer: "Esquecemos informação nova de forma acelerada logo após aprendê-la, e depois cada vez mais devagar; sem revisão, boa parte do aprendido se perde já nas primeiras horas ou dias.",
+    studentAnswer: "A curva do esquecimento diz que quanto mais você revisa um conteúdo, mais fácil fica lembrar dele depois.",
+    expectedClassification: "partial",
+    rationale: "A parte sobre revisão ajudar é compatível com o espírito do material, mas a resposta não descreve o que é a curva em si — a taxa de esquecimento acelerada logo após aprender."
+  },
+  {
+    id: "spac-08", domain: "Repetição espaçada", source: "project", caseType: "incorrect_conceptual", boundary: null,
+    prompt: "O que é o efeito de teste (testing effect)?",
+    referenceAnswer: "Tentar recuperar uma informação da memória fortalece essa memória mais do que simplesmente reler o material.",
+    studentAnswer: "O efeito de teste é quando você faz muitas provas na escola e isso deixa você estressado, o que atrapalha a memória.",
+    expectedClassification: "incorrect",
+    rationale: "Descreve estresse por excesso de provas, um conceito completamente diferente do testing effect (recuperação ativa fortalece a memória)."
+  },
+  {
+    id: "spac-09", domain: "Repetição espaçada", source: "project", caseType: "incorrect_keyword_wrong_relation", boundary: "partial_incorrect",
+    prompt: "Por que sistemas de repetição espaçada aumentam o intervalo entre revisões conforme você acerta?",
+    referenceAnswer: "Aumentam o intervalo cada vez que você acerta um conceito: primeiro em um dia, depois alguns dias, depois semanas. A lógica é revisar um pouco antes de esquecer.",
+    studentAnswer: "Os intervalos de revisão aumentam porque, quanto mais vezes você erra um conceito, mais espaçadas as revisões dele ficam, para você ter mais tempo de estudar antes da próxima tentativa.",
+    expectedClassification: "incorrect",
+    rationale: "Usa os termos certos (intervalo, revisão, erro) mas inverte a lógica: no material o intervalo cresce a cada ACERTO, não a cada erro."
+  },
+  {
+    id: "spac-10", domain: "Repetição espaçada", source: "project", caseType: "incorrect_sophisticated", boundary: "partial_incorrect",
+    prompt: "Por que reler e grifar podem dar uma falsa sensação de domínio do conteúdo?",
+    referenceAnswer: "Reler ou grifar cria uma sensação de familiaridade confundida com aprendizado real, mas essa fluência de reconhecimento não garante que a informação será lembrada depois, sem o texto na frente.",
+    studentAnswer: "Reler e grifar são tecnicamente formas de codificação elaborativa, um processo cognitivo que fortalece traços de memória ao criar múltiplas rotas de recuperação no córtex, sendo consideradas na literatura de ciência cognitiva estratégias de estudo robustas e validadas experimentalmente para retenção de longo prazo.",
+    expectedClassification: "incorrect",
+    rationale: "Linguagem técnica e convincente, mas contradiz diretamente o ponto do material: reler e grifar são citados como estratégias que ENGANAM a autoavaliação, não como validadas para retenção."
+  },
+  {
+    id: "spac-11", domain: "Repetição espaçada", source: "project", caseType: "incorrect_cause_effect_inversion", boundary: null,
+    prompt: "O que caracteriza uma 'dificuldade desejável' no aprendizado?",
+    referenceAnswer: "Certas dificuldades (esperar para revisar, testar-se) tornam o estudo mais lento e desconfortável no curto prazo, mas produzem memórias mais fortes no longo prazo.",
+    studentAnswer: "Dificuldades desejáveis funcionam porque, depois que a memória já está bem consolidada e forte, o estudo começa a parecer mais difícil e desconfortável — a dificuldade é uma consequência de já saber bem o conteúdo.",
+    expectedClassification: "incorrect",
+    rationale: "Inverte causa e efeito: no material a dificuldade é a CAUSA de uma memória mais forte depois, não uma consequência de já saber bem."
+  },
+  {
+    id: "spac-12", domain: "Repetição espaçada", source: "project", caseType: "partial_overgeneralization", boundary: "partial_incorrect",
+    prompt: "O que caracteriza uma 'dificuldade desejável' no aprendizado?",
+    referenceAnswer: "Certas dificuldades específicas (esperar para revisar, testar-se em vez de reler) tornam o estudo mais lento e desconfortável no curto prazo, mas produzem memórias mais fortes no longo prazo.",
+    studentAnswer: "Basicamente, quanto mais difícil e desconfortável for estudar, melhor você vai aprender — então sofrer bastante durante o estudo é sempre um bom sinal.",
+    expectedClassification: "partial",
+    rationale: "Generaliza demais: o material fala de dificuldades específicas (esperar, testar-se), não de qualquer sofrimento ou dificuldade — perde a precisão, mas mantém o núcleo de que certa dificuldade pode ajudar."
+  },
+
+  // ---------------------------------------------------------------
+  // Técnica Feynman (content/tecnica-feynman.json)
+  // ---------------------------------------------------------------
+  {
+    id: "feyn-01", domain: "Técnica Feynman", source: "project", caseType: "correct_literal", boundary: null,
+    prompt: "Por que Richard Feynman ficou conhecido como 'O Grande Explicador'?",
+    referenceAnswer: "Richard Feynman foi um físico americano, ganhador do Prêmio Nobel de Física de 1965, famoso não só por suas contribuições científicas, mas também por sua habilidade de explicar ideias complexas de forma simples e acessível.",
+    studentAnswer: "Feynman era um físico que ganhou o Nobel de Física em 1965 e ficou famoso por saber explicar ideias complicadas de um jeito simples e fácil de entender, por isso o apelido de Grande Explicador.",
+    expectedClassification: "correct",
+    rationale: "Reproduz quase literalmente o motivo do apelido."
+  },
+  {
+    id: "feyn-02", domain: "Técnica Feynman", source: "project", caseType: "correct_paraphrase", boundary: null,
+    prompt: "Qual é a vantagem de explicar um conceito 'como para uma criança'?",
+    referenceAnswer: "Obriga a evitar jargão técnico e frases decoradas, forçando linguagem simples e analogias — qualquer parte confusa ou incompleta da explicação revela o que ainda não foi bem compreendido.",
+    studentAnswer: "Tentar ensinar como se fosse pra uma criança te obriga a largar os termos difíceis e usar exemplos simples — e é justamente aí que você percebe as partes que ainda não entendeu direito.",
+    expectedClassification: "correct",
+    rationale: "Paráfrase fiel ao mecanismo: linguagem simples revela lacunas de compreensão."
+  },
+  {
+    id: "feyn-03", domain: "Técnica Feynman", source: "project", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "Qual é o primeiro passo da Técnica Feynman?",
+    referenceAnswer: "O primeiro passo é escolher um conceito que você quer aprender e tentar explicá-lo com suas próprias palavras, como se estivesse ensinando alguém que não sabe nada sobre o assunto.",
+    studentAnswer: "Escolher um conceito e tentar explicar com suas próprias palavras, como se ensinasse alguém leigo.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas cobre os dois elementos essenciais do passo 1: escolher o conceito e explicar como para um leigo."
+  },
+  {
+    id: "feyn-04", domain: "Técnica Feynman", source: "project", caseType: "correct_extra_info", boundary: null,
+    prompt: "O que é a 'ilusão de profundidade explicativa'?",
+    referenceAnswer: "É quando as pessoas superestimam o quanto entendem algo até tentarem explicá-lo em detalhes; reconhecer termos e acompanhar uma aula não é o mesmo que conseguir reconstruir a explicação sozinho.",
+    studentAnswer: "A ilusão de profundidade explicativa é quando a gente acha que entende bem um assunto só porque reconhece os termos ou acompanhou uma explicação, mas na hora de reconstruir sozinho, sem ajuda, percebe que na verdade não sabia tão bem assim — isso me lembra muito de quando eu assisto um tutorial de programação e acho que entendi tudo, mas travo total na hora de escrever o código sozinho.",
+    expectedClassification: "correct",
+    rationale: "A analogia do tutorial de programação é irrelevante ao julgamento, mas não distorce o mecanismo correto e completo."
+  },
+  {
+    id: "feyn-05", domain: "Técnica Feynman", source: "project", caseType: "partial_omission", boundary: null,
+    prompt: "O que revela as lacunas de compreensão na Técnica Feynman?",
+    referenceAnswer: "Ao tentar explicar, é comum travar em certos pontos, recorrer a termos técnicos sem defini-los, ou perceber que uma parte do raciocínio não faz sentido — esses momentos de trava são as lacunas reais de compreensão.",
+    studentAnswer: "As lacunas aparecem quando você trava tentando explicar alguma parte.",
+    expectedClassification: "partial",
+    rationale: "Menciona corretamente 'travar' como sinal de lacuna, mas omite os outros sinais citados (recorrer a jargão sem definir, perceber que o raciocínio não faz sentido)."
+  },
+  {
+    id: "feyn-06", domain: "Técnica Feynman", source: "project", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "A Técnica Feynman, como método de passos formais, foi:",
+    referenceAnswer: "Não foi escrita pelo próprio Feynman como lista formal de passos — foi sistematizada depois por educadores, inspirados na filosofia dele de que entender de verdade é conseguir explicar sem depender de jargão.",
+    studentAnswer: "A Técnica Feynman foi criada pelo próprio Richard Feynman como um método formal de 4 passos para estudar, publicado por ele em um dos seus livros.",
+    expectedClassification: "partial",
+    rationale: "Acerta a inspiração (a filosofia de Feynman), mas erra um detalhe central: o material é claro que ele NÃO escreveu essa lista de passos formal."
+  },
+  {
+    id: "feyn-07", domain: "Técnica Feynman", source: "project", caseType: "partial_split", boundary: null,
+    prompt: "Qual é a vantagem de explicar um conceito 'como para uma criança'?",
+    referenceAnswer: "Obriga a evitar jargão técnico e frases decoradas, forçando linguagem simples e analogias — qualquer parte confusa da explicação revela o que ainda não foi bem compreendido.",
+    studentAnswer: "Explicar como para uma criança é bom porque crianças gostam de exemplos e histórias, então a explicação fica mais divertida de fazer.",
+    expectedClassification: "partial",
+    rationale: "A menção a exemplos/analogias tem alguma relação com o material, mas erra o motivo central (evitar jargão e revelar lacunas) e substitui por uma justificativa superficial ('mais divertida')."
+  },
+  {
+    id: "feyn-08", domain: "Técnica Feynman", source: "project", caseType: "incorrect_conceptual", boundary: null,
+    prompt: "Por que Richard Feynman ficou conhecido como 'O Grande Explicador'?",
+    referenceAnswer: "Famoso não só pelas contribuições científicas, mas pela habilidade de explicar ideias complexas de forma simples e acessível.",
+    studentAnswer: "Feynman é conhecido como o Grande Explicador porque ele escreveu o maior número de livros de física da história.",
+    expectedClassification: "incorrect",
+    rationale: "Não tem relação com o motivo real (didática e clareza ao explicar), inventa um fato não mencionado."
+  },
+  {
+    id: "feyn-09", domain: "Técnica Feynman", source: "project", caseType: "incorrect_keyword_wrong_relation", boundary: "partial_incorrect",
+    prompt: "O que revela as lacunas de compreensão na Técnica Feynman?",
+    referenceAnswer: "Recorrer a termos técnicos SEM DEFINI-LOS, travar ao explicar, ou perceber que o raciocínio não faz sentido — esses são os sinais de lacuna real de compreensão.",
+    studentAnswer: "As lacunas de compreensão são reveladas quando você usa muitos termos técnicos numa explicação, porque isso mostra que você domina bem o vocabulário da área.",
+    expectedClassification: "incorrect",
+    rationale: "Usa o termo certo ('termos técnicos') mas inverte a relação: recorrer a jargão SEM DEFINIR é sinal de lacuna, não de domínio."
+  },
+  {
+    id: "feyn-10", domain: "Técnica Feynman", source: "project", caseType: "incorrect_sophisticated", boundary: "partial_incorrect",
+    prompt: "O que é a 'ilusão de profundidade explicativa'?",
+    referenceAnswer: "É quando as pessoas superestimam o quanto entendem algo até tentarem explicá-lo; reconhecer termos e acompanhar uma aula não é o mesmo que reconstruir a explicação sozinho.",
+    studentAnswer: "A ilusão de profundidade explicativa é um viés cognitivo que ocorre porque o cérebro processa informação complexa através de heurísticas de familiaridade, e por isso quanto mais vezes você é exposto a um conceito através de aulas e leituras, mais profundamente ele se internaliza na memória de longo prazo, tornando a exposição repetida altamente eficaz.",
+    expectedClassification: "incorrect",
+    rationale: "Linguagem técnica e persuasiva, mas contradiz o ponto do material: a ilusão é justamente que exposição/reconhecimento NÃO significa compreensão profunda."
+  },
+  {
+    id: "feyn-11", domain: "Técnica Feynman", source: "project", caseType: "incorrect_cause_effect_inversion", boundary: null,
+    prompt: "O que revela as lacunas de compreensão na Técnica Feynman?",
+    referenceAnswer: "Ao tentar explicar, travar em certos pontos revela lacunas reais de compreensão.",
+    studentAnswer: "Você trava ao tentar explicar um conceito porque já sabe, no fundo, que não vai conseguir explicar bem — a trava vem da falta de confiança, não de uma lacuna real de conhecimento.",
+    expectedClassification: "incorrect",
+    rationale: "Inverte a relação causal do material: a trava é um SINTOMA de uma lacuna real de compreensão, não uma causa vinda de falta de confiança."
+  },
+  {
+    id: "feyn-12", domain: "Técnica Feynman", source: "project", caseType: "partial_example_without_explanation", boundary: "partial_incorrect",
+    prompt: "O que caracteriza o passo final da Técnica Feynman?",
+    referenceAnswer: "Com a lacuna preenchida, a explicação é refeita, substituindo termos técnicos por linguagem simples e, quando possível, comparando o conceito a algo já familiar (uma analogia). O processo pode ser repetido até a explicação ficar clara e fluida.",
+    studentAnswer: "É tipo quando você troca 'fotossíntese' por 'a planta comendo luz do sol' pra ficar mais fácil de entender.",
+    expectedClassification: "partial",
+    rationale: "Dá um exemplo correto e relevante de simplificação com analogia, mas não descreve o passo em si (refazer a explicação, repetir até ficar clara) nem menciona que vem depois de preencher a lacuna."
+  },
+
+  // ---------------------------------------------------------------
+  // Biologia (conhecimento geral)
+  // ---------------------------------------------------------------
+  {
+    id: "bio-01", domain: "Biologia", source: "general", caseType: "correct_literal", boundary: null,
+    prompt: "Quais são os três princípios que sustentam a seleção natural?",
+    referenceAnswer: "Existe variação entre os indivíduos de uma população; parte dessa variação é hereditária; e indivíduos com certas variações se reproduzem mais que outros (reprodução diferencial), o que muda a frequência dessas características na população ao longo do tempo.",
+    studentAnswer: "Existe variação entre os indivíduos, parte dela é hereditária, e quem tem características vantajosas tende a se reproduzir mais, mudando a população ao longo das gerações.",
+    expectedClassification: "correct",
+    rationale: "Cobre os três princípios (variação, herança, reprodução diferencial) quase literalmente."
+  },
+  {
+    id: "bio-02", domain: "Biologia", source: "general", caseType: "correct_paraphrase", boundary: null,
+    prompt: "O que é a fotossíntese, em termos gerais?",
+    referenceAnswer: "É o processo pelo qual plantas usam a energia da luz para converter dióxido de carbono e água em glicose (energia química) e oxigênio, liberado como subproduto.",
+    studentAnswer: "É basicamente as plantas pegando a luz do sol, CO2 do ar e água, e transformando isso em açúcar pra se alimentarem, soltando oxigênio como sobra do processo.",
+    expectedClassification: "correct",
+    rationale: "Paráfrase correta e completa: luz + CO2 + água → glicose + oxigênio."
+  },
+  {
+    id: "bio-03", domain: "Biologia", source: "general", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "O que caracteriza uma mutação genética, de forma simples?",
+    referenceAnswer: "É uma alteração na sequência do DNA de um organismo, que pode não ter efeito, ser prejudicial, ou raramente ser vantajosa.",
+    studentAnswer: "Mudança na sequência do DNA, que pode ser neutra, ruim ou (raramente) boa.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas cobre a definição e as três possibilidades de efeito."
+  },
+  {
+    id: "bio-04", domain: "Biologia", source: "general", caseType: "correct_extra_info", boundary: null,
+    prompt: "Por que a diversidade genética é importante para a sobrevivência de uma população?",
+    referenceAnswer: "Uma população geneticamente diversa tem mais chance de conter indivíduos capazes de sobreviver a mudanças ambientais ou doenças novas, porque diferentes variações aumentam a probabilidade de alguém ter a característica necessária para resistir.",
+    studentAnswer: "Populações com mais diversidade genética sobrevivem melhor a doenças e mudanças ambientais porque é mais provável que alguém tenha a variação necessária para resistir — é meio parecido com ter vários tipos de senha diferentes numa família, se uma vaza as outras continuam seguras.",
+    expectedClassification: "correct",
+    rationale: "A analogia das senhas é irrelevante, mas o mecanismo central está correto e completo."
+  },
+  {
+    id: "bio-05", domain: "Biologia", source: "general", caseType: "partial_omission", boundary: null,
+    prompt: "Qual a diferença fundamental entre mitose e meiose?",
+    referenceAnswer: "A mitose produz duas células-filhas geneticamente idênticas à célula-mãe, usada em crescimento e reparo; a meiose produz quatro células-filhas com metade do número de cromossomos, usada na formação de gametas, e gera variação genética.",
+    studentAnswer: "A meiose forma os gametas, com metade dos cromossomos da célula original.",
+    expectedClassification: "partial",
+    rationale: "Acerta a parte da meiose, mas não menciona a mitose nem o contraste central pedido pela pergunta."
+  },
+  {
+    id: "bio-06", domain: "Biologia", source: "general", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "Quais são os três princípios que sustentam a seleção natural?",
+    referenceAnswer: "Existe variação entre os indivíduos; parte dela é hereditária; e reprodução diferencial (quem tem vantagens se reproduz mais) muda a população ao longo do tempo.",
+    studentAnswer: "A seleção natural acontece porque existe variação entre os indivíduos e essa variação é hereditária, então com o tempo só sobrevivem os mais fortes da espécie.",
+    expectedClassification: "partial",
+    rationale: "Acerta variação e hereditariedade, mas reduz reprodução diferencial a 'sobrevivência dos mais fortes' — simplificação popular e imprecisa; o mecanismo é reproduzir mais, não ser mais forte."
+  },
+  {
+    id: "bio-07", domain: "Biologia", source: "general", caseType: "partial_split", boundary: null,
+    prompt: "O que é a fotossíntese, em termos gerais?",
+    referenceAnswer: "É o processo pelo qual plantas usam a luz para converter CO2 e água em glicose e oxigênio, liberado como subproduto.",
+    studentAnswer: "Fotossíntese é quando a planta respira e solta oxigênio pro ar.",
+    expectedClassification: "partial",
+    rationale: "Acerta que oxigênio é liberado, mas descreve isso como 'respiração' (processo diferente) e omite completamente a conversão de CO2 e água em glicose usando luz."
+  },
+  {
+    id: "bio-08", domain: "Biologia", source: "general", caseType: "incorrect_confusion_close_concepts", boundary: "partial_incorrect",
+    prompt: "Qual a diferença fundamental entre mitose e meiose?",
+    referenceAnswer: "A mitose produz duas células-filhas idênticas, usada em crescimento e reparo; a meiose produz quatro células com metade dos cromossomos, usada na formação de gametas.",
+    studentAnswer: "A meiose é o processo que faz duas células idênticas para o corpo crescer e se reparar, mantendo o mesmo número de cromossomos.",
+    expectedClassification: "incorrect",
+    rationale: "Troca completamente as definições: essa descrição corresponde à MITOSE, não à meiose — confusão clássica entre dois conceitos próximos."
+  },
+  {
+    id: "bio-09", domain: "Biologia", source: "general", caseType: "incorrect_vague", boundary: "partial_incorrect",
+    prompt: "Quais são os três princípios que sustentam a seleção natural?",
+    referenceAnswer: "Variação entre indivíduos, hereditariedade dessa variação, e reprodução diferencial dos mais aptos.",
+    studentAnswer: "Seleção natural é tipo quando a natureza escolhe quem vai sobreviver e quem não vai, dependendo de várias coisas.",
+    expectedClassification: "incorrect",
+    rationale: "Vaga demais — não menciona variação, hereditariedade nem reprodução diferencial; 'a natureza escolhe' e 'várias coisas' não demonstram recuperação do mecanismo."
+  },
+  {
+    id: "bio-10", domain: "Biologia", source: "general", caseType: "incorrect_almost_empty", boundary: null,
+    prompt: "O que é a fotossíntese, em termos gerais?",
+    referenceAnswer: "É o processo pelo qual plantas usam a luz para converter CO2 e água em glicose e oxigênio.",
+    studentAnswer: "Photossintese e as plantas fazendo coisa com a luz eu acho",
+    expectedClassification: "incorrect",
+    rationale: "Está acima do mínimo técnico de caracteres, mas não articula nenhum elemento correto do mecanismo — praticamente vazia em conteúdo."
+  },
+  {
+    id: "bio-11", domain: "Biologia", source: "general", caseType: "incorrect_subtle_false_positive_trap", boundary: "partial_incorrect",
+    prompt: "O que caracteriza uma mutação genética, de forma simples?",
+    referenceAnswer: "É uma alteração na sequência do DNA, que pode não ter efeito, ser prejudicial, ou raramente ser vantajosa.",
+    studentAnswer: "Mutação genética é uma alteração no DNA de um organismo que sempre passa para os descendentes e sempre torna a espécie mais forte e mais adaptada ao ambiente ao longo do tempo.",
+    expectedClassification: "incorrect",
+    rationale: "Usa vocabulário correto (alteração no DNA), mas contém dois erros graves disfarçados: mutações nem sempre são hereditárias, e raramente são vantajosas (a maioria é neutra ou prejudicial) — caso desenhado para testar falso positivo."
+  },
+  {
+    id: "bio-12", domain: "Biologia", source: "general", caseType: "partial_example_without_explanation", boundary: "partial_incorrect",
+    prompt: "Quais são os três princípios que sustentam a seleção natural?",
+    referenceAnswer: "Variação entre indivíduos, hereditariedade dessa variação, e reprodução diferencial dos mais aptos, mudando a população ao longo do tempo.",
+    studentAnswer: "Um exemplo é a girafa: as com pescoço mais comprido conseguiam comer folhas mais altas e sobreviviam mais.",
+    expectedClassification: "partial",
+    rationale: "O exemplo é correto e relevante (reprodução diferencial via vantagem alimentar), mas não articula os três princípios gerais como explicação — fica só no exemplo."
+  },
+
+  // ---------------------------------------------------------------
+  // História (conhecimento geral)
+  // ---------------------------------------------------------------
+  {
+    id: "hist-01", domain: "História", source: "general", caseType: "correct_literal", boundary: null,
+    prompt: "Quais foram as principais causas da Revolução Francesa (1789)?",
+    referenceAnswer: "Uma combinação de crise financeira do Estado francês, desigualdade social extrema entre os três estados (o povo pagava a maior parte dos impostos), más colheitas que encareceram o pão, e a influência das ideias iluministas sobre direitos e liberdade.",
+    studentAnswer: "A Revolução Francesa foi causada pela crise financeira do governo, pela desigualdade entre os três estados (o povo pagava a maior parte dos impostos), pelas más colheitas que encareceram o pão, e pelas ideias iluministas sobre liberdade e direitos.",
+    expectedClassification: "correct",
+    rationale: "Reproduz quase literalmente as quatro causas centrais."
+  },
+  {
+    id: "hist-02", domain: "História", source: "general", caseType: "correct_paraphrase", boundary: null,
+    prompt: "O que foi a Guerra Fria, de forma geral?",
+    referenceAnswer: "Foi um período de tensão política, militar e ideológica entre Estados Unidos e União Soviética após a Segunda Guerra Mundial, marcado por disputa de influência global e corrida armamentista/nuclear, mas sem confronto militar direto entre as duas potências.",
+    studentAnswer: "Foi uma disputa de décadas entre EUA e URSS por influência no mundo depois da Segunda Guerra, com corrida por armas e tecnologia nuclear, mas os dois países nunca entraram em guerra direta um contra o outro.",
+    expectedClassification: "correct",
+    rationale: "Paráfrase completa e fiel, incluindo o ponto central da ausência de confronto direto."
+  },
+  {
+    id: "hist-03", domain: "História", source: "general", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "O que caracterizou o feudalismo na Europa medieval?",
+    referenceAnswer: "Senhores feudais concediam terra a vassalos em troca de serviços (geralmente militares), enquanto camponeses/servos trabalhavam a terra em troca de proteção.",
+    studentAnswer: "Senhores davam terra a vassalos em troca de serviço militar, e servos trabalhavam a terra em troca de proteção.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas cobre as duas relações centrais do sistema feudal."
+  },
+  {
+    id: "hist-04", domain: "História", source: "general", caseType: "correct_extra_info", boundary: null,
+    prompt: "Qual foi o papel da Revolução Industrial na transformação da sociedade?",
+    referenceAnswer: "A introdução de máquinas e produção em larga escala mudou o trabalho artesanal para o fabril, gerou êxodo rural, criou uma nova classe operária, e acelerou a capacidade produtiva.",
+    studentAnswer: "A Revolução Industrial trocou a produção artesanal por máquinas nas fábricas, levou muita gente do campo pra cidade e criou a classe operária, aumentando muito a produção — isso me lembra um pouco de como a internet mudou o jeito de trabalhar hoje em dia, só que bem mais rápido.",
+    expectedClassification: "correct",
+    rationale: "A comparação com a internet é irrelevante, mas o mecanismo central está correto e completo."
+  },
+  {
+    id: "hist-05", domain: "História", source: "general", caseType: "partial_omission", boundary: null,
+    prompt: "O que motivou a colonização das Américas pelas potências europeias a partir do século XVI?",
+    referenceAnswer: "A busca por riquezas (ouro e prata), o interesse em rotas e produtos comerciais, a expansão da influência religiosa cristã, e a disputa entre potências europeias por território.",
+    studentAnswer: "A Europa colonizou as Américas principalmente atrás de ouro e prata.",
+    expectedClassification: "partial",
+    rationale: "Um dos motivos reais, mas omite os outros fatores centrais citados (rotas comerciais, expansão religiosa, disputa entre potências)."
+  },
+  {
+    id: "hist-06", domain: "História", source: "general", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "Quais foram as principais causas da Revolução Francesa (1789)?",
+    referenceAnswer: "Crise financeira do Estado, desigualdade social entre os três estados, más colheitas, e influência das ideias iluministas.",
+    studentAnswer: "A Revolução Francesa aconteceu porque o povo estava cansado da monarquia e queria democracia, então se revoltou contra o rei.",
+    expectedClassification: "partial",
+    rationale: "Capta um sentimento geral relacionado (insatisfação popular), mas não menciona as causas estruturais específicas que o material apresenta como as causas reais."
+  },
+  {
+    id: "hist-07", domain: "História", source: "general", caseType: "partial_split", boundary: null,
+    prompt: "O que caracterizou o feudalismo na Europa medieval?",
+    referenceAnswer: "Senhores concediam terra a vassalos em troca de serviço militar; servos trabalhavam a terra em troca de proteção dos senhores.",
+    studentAnswer: "No feudalismo, os senhores feudais davam proteção militar para o povo em troca de lealdade.",
+    expectedClassification: "partial",
+    rationale: "Acerta parte da relação (proteção em troca de lealdade), mas mistura os papéis: quem dava terra por serviço militar eram os senhores para os vassalos, e quem recebia proteção em troca de trabalho eram os servos."
+  },
+  {
+    id: "hist-08", domain: "História", source: "general", caseType: "incorrect_conceptual", boundary: null,
+    prompt: "O que foi a Guerra Fria, de forma geral?",
+    referenceAnswer: "Tensão política, militar e ideológica entre EUA e URSS, sem confronto militar direto entre as duas potências.",
+    studentAnswer: "A Guerra Fria foi um conflito militar direto entre tropas americanas e soviéticas na Europa, com batalhas registradas em várias cidades.",
+    expectedClassification: "incorrect",
+    rationale: "Contradiz o ponto central: o material é explícito que NÃO houve confronto militar direto — essa é justamente a característica que define a 'Guerra Fria'."
+  },
+  {
+    id: "hist-09", domain: "História", source: "general", caseType: "incorrect_keyword_wrong_relation", boundary: "partial_incorrect",
+    prompt: "Qual foi o papel da Revolução Industrial na transformação da sociedade?",
+    referenceAnswer: "Máquinas e produção em larga escala mudaram o trabalho artesanal para fabril, gerando êxodo rural e uma nova classe operária.",
+    studentAnswer: "A Revolução Industrial foi importante porque as fábricas fizeram os camponeses ficarem mais ricos que os donos das fábricas, invertendo a hierarquia social da época.",
+    expectedClassification: "incorrect",
+    rationale: "Usa termos certos (fábricas, camponeses) mas descreve uma relação que não existiu — não houve inversão de riqueza entre operários e donos de fábrica."
+  },
+  {
+    id: "hist-10", domain: "História", source: "general", caseType: "incorrect_negation", boundary: "partial_incorrect",
+    prompt: "Quais foram as principais causas da Revolução Francesa (1789)?",
+    referenceAnswer: "Crise financeira do Estado, desigualdade social, más colheitas, e influência das ideias iluministas.",
+    studentAnswer: "A Revolução Francesa não teve relação com a situação financeira do governo francês — foi um movimento puramente ideológico, inspirado só pelas ideias iluministas, sem nenhuma causa econômica ou social por trás.",
+    expectedClassification: "incorrect",
+    rationale: "Nega diretamente um dos pilares centrais do material (crise financeira e desigualdade social como causas), afirmando o oposto."
+  },
+  {
+    id: "hist-11", domain: "História", source: "general", caseType: "incorrect_confusion_close_concepts", boundary: null,
+    prompt: "O que caracterizou o feudalismo na Europa medieval?",
+    referenceAnswer: "Senhores concediam terra a vassalos em troca de serviço militar; servos trabalhavam a terra em troca de proteção — sem grande liberdade de movimento.",
+    studentAnswer: "O feudalismo foi o sistema em que fábricas contratavam trabalhadores da cidade em troca de salário, e esses trabalhadores viviam em bairros operários perto das fábricas.",
+    expectedClassification: "incorrect",
+    rationale: "Descreve o sistema fabril da Revolução Industrial (outro conceito do mesmo domínio), não o feudalismo — confusão entre dois períodos históricos distintos e próximos no material."
+  },
+  {
+    id: "hist-12", domain: "História", source: "general", caseType: "incorrect_subtle_false_positive_trap", boundary: "partial_incorrect",
+    prompt: "Qual foi o papel da Revolução Industrial na transformação da sociedade?",
+    referenceAnswer: "Máquinas e produção em larga escala mudaram o trabalho artesanal para fabril, gerando êxodo rural, uma nova classe operária, e crescimento econômico.",
+    studentAnswer: "A Revolução Industrial transformou a sociedade porque substituiu o trabalho manual por máquinas nas fábricas, o que levou à urbanização e criou a classe operária — e, como consequência direta e imediata, eliminou completamente a pobreza na Europa, já que a produção em massa garantiu riqueza para todos os trabalhadores.",
+    expectedClassification: "incorrect",
+    rationale: "Começa corretamente (máquinas, urbanização, classe operária) — por isso é um caso traiçoeiro — mas conclui com uma afirmação historicamente incorreta e não sustentada pelo material: não eliminou a pobreza, gerou condições de trabalho precárias."
+  },
+  {
+    id: "hist-13", domain: "História", source: "general", caseType: "partial_emphasis_distortion", boundary: "partial_incorrect",
+    prompt: "O que motivou a colonização das Américas pelas potências europeias a partir do século XVI?",
+    referenceAnswer: "A busca por riquezas, o interesse em rotas e produtos comerciais, a expansão da influência religiosa cristã, e a disputa entre potências europeias por território.",
+    studentAnswer: "As potências europeias colonizaram as Américas principalmente para converter os povos nativos ao cristianismo — esse foi o principal motivo por trás da colonização.",
+    expectedClassification: "partial",
+    rationale: "Menciona um fator real (expansão religiosa), mas o eleva a 'principal motivo', ofuscando os fatores centrais do material (riquezas, rotas comerciais, disputa entre potências) — captura uma parte real, mas distorce a ênfase."
+  },
+
+  // ---------------------------------------------------------------
+  // Física (conhecimento geral)
+  // ---------------------------------------------------------------
+  {
+    id: "fis-01", domain: "Física", source: "general", caseType: "correct_literal", boundary: null,
+    prompt: "O que diz a primeira lei de Newton (lei da inércia)?",
+    referenceAnswer: "Um corpo em repouso tende a permanecer em repouso, e um corpo em movimento tende a continuar em movimento com velocidade constante em linha reta, a menos que uma força resultante externa atue sobre ele.",
+    studentAnswer: "Um objeto parado continua parado, e um objeto em movimento continua se movendo em linha reta com a mesma velocidade, a menos que uma força resultante aja sobre ele.",
+    expectedClassification: "correct",
+    rationale: "Reproduz quase literalmente a lei da inércia."
+  },
+  {
+    id: "fis-02", domain: "Física", source: "general", caseType: "correct_paraphrase", boundary: null,
+    prompt: "Qual a diferença entre massa e peso?",
+    referenceAnswer: "Massa é a quantidade de matéria de um corpo, medida em quilogramas, e não muda com a localização; peso é a força da gravidade sobre essa massa, medida em newtons, e varia conforme a gravidade do local.",
+    studentAnswer: "Massa é quanto de matéria um corpo tem e não muda dependendo de onde você está; peso é o quanto a gravidade puxa essa massa, então na Lua, onde a gravidade é mais fraca, seu peso diminui mas sua massa continua a mesma.",
+    expectedClassification: "correct",
+    rationale: "Paráfrase correta e completa da distinção massa/peso, incluindo o exemplo da Lua coerente com o conceito."
+  },
+  {
+    id: "fis-03", domain: "Física", source: "general", caseType: "correct_short", boundary: "correct_partial",
+    prompt: "O que é energia cinética, de forma simples?",
+    referenceAnswer: "É a energia que um corpo possui por estar em movimento; depende da massa do corpo e da sua velocidade.",
+    studentAnswer: "É a energia que um objeto tem por estar em movimento, e depende da massa e da velocidade dele.",
+    expectedClassification: "correct",
+    rationale: "Curta, mas cobre a definição e as duas variáveis determinantes (massa e velocidade)."
+  },
+  {
+    id: "fis-04", domain: "Física", source: "general", caseType: "correct_extra_info", boundary: null,
+    prompt: "O que afirma a segunda lei de Newton?",
+    referenceAnswer: "A força resultante aplicada sobre um corpo é igual à massa do corpo multiplicada pela sua aceleração (F = m×a).",
+    studentAnswer: "A segunda lei de Newton diz que força é igual a massa vezes aceleração — quanto mais força você aplica, mais o objeto acelera, e quanto mais pesado o objeto, mais difícil é acelerá-lo com a mesma força — é tipo empurrar um carrinho de supermercado vazio versus um cheio, o cheio precisa de muito mais força pra sair do lugar do mesmo jeito.",
+    expectedClassification: "correct",
+    rationale: "A analogia do carrinho de supermercado é irrelevante, mas o mecanismo (F=ma e a relação inversa entre massa e aceleração) está correto e completo."
+  },
+  {
+    id: "fis-05", domain: "Física", source: "general", caseType: "partial_omission", boundary: null,
+    prompt: "Por que um satélite em órbita não cai na Terra?",
+    referenceAnswer: "O satélite está caindo continuamente em direção à Terra por gravidade, mas sua velocidade horizontal é grande o suficiente para que, enquanto cai, a curvatura da Terra 'se afaste' na mesma proporção, resultando numa trajetória circular.",
+    studentAnswer: "O satélite não cai porque tem uma velocidade horizontal muito grande.",
+    expectedClassification: "partial",
+    rationale: "Menciona corretamente a velocidade horizontal, mas omite que o satélite está de fato caindo continuamente por gravidade e que é a curvatura da Terra que transforma isso numa órbita."
+  },
+  {
+    id: "fis-06", domain: "Física", source: "general", caseType: "partial_imprecision", boundary: "partial_incorrect",
+    prompt: "O que afirma a segunda lei de Newton?",
+    referenceAnswer: "A força resultante é igual à massa multiplicada pela aceleração (F=m×a): quanto maior a força, maior a aceleração; quanto maior a massa, menor a aceleração para a mesma força.",
+    studentAnswer: "A segunda lei de Newton diz que quanto mais força você aplica em um objeto, mais rápido ele vai, e objetos mais pesados são sempre mais difíceis de mover, não importa a força aplicada.",
+    expectedClassification: "partial",
+    rationale: "Captura a relação geral entre força e movimento, mas distorce a proporcionalidade central: mesmo objetos pesados aceleram, só que menos para a mesma força — dizer 'não importa a força' contradiz a fórmula."
+  },
+  {
+    id: "fis-07", domain: "Física", source: "general", caseType: "partial_split", boundary: null,
+    prompt: "Por que um satélite em órbita não cai na Terra?",
+    referenceAnswer: "O satélite está caindo continuamente por gravidade, mas sua velocidade horizontal combinada com a curvatura da Terra resulta numa trajetória circular — não há propulsão constante envolvida.",
+    studentAnswer: "O satélite está sempre caindo em direção à Terra por causa da gravidade, mas ele tem motores que ficam ligados o tempo todo empurrando ele pra frente pra compensar a queda.",
+    expectedClassification: "partial",
+    rationale: "Acerta a parte central de que o satélite está continuamente caindo por gravidade, mas erra o motivo de não colidir: não é por motores ligados continuamente, e sim pela velocidade horizontal inicial combinada com a curvatura da Terra."
+  },
+  {
+    id: "fis-08", domain: "Física", source: "general", caseType: "incorrect_keyword_wrong_relation", boundary: "partial_incorrect",
+    prompt: "Qual a diferença entre massa e peso?",
+    referenceAnswer: "Massa é medida em quilogramas e não muda com a localização; peso é medido em newtons e varia com a gravidade do local.",
+    studentAnswer: "Massa e peso são a mesma coisa, só que peso é medido em quilos na Terra e massa é medida em newtons no espaço.",
+    expectedClassification: "incorrect",
+    rationale: "Nega a distinção central entre massa e peso (afirma que são 'a mesma coisa') e ainda troca as unidades corretas — usa os termos certos mas descreve uma relação errada."
+  },
+  {
+    id: "fis-09", domain: "Física", source: "general", caseType: "incorrect_conceptual", boundary: "partial_incorrect",
+    prompt: "O que diz a primeira lei de Newton (lei da inércia)?",
+    referenceAnswer: "Um corpo em movimento tende a continuar em movimento com velocidade constante, a menos que uma força resultante atue sobre ele.",
+    studentAnswer: "A lei da inércia diz que as coisas em movimento vão parar sozinhas com o tempo, então é preciso empurrar continuamente pra manter algo em movimento.",
+    expectedClassification: "incorrect",
+    rationale: "Descreve a visão aristotélica pré-newtoniana, que a lei da inércia especificamente contradiz: objetos em movimento continuam em movimento SEM precisar de força contínua."
+  },
+  {
+    id: "fis-10", domain: "Física", source: "general", caseType: "incorrect_sophisticated", boundary: null,
+    prompt: "O que é energia cinética, de forma simples?",
+    referenceAnswer: "É a energia que um corpo possui por estar em movimento; depende da massa e da velocidade.",
+    studentAnswer: "A energia cinética é definida termodinamicamente como o produto entre a entropia do sistema em movimento e o gradiente de temperatura entre o corpo e o ambiente, sendo maximizada quando o corpo atinge equilíbrio térmico com o meio ao seu redor.",
+    expectedClassification: "incorrect",
+    rationale: "Usa vocabulário técnico de termodinâmica que não tem relação com a definição real de energia cinética — soa sofisticado mas é conceitualmente errado."
+  },
+  {
+    id: "fis-11", domain: "Física", source: "general", caseType: "incorrect_confusion_close_concepts", boundary: "partial_incorrect",
+    prompt: "O que afirma a segunda lei de Newton?",
+    referenceAnswer: "A força resultante é igual à massa multiplicada pela aceleração (F=m×a).",
+    studentAnswer: "A segunda lei de Newton diz que um objeto em repouso permanece em repouso e um objeto em movimento continua em movimento, a menos que uma força atue sobre ele.",
+    expectedClassification: "incorrect",
+    rationale: "Essa é a descrição da PRIMEIRA lei de Newton (inércia), não da segunda (F=ma) — confusão comum entre duas leis próximas e frequentemente trocadas."
+  },
+  {
+    id: "fis-12", domain: "Física", source: "general", caseType: "incorrect_subtle_false_positive_trap", boundary: "partial_incorrect",
+    prompt: "O que afirma a segunda lei de Newton?",
+    referenceAnswer: "A força resultante é igual à massa multiplicada pela aceleração (F=m×a): para a mesma força, quanto maior a massa, menor a aceleração.",
+    studentAnswer: "A segunda lei de Newton estabelece que força é igual a massa vezes aceleração (F = m×a), então quanto maior a massa de um objeto, maior será sua aceleração para uma mesma força aplicada, o que explica por que objetos mais pesados se movem mais rápido quando empurrados com a mesma intensidade.",
+    expectedClassification: "incorrect",
+    rationale: "Cita corretamente a fórmula F=m×a, o que a torna traiçoeira, mas inverte a relação física real: para uma MESMA força, quanto MAIOR a massa, MENOR a aceleração (não maior)."
+  },
+  {
+    id: "fis-13", domain: "Física", source: "general", caseType: "partial_imprecision_variable", boundary: "partial_incorrect",
+    prompt: "O que é energia cinética, de forma simples?",
+    referenceAnswer: "É a energia que um corpo possui por estar em movimento; depende da massa E da velocidade do corpo.",
+    studentAnswer: "Energia cinética é a energia que um objeto tem por estar se movendo, e ela fica maior quanto maior for o objeto.",
+    expectedClassification: "partial",
+    rationale: "Acerta o núcleo (energia por estar em movimento), mas erra a variável determinante: o material especifica massa E velocidade, e a resposta atribui apenas ao 'tamanho' do objeto, sem mencionar velocidade."
+  }
+]);

@@ -13,7 +13,7 @@
    ===================================================================== */
 import { adminAuth, adminDb } from "./firebaseAdmin.js";
 
-/* Duas cotas separadas, porque os custos são de ordens de grandeza diferentes.
+/* Cotas separadas, porque os custos são de ordens de grandeza diferentes.
  *
  * "explain" — avaliar explicação e gerar analogia. Medido em produção: cerca de
  * US$ 0,0009 por avaliação, ou meio centavo de real. Racionar isso não protege
@@ -25,12 +25,18 @@ import { adminAuth, adminDb } from "./firebaseAdmin.js";
  * capítulos inteiros de livro e custam muito mais por chamada, então mantêm um
  * teto conservador. Este é o balde que realmente precisa de controle.
  *
- * Antes existia um contador único de 40/mês para tudo, o que fazia a avaliação
- * barata competir por espaço com a geração cara.
+ * "constructed_eval" — avaliação semântica da resposta construída (Prioridade
+ * 3, ver api/avaliar-resposta-construida.js). Balde PRÓPRIO, separado de
+ * "explain": embora o custo por chamada seja da mesma ordem de grandeza da
+ * avaliação de explicação, é um recurso pedagógico distinto (recuperação
+ * ativa vs. modo Feynman) e não pode consumir nem disputar a cota mensal de
+ * quem usa bastante o Feynman — um teto compartilhado faria uma pessoa que
+ * usa muito um dos dois recursos bloquear o outro sem aviso.
  */
 const PLAN_LIMITS = {
   explain: { free: 300, premium: 3000 },
-  generate: { free: 60, premium: 600 }
+  generate: { free: 60, premium: 600 },
+  constructed_eval: { free: 300, premium: 3000 }
 };
 
 const DEFAULT_BUCKET = "generate";
@@ -232,7 +238,9 @@ export async function requireUsageQuota(req, res, bucket = DEFAULT_BUCKET) {
         code: "transient_error"
       });
     } else {
-      const what = usage.bucket === "explain" ? "avaliações de explicação" : "gerações de conteúdo";
+      const what = usage.bucket === "explain" ? "avaliações de explicação"
+        : usage.bucket === "constructed_eval" ? "avaliações semânticas de resposta construída"
+        : "gerações de conteúdo";
       res.status(429).json({
         error: `Limite mensal de ${what} atingido (${usage.current}/${usage.limit} no plano ${usage.plan}). O limite é renovado no início do próximo mês.`
       });

@@ -95,6 +95,22 @@ const BADGES = [
 ];
 
 const EXPLANATION_PASS_SCORE = 70;
+const EXPLANATION_MIN_LENGTH = 30;
+// Estados possíveis de um explainAttempt. "pending_evaluation" cobre tanto
+// "ainda não tentamos chamar a IA" quanto "cota esgotada" — nos dois casos
+// a explicação já está persistida e pode ser avaliada depois, sem que a
+// pessoa precise reescrevê-la (ver createExplainAttempt/evaluateExplainAttempt).
+// "evaluation_failed" é reservado para quando a IA FOI chamada e falhou por
+// motivo técnico (timeout/rede/HTTP/parse) — semântica escolhida de propósito
+// para distinguir "esperando cota" de "algo deu errado tecnicamente", ver
+// docs/estado-pedagogico.md. Ambos os estados não-"evaluated" podem ser
+// reavaliados por evaluateExplainAttempt.
+const EXPLAIN_ATTEMPT_STATUSES = Object.freeze(["pending_evaluation", "evaluated", "evaluation_failed"]);
+// Decisões que o SERVIDOR pode devolver (ver api/_lib/explanationEvaluation.js).
+// "pending_evaluation" não está aqui: é o valor que a decisão assume quando o
+// attempt ainda não foi avaliado (ver deriveExplainAttemptDecision), nunca algo
+// que a IA decide.
+const EXPLAIN_PEDAGOGICAL_DECISIONS_FROM_API = Object.freeze(["passed", "retry_recommended", "return_to_comprehension"]);
 const RETRIEVAL_PASS_QUALITY = 4;
 const STATE_SCHEMA_VERSION = 1;
 const PEDAGOGY_VERSION = 1;
@@ -102,6 +118,11 @@ const HISTORY_LIMIT = 50;
 const COMPREHENSION_STATUSES = Object.freeze(["not_assessed", "no_issue_detected", "doubt_reported", "blocked"]);
 const CALIBRATION_STATUSES = Object.freeze(["insufficient_data", "calibrated", "overconfident", "underconfident", "mixed"]);
 const RETRIEVAL_SOURCES = Object.freeze(["review", "quiz", "constructed_response"]);
+const RESPONSE_TYPES = Object.freeze(["multiple_choice", "constructed", "self_rated_review"]);
+const EVIDENCE_STRENGTHS = Object.freeze(["none", "weak", "medium", "strong"]);
+const CONSTRUCTED_RATINGS = Object.freeze({ failed:1, partial:3, correct:4 });
+const MIN_CONSTRUCTED_RESPONSE_LENGTH = 10;
+const AI_EVALUATION_CLASSIFICATIONS = Object.freeze(["incorrect", "partial", "correct"]);
 const CONTENT_QUALITY_STATUSES = Object.freeze(["ok", "suspected", "reported"]);
 const ERROR_TYPES = Object.freeze([
   "retrieval_failure", "conceptual_error", "incomplete_explanation", "misinterpretation",
@@ -130,7 +151,8 @@ function defaultCardState(){
     seen:false, presentedAt:null,
     comprehensionStatus:"not_assessed", comprehensionIssue:null,
     retrievalPassedAt:null, lastRetrievalSource:null, lastRetrievalQuality:null, retrievalAttempts:[],
-    explainCount:0, lastExplainScore:null, explanationPassedAt:null,
+    retrievalEvidenceStrength:"none", strongRetrievalPassedAt:null, pendingConstructedResponse:null,
+    explainCount:0, lastExplainScore:null, explanationPassedAt:null, explainAttempts:[],
     applicationPassedAt:null, applicationLevel:0, applicationAttempts:[],
     lastConfidence:null, calibrationStatus:"insufficient_data",
     lastErrorType:null, errorHistory:[],
@@ -162,10 +184,16 @@ function normalizeCardState(legacy){
   const normalized = Object.assign(defaultCardState(), legacy || {});
   normalized.pedagogyVersion = PEDAGOGY_VERSION;
   normalized.retrievalAttempts = trimHistory(legacy && legacy.retrievalAttempts);
+  // Registros antigos (antes desta etapa) não têm explainAttempts — inicializa
+  // como [] sem tentar reconstruir tentativas passadas a partir de
+  // explainCount/lastExplainScore (não há dado suficiente pra isso, e não é
+  // migração destrutiva: os campos antigos continuam intactos, ver abaixo).
+  normalized.explainAttempts = trimHistory(legacy && legacy.explainAttempts);
   normalized.applicationAttempts = trimHistory(legacy && legacy.applicationAttempts);
   normalized.errorHistory = trimHistory(legacy && legacy.errorHistory);
   normalized.contentQuality = Object.assign(defaultCardState().contentQuality, legacy && legacy.contentQuality || {});
   if(!COMPREHENSION_STATUSES.includes(normalized.comprehensionStatus)) normalized.comprehensionStatus = "not_assessed";
+  if(!EVIDENCE_STRENGTHS.includes(normalized.retrievalEvidenceStrength)) normalized.retrievalEvidenceStrength = "none";
   if(!CONTENT_QUALITY_STATUSES.includes(normalized.contentQuality.status)) normalized.contentQuality.status = "ok";
   if(!Number.isFinite(normalized.applicationLevel)) normalized.applicationLevel = 0;
   normalized.calibrationStatus = calculateCalibrationStatus(normalized.retrievalAttempts);
@@ -229,21 +257,395 @@ function recordError(cardState, type, source, detail){
   return item;
 }
 
-function recordRetrievalEvidence(cardState, passed, source, quality, confidence, intervalDays){
+function recordRetrievalEvidence(cardState, passed, source, quality, confidence, intervalDays, details){
   if(!RETRIEVAL_SOURCES.includes(source)) throw new Error(`Fonte de recuperação inválida: ${source}`);
+  details = details || {};
+  const defaultResponseType = source === "quiz" ? "multiple_choice" : source === "review" ? "self_rated_review" : "constructed";
+  const defaultStrength = source === "quiz" ? "weak" : source === "review" ? "medium" : "strong";
+  const responseType = details.responseType || defaultResponseType;
+  const evidenceStrength = passed ? (details.evidenceStrength || defaultStrength) : "none";
+  if(!RESPONSE_TYPES.includes(responseType)) throw new Error(`Tipo de resposta inválido: ${responseType}`);
+  if(!EVIDENCE_STRENGTHS.includes(evidenceStrength)) throw new Error(`Força de evidência inválida: ${evidenceStrength}`);
   const attempt = {
     at:new Date().toISOString(), source, passed:Boolean(passed), quality,
     confidence:confidence == null ? null : confidence,
-    intervalDays:intervalDays == null ? null : intervalDays
+    intervalDays:intervalDays == null ? null : intervalDays,
+    responseType, evidenceStrength
   };
+  if(responseType === "constructed"){
+    attempt.responseText = String(details.responseText || "");
+    attempt.latencyMs = Math.max(0, Number(details.latencyMs) || 0);
+  }
   cardState.retrievalAttempts = trimHistory([...(cardState.retrievalAttempts || []), attempt]);
   cardState.lastRetrievalSource = source;
   cardState.lastRetrievalQuality = quality;
   if(confidence != null) cardState.lastConfidence = confidence;
   if(passed) cardState.retrievalPassedAt = todayStr();
+  const currentStrength = EVIDENCE_STRENGTHS.indexOf(cardState.retrievalEvidenceStrength || "none");
+  const nextStrength = EVIDENCE_STRENGTHS.indexOf(evidenceStrength);
+  if(nextStrength > currentStrength) cardState.retrievalEvidenceStrength = evidenceStrength;
+  if(passed && evidenceStrength === "strong") cardState.strongRetrievalPassedAt = todayStr();
   if(!passed) recordError(cardState, "retrieval_failure", source, null);
   cardState.calibrationStatus = calculateCalibrationStatus(cardState.retrievalAttempts);
   return Boolean(passed);
+}
+
+function createConstructedAttemptSession(conceptId, startedAt){
+  return { conceptId, startedAt:startedAt == null ? Date.now() : startedAt, confidence:null, responseText:"", submitted:false, revealed:false, latencyMs:null };
+}
+
+function setConstructedConfidence(session, confidence){
+  if(session.submitted || session.revealed) throw new Error("A confiança não pode ser alterada após o envio.");
+  if(![1,2,3].includes(confidence)) throw new Error("Confiança inválida.");
+  session.confidence = confidence;
+  return session;
+}
+
+function submitConstructedResponse(session, responseText, submittedAt){
+  if(session.confidence == null) throw new Error("Registre a confiança antes de enviar a resposta.");
+  const text = String(responseText || "").trim();
+  if(text.length < MIN_CONSTRUCTED_RESPONSE_LENGTH) throw new Error(`A resposta deve ter ao menos ${MIN_CONSTRUCTED_RESPONSE_LENGTH} caracteres.`);
+  const now = submittedAt == null ? Date.now() : submittedAt;
+  session.responseText = text;
+  session.latencyMs = Math.max(0, now - session.startedAt);
+  session.submitted = true;
+  return session;
+}
+
+function revealConstructedResponse(session){
+  if(session.confidence == null) throw new Error("A resposta não pode ser revelada sem confiança prévia.");
+  if(!session.submitted || !session.responseText) throw new Error("A resposta não pode ser revelada antes do envio.");
+  session.revealed = true;
+  return true;
+}
+
+function constructedPromptData(concept){
+  return { conceptId:concept.id, tag:concept.tag, prompt:concept.q || concept.title };
+}
+
+function getConstructedReference(session, concept){
+  revealConstructedResponse(session);
+  return { responseText:session.responseText, referenceText:concept.text };
+}
+
+function recordConstructedResponseAttempt(cardState, session, rating){
+  if(!session.revealed) throw new Error("Avalie somente depois da tentativa válida e da revelação.");
+  if(!Object.prototype.hasOwnProperty.call(CONSTRUCTED_RATINGS, rating)) throw new Error("Avaliação construída inválida.");
+  const quality = CONSTRUCTED_RATINGS[rating];
+  const passed = rating === "correct";
+  const elapsedDays = elapsedDaysSinceLastReview(cardState);
+  fsrsUpdate(cardState, quality);
+  recordRetrievalEvidence(cardState, passed, "constructed_response", quality, session.confidence, elapsedDays, {
+    responseType:"constructed", evidenceStrength:passed ? "strong" : "none",
+    responseText:session.responseText, latencyMs:session.latencyMs
+  });
+  cardState.pendingConstructedResponse = null;
+  return cardState.retrievalAttempts[cardState.retrievalAttempts.length - 1];
+}
+
+/* ---- Avaliação semântica por IA (Prioridade 3) --------------------
+   Camada estritamente adicional sobre a resposta construída: compara
+   responseText com a referência do conceito no servidor e anexa o
+   resultado ao attempt JÁ registrado por recordConstructedResponseAttempt.
+   Nunca roda antes da autoavaliação, nunca reescreve passed/quality/
+   evidenceStrength/retrievalPassedAt/strongRetrievalPassedAt, e uma
+   falha aqui (rede, timeout, saída inválida) não desfaz nem atrasa nada
+   do que já aconteceu — ver requestConstructedAiEvaluation, que chama
+   estas funções puras depois de FSRS e persistência já terem ocorrido. */
+
+/**
+ * Valida a resposta bruta do endpoint /api/avaliar-resposta-construida
+ * contra o schema esperado. Retorna null (nunca lança) para qualquer
+ * formato inesperado — validação defensiva no cliente, além da já feita
+ * no servidor (api/_lib/constructedEvaluation.js), porque esta função
+ * também decide se algo é persistido em retrievalAttempts.
+ */
+function validateConstructedAiEvaluation(data){
+  if(!data || typeof data !== "object") return null;
+  if(!AI_EVALUATION_CLASSIFICATIONS.includes(data.classification)) return null;
+  const confidence = Number(data.confidence);
+  if(!Number.isFinite(confidence)) return null;
+  return {
+    classification:data.classification,
+    confidence:Math.min(1, Math.max(0, confidence)),
+    reason: typeof data.reason === "string" ? data.reason.slice(0, 400) : "",
+    model: typeof data.model === "string" ? data.model.slice(0, 200) : ""
+  };
+}
+
+/**
+ * Anexa a avaliação semântica a um attempt já registrado, sob a chave
+ * `aiEvaluation` (ausente em qualquer registro antigo — compatibilidade
+ * total sem migração). Nunca toca em passed/quality/evidenceStrength;
+ * essas continuam vindo exclusivamente da autoavaliação do usuário.
+ */
+function attachAiEvaluationToAttempt(attempt, aiResult){
+  if(!attempt || !aiResult) return attempt;
+  attempt.aiEvaluation = {
+    classification:aiResult.classification,
+    confidence:aiResult.confidence,
+    reason:aiResult.reason,
+    evaluatedAt:new Date().toISOString(),
+    model:aiResult.model
+  };
+  return attempt;
+}
+
+/**
+ * Dispara a avaliação semântica de forma assíncrona e melhor-esforço,
+ * depois que autoavaliação + FSRS + persistência já aconteceram (ver os
+ * chamadores em renderConstructedReference). Qualquer falha — quota,
+ * rede, timeout, saída inválida — é engolida aqui: o fluxo de revisão
+ * já terminou por completo antes desta função sequer ser chamada.
+ */
+// Contadores só de sessão (nunca persistidos, resetam a cada carregamento
+// de página) — existem exclusivamente para "permitir verificar... falhas
+// técnicas" e conclusões (item 8 da observabilidade) sem criar um novo
+// campo persistido nem registrar conteúdo bruto. Ver getAiEvaluationSessionStats().
+let aiEvaluationSessionSuccesses = 0;
+let aiEvaluationSessionFailures = 0;
+
+async function requestConstructedAiEvaluation(concept, session, attempt){
+  if(!attempt || typeof authedFetch !== "function") return;
+  try{
+    const res = await authedFetch("/api/avaliar-resposta-construida", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ conceptTitle:concept.title, referenceText:concept.text, responseText:session.responseText })
+    });
+    if(!res.ok){ aiEvaluationSessionFailures += 1; return; }
+    const data = await res.json();
+    const aiResult = validateConstructedAiEvaluation(data);
+    if(!aiResult){ aiEvaluationSessionFailures += 1; return; }
+    attachAiEvaluationToAttempt(attempt, aiResult);
+    aiEvaluationSessionSuccesses += 1;
+    await saveState();
+  }catch(e){
+    aiEvaluationSessionFailures += 1;
+    console.error("Avaliação semântica por IA indisponível (fluxo de revisão não é afetado):", e);
+  }
+}
+
+/** Contadores desta sessão (não persistidos) — só para observabilidade local. */
+function getAiEvaluationSessionStats(){
+  return { successes:aiEvaluationSessionSuccesses, failures:aiEvaluationSessionFailures };
+}
+
+/* ---- Concordância autoavaliação x IA (experimento pedagógico controlado,
+   Prioridade 4) --------------------------------------------------------
+   Camada puramente analítica: mede o quanto a avaliação semântica
+   concorda com a autoavaliação do usuário em uso real. NUNCA lê nem
+   escreve em evidenceStrength/retrievalPassedAt/strongRetrievalPassedAt/
+   FSRS/calibração — essas continuam vindo exclusivamente da autoavaliação
+   (ver recordConstructedResponseAttempt). Os registros aqui nunca incluem
+   responseText, o texto de referência, nem o "reason" da IA — só classes,
+   confidence, domínio/tag e timestamps (ver buildAiAgreementRecord). */
+
+const AGREEMENT_CLASSES = Object.freeze(["incorrect", "partial", "correct"]);
+const AGREEMENT_ORDER = Object.freeze({ incorrect:0, partial:1, correct:2 });
+
+/**
+ * Deriva a classe da AUTOAVALIAÇÃO do usuário a partir do `quality` já
+ * persistido no attempt — nunca duplica dado num campo novo. Para
+ * source:"constructed_response", `quality` já É CONSTRUCTED_RATINGS
+ * (failed:1, partial:3, correct:4); esta função só inverte esse mapa.
+ * Retorna null para qualquer outra fonte (quiz/review) — fora do escopo
+ * desta comparação, que é só sobre resposta construída — ou para dados
+ * antigos/corrompidos sem um quality reconhecível.
+ */
+function deriveUserClassificationFromAttempt(attempt){
+  if(!attempt || attempt.source !== "constructed_response") return null;
+  if(attempt.quality === 4) return "correct";
+  if(attempt.quality === 3) return "partial";
+  if(attempt.quality === 1) return "incorrect";
+  return null;
+}
+
+/**
+ * Registro mínimo de concordância para UM attempt — só classes,
+ * confidence e domínio/tag (quando disponível). Nunca inclui
+ * responseText, referenceText ou o "reason" completo da IA (privacidade
+ * — ver item 6 do escopo). Retorna null quando não há autoavaliação
+ * derivável ou não há aiEvaluation ainda (tentativa sem IA concluída).
+ */
+function buildAiAgreementRecord(conceptId, tag, attempt){
+  const userClass = deriveUserClassificationFromAttempt(attempt);
+  if(!userClass || !attempt || !attempt.aiEvaluation) return null;
+  const aiClass = attempt.aiEvaluation.classification;
+  if(!AGREEMENT_CLASSES.includes(aiClass)) return null;
+  return {
+    conceptId,
+    domain: tag || null,
+    userClass,
+    aiClass,
+    confidence: attempt.aiEvaluation.confidence,
+    at: attempt.aiEvaluation.evaluatedAt || attempt.at || null
+  };
+}
+
+/**
+ * Varre um mapa de cardStates (tipicamente STATE.cards) + a lista de
+ * conceitos (só para achar a tag) e monta os registros de concordância
+ * — só resposta construída com aiEvaluation já anexada. Função pura:
+ * não lê STATE/CONCEPTS diretamente, para ficar testável sem DOM.
+ */
+function collectAiAgreementRecords(cards, concepts){
+  const conceptsById = {};
+  (concepts || []).forEach(c => { conceptsById[c.id] = c; });
+  const records = [];
+  for(const conceptId of Object.keys(cards || {})){
+    const cardState = cards[conceptId];
+    const attempts = (cardState && cardState.retrievalAttempts) || [];
+    const tag = conceptsById[conceptId] ? conceptsById[conceptId].tag : null;
+    for(const attempt of attempts){
+      const record = buildAiAgreementRecord(conceptId, tag, attempt);
+      if(record) records.push(record);
+    }
+  }
+  return records;
+}
+
+/** Matriz de concordância 3x3: matrix[classeDoUsuário][classeDaIA] = contagem. */
+function buildAgreementConfusionMatrix(records){
+  const matrix = {};
+  for(const u of AGREEMENT_CLASSES){
+    matrix[u] = {};
+    for(const a of AGREEMENT_CLASSES) matrix[u][a] = 0;
+  }
+  for(const r of (records || [])){
+    if(!r || !AGREEMENT_CLASSES.includes(r.userClass) || !AGREEMENT_CLASSES.includes(r.aiClass)) continue;
+    matrix[r.userClass][r.aiClass] += 1;
+  }
+  return matrix;
+}
+
+function avgAgreementConfidence(records){
+  const withConfidence = (records || []).filter(r => Number.isFinite(r.confidence));
+  if(!withConfidence.length) return null;
+  return withConfidence.reduce((sum, r) => sum + r.confidence, 0) / withConfidence.length;
+}
+
+/**
+ * Estatísticas experimentais de concordância — accuracy/agreement, nunca
+ * usadas para decisão pedagógica (item 5 do escopo: "não use esses
+ * valores para decisão pedagógica"). "ai_more_generous": a IA classifica
+ * ACIMA do usuário (ex.: usuário disse partial, IA disse correct).
+ * "ai_more_strict": a IA classifica ABAIXO do usuário.
+ */
+function computeAiAgreementStats(records){
+  const valid = (records || []).filter(r => r && AGREEMENT_CLASSES.includes(r.userClass) && AGREEMENT_CLASSES.includes(r.aiClass));
+  const total = valid.length;
+  const agree = valid.filter(r => r.userClass === r.aiClass);
+  const disagree = valid.filter(r => r.userClass !== r.aiClass);
+  const generous = valid.filter(r => AGREEMENT_ORDER[r.aiClass] > AGREEMENT_ORDER[r.userClass]);
+  const strict = valid.filter(r => AGREEMENT_ORDER[r.aiClass] < AGREEMENT_ORDER[r.userClass]);
+  return {
+    total,
+    confusionMatrix: buildAgreementConfusionMatrix(valid),
+    agreementRate: total ? agree.length / total : null,
+    disagreementRate: total ? disagree.length / total : null,
+    aiMoreGenerousRate: total ? generous.length / total : null,
+    aiMoreStrictRate: total ? strict.length / total : null,
+    avgConfidenceAgreement: avgAgreementConfidence(agree),
+    avgConfidenceDisagreement: avgAgreementConfidence(disagree),
+    avgConfidenceAiMoreGenerous: avgAgreementConfidence(generous),
+    avgConfidenceAiMoreStrict: avgAgreementConfidence(strict)
+  };
+}
+
+/**
+ * Cobertura: quantas tentativas de resposta construída existem no total
+ * e quantas já têm aiEvaluation anexada — não distingue "falhou" de
+ * "ainda não tentou" (a arquitetura atual não persiste essa distinção,
+ * de propósito — ver requestConstructedAiEvaluation, melhor-esforço e
+ * silencioso). Falhas desta sessão ficam em getAiEvaluationSessionStats().
+ */
+function computeAiEvaluationCoverage(cards){
+  let totalConstructedAttempts = 0;
+  let attemptsWithAiEvaluation = 0;
+  for(const conceptId of Object.keys(cards || {})){
+    const attempts = (cards[conceptId] && cards[conceptId].retrievalAttempts) || [];
+    for(const attempt of attempts){
+      if(!attempt || attempt.source !== "constructed_response") continue;
+      totalConstructedAttempts += 1;
+      if(attempt.aiEvaluation) attemptsWithAiEvaluation += 1;
+    }
+  }
+  return {
+    totalConstructedAttempts,
+    attemptsWithAiEvaluation,
+    aiEvaluationCoverageRate: totalConstructedAttempts ? attemptsWithAiEvaluation / totalConstructedAttempts : null
+  };
+}
+
+/**
+ * Agrega as mesmas taxas de computeAiAgreementStats (reaproveitada, não
+ * reimplementada) por domínio/tag — usado pelo relatório real (ver
+ * scripts/reportAiAgreement.js) para apontar em quais domínios ocorrem
+ * mais divergências. Grupos com menos de `minSampleSize` registros são
+ * marcados `insufficientSample:true` — nunca descartados silenciosamente,
+ * só sinalizados como não confiáveis para interpretação isolada.
+ */
+function aggregateAiAgreementByDomain(records, minSampleSize){
+  const threshold = minSampleSize == null ? 10 : minSampleSize;
+  const byDomain = {};
+  for(const r of (records || [])){
+    const key = (r && r.domain) ? r.domain : "(sem domínio)";
+    (byDomain[key] = byDomain[key] || []).push(r);
+  }
+  const out = {};
+  for(const domain of Object.keys(byDomain)){
+    const stats = computeAiAgreementStats(byDomain[domain]);
+    out[domain] = {
+      n: stats.total,
+      agreementRate: stats.agreementRate,
+      aiMoreGenerousRate: stats.aiMoreGenerousRate,
+      aiMoreStrictRate: stats.aiMoreStrictRate,
+      insufficientSample: stats.total < threshold
+    };
+  }
+  return out;
+}
+
+/**
+ * Todos os registros em que usuário e IA discordam — só identificadores
+ * técnicos e classes (conceptId/domain/userClass/aiClass/confidence/at),
+ * nunca responseText/referenceText/reason (ver buildAiAgreementRecord,
+ * que já não inclui esses campos desde a origem do registro).
+ */
+function findAiAgreementDivergences(records){
+  return (records || []).filter(r => r && AGREEMENT_CLASSES.includes(r.userClass) && AGREEMENT_CLASSES.includes(r.aiClass) && r.userClass !== r.aiClass);
+}
+
+/**
+ * As três combinações de maior interesse para análise futura (nunca para
+ * alterar comportamento pedagógico — ver escopo do relatório real):
+ * user incorrect→AI correct (a mais importante: potencial superestimação
+ * da aprendizagem), user partial→AI correct, e user correct→AI incorrect.
+ */
+function findCriticalAiAgreementCombinations(records){
+  const divergences = findAiAgreementDivergences(records);
+  return {
+    userIncorrectAiCorrect: divergences.filter(r => r.userClass === "incorrect" && r.aiClass === "correct"),
+    userPartialAiCorrect: divergences.filter(r => r.userClass === "partial" && r.aiClass === "correct"),
+    userCorrectAiIncorrect: divergences.filter(r => r.userClass === "correct" && r.aiClass === "incorrect")
+  };
+}
+
+/**
+ * Relatório de observabilidade pronto para uso real (lê STATE/CONCEPTS
+ * atuais) — não chamado automaticamente por nenhum fluxo de UI; existe
+ * para inspeção manual (ex.: console do navegador) ou para uma futura
+ * tela de administração, fora do escopo desta etapa.
+ */
+function getAiAgreementReport(){
+  if(typeof STATE === "undefined" || !STATE || !STATE.cards) return null;
+  const records = collectAiAgreementRecords(STATE.cards, typeof CONCEPTS !== "undefined" ? CONCEPTS : []);
+  return {
+    ...computeAiEvaluationCoverage(STATE.cards),
+    ...computeAiAgreementStats(records),
+    session: getAiEvaluationSessionStats()
+  };
 }
 
 function recordExplanationEvidence(cardState, score){
@@ -252,14 +654,250 @@ function recordExplanationEvidence(cardState, score){
   return true;
 }
 
-function recordExplanationOutcome(cardState, score, resultData){
+/**
+ * `evaluation` aqui é o objeto JÁ NORMALIZADO por mapExplanationResponseToEvaluation
+ * (chaves em inglês: conceptualErrors/missingPoints), não a resposta bruta do
+ * endpoint (que usa equivocos/pontosFaltando em português) — ver
+ * applyExplanationEvaluation, único chamador desta função.
+ */
+function recordExplanationOutcome(cardState, score, evaluation){
   recordExplanationEvidence(cardState, score);
-  if(resultData && Array.isArray(resultData.equivocos) && resultData.equivocos.length > 0){
-    recordError(cardState, "conceptual_error", "explanation", resultData.equivocos.join("; "));
+  if(evaluation && Array.isArray(evaluation.conceptualErrors) && evaluation.conceptualErrors.length > 0){
+    recordError(cardState, "conceptual_error", "explanation", evaluation.conceptualErrors.join("; "));
   }else if(score < EXPLANATION_PASS_SCORE){
-    const detail = resultData && Array.isArray(resultData.pontosFaltando) ? resultData.pontosFaltando.join("; ") : null;
+    const detail = evaluation && Array.isArray(evaluation.missingPoints) ? evaluation.missingPoints.join("; ") : null;
     recordError(cardState, "incomplete_explanation", "explanation", detail);
   }
+}
+
+/* ---- Explicar / Técnica de Feynman — histórico por tentativa -------
+   (Prioridade 3 — correção crítica: persistência antes da IA + estado
+   "aguardando avaliação"). Espelha a arquitetura já usada por
+   retrievalAttempts/recordConstructedResponseAttempt: cada tentativa é
+   um objeto próprio, criado e PERSISTIDO antes de qualquer chamada de
+   IA, e só atualizado in-place depois — nunca perdido por timeout,
+   cota esgotada ou fechamento da aba. explainCount/lastExplainScore/
+   explanationPassedAt continuam existindo e sendo atualizados (só
+   depois de uma avaliação bem-sucedida), por compatibilidade — ver
+   docs/estado-pedagogico.md. */
+
+function generateExplainAttemptId(){
+  if(typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `ea-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+}
+
+/**
+ * Cria e PERSISTE (no array, ainda não no storage — quem chama precisa
+ * dar saveState() em seguida) um novo explainAttempt com
+ * status:"pending_evaluation", ANTES de qualquer chamada de IA. Esse é
+ * o invariante mais importante desta etapa: perda de rede, cota ou
+ * fechamento da aba depois deste ponto nunca apaga o texto do aluno.
+ */
+/**
+ * `previousAttemptId`/`attemptNumber` linkam esta tentativa à anterior do
+ * MESMO conceito (se houver) — permitem reconstruir a cadeia "tentativa 1
+ * → tentativa 2 → tentativa 3" sem um segundo sistema de histórico, só
+ * lendo explainAttempts[] na ordem em que já fica (mais os dois campos,
+ * que sobrevivem mesmo que o array seja um dia reordenado/filtrado). Todo
+ * attempt novo — seja a primeira explicação do conceito ou uma "tentar
+ * explicar novamente" depois de um diagnóstico — passa por aqui.
+ */
+function createExplainAttempt(cardState, responseText){
+  const text = String(responseText || "").trim();
+  if(text.length < EXPLANATION_MIN_LENGTH){
+    throw new Error(`A explicação deve ter ao menos ${EXPLANATION_MIN_LENGTH} caracteres.`);
+  }
+  const existing = cardState.explainAttempts || [];
+  const lastAttempt = existing.length ? existing[existing.length - 1] : null;
+  // attemptNumber encadeia a partir do attemptNumber do anterior (não do
+  // tamanho do array) de propósito: depois que o histórico atinge o limite
+  // de 50 e passa a ser aparado (trimHistory), existing.length fica preso
+  // em 50 para sempre — encadear pelo valor anterior mantém a contagem
+  // real de tentativas (51ª, 52ª...) mesmo com tentativas antigas já
+  // removidas do array.
+  const attempt = {
+    id: generateExplainAttemptId(),
+    at: new Date().toISOString(),
+    responseText: text,
+    status: "pending_evaluation",
+    evaluation: null,
+    evaluatedAt: null,
+    previousAttemptId: lastAttempt ? lastAttempt.id : null,
+    attemptNumber: lastAttempt ? (lastAttempt.attemptNumber || existing.length) + 1 : 1,
+    followUp: null
+  };
+  cardState.explainAttempts = trimHistory([...existing, attempt]);
+  return attempt;
+}
+
+function findExplainAttempt(cardState, attemptId){
+  return (cardState && cardState.explainAttempts || []).find(a => a.id === attemptId) || null;
+}
+
+/**
+ * Decisão pedagógica "vista de fora": se o attempt já foi avaliado,
+ * devolve a decisão persistida; senão devolve "pending_evaluation" — sem
+ * duplicar o dado, é uma leitura derivada (ver evaluation.pedagogicalDecision).
+ */
+function deriveExplainAttemptDecision(attempt){
+  if(attempt && attempt.status === "evaluated" && attempt.evaluation){
+    return attempt.evaluation.pedagogicalDecision;
+  }
+  return "pending_evaluation";
+}
+
+/**
+ * Falha TÉCNICA (timeout/rede/HTTP/parse) na chamada de IA — semântica
+ * escolhida de propósito, distinta de cota esgotada (que mantém
+ * "pending_evaluation", ver evaluateExplainAttempt): aqui a IA foi
+ * chamada e algo deu errado no meio do caminho. Idempotente: nunca
+ * reabre um attempt já avaliado.
+ */
+function markExplainAttemptFailed(cardState, attemptId){
+  const attempt = findExplainAttempt(cardState, attemptId);
+  if(!attempt || attempt.status === "evaluated") return attempt;
+  attempt.status = "evaluation_failed";
+  return attempt;
+}
+
+/**
+ * Traduz a resposta bruta do endpoint (chaves em português —
+ * api/_lib/explanationEvaluation.js) para o schema estruturado persistido
+ * por tentativa (chaves em inglês, pedidas nesta etapa). Defensiva: nunca
+ * lança, sempre devolve algo utilizável mesmo com campos ausentes —
+ * mesmo espírito de validateConstructedAiEvaluation.
+ */
+function mapExplanationResponseToEvaluation(data){
+  data = data || {};
+  const score = Math.max(0, Math.min(100, Math.round(Number(data.nota) || 0)));
+  const qualityByScore = score>=90 ? 5 : score>=70 ? 4 : score>=45 ? 3 : 1;
+  const quality = [1,3,4,5].includes(data.qualidadeSM2) ? Math.min(data.qualidadeSM2, qualityByScore) : qualityByScore;
+  const conceptualErrors = Array.isArray(data.equivocos) ? data.equivocos : [];
+  const pedagogicalDecision = EXPLAIN_PEDAGOGICAL_DECISIONS_FROM_API.includes(data.decisaoPedagogica)
+    ? data.decisaoPedagogica
+    : (score >= EXPLANATION_PASS_SCORE ? "passed" : (conceptualErrors.length > 0 ? "return_to_comprehension" : "retry_recommended"));
+  return {
+    score,
+    centralMechanism: typeof data.mecanismoCentral === "string" ? data.mecanismoCentral : "",
+    mechanismInText: typeof data.mecanismoNoTexto === "string" ? data.mecanismoNoTexto : "",
+    coveredPoints: Array.isArray(data.pontosCobertos) ? data.pontosCobertos : [],
+    missingPoints: Array.isArray(data.pontosFaltando) ? data.pontosFaltando : [],
+    conceptualErrors,
+    imprecisions: Array.isArray(data.imprecisoes) ? data.imprecisoes : [],
+    feedback: typeof data.feedback === "string" ? data.feedback : "",
+    quality,
+    pedagogicalDecision,
+    followUpQuestion: typeof data.perguntaAprofundamento === "string" ? data.perguntaAprofundamento : ""
+  };
+}
+
+/**
+ * Aplica uma avaliação bem-sucedida a um attempt JÁ EXISTENTE — nunca cria
+ * um novo. Idempotente: se o attempt já estiver "evaluated", não reaplica
+ * FSRS/XP/contadores (evita duplicar efeitos quando chamada mais de uma
+ * vez, ex.: avaliação posterior de uma tentativa que, por alguma corrida,
+ * já tinha sido avaliada). Só a partir daqui — nunca antes — é que FSRS,
+ * explainCount, lastExplainScore e explanationPassedAt são tocados.
+ */
+function applyExplanationEvaluation(cardState, attemptId, rawApiResponse){
+  const attempt = findExplainAttempt(cardState, attemptId);
+  if(!attempt) throw new Error("Tentativa de explicação não encontrada.");
+  if(attempt.status === "evaluated") return attempt;
+
+  const evaluation = mapExplanationResponseToEvaluation(rawApiResponse);
+  const previousScore = cardState.lastExplainScore;
+  cardState.explainCount = (cardState.explainCount || 0) + 1;
+  cardState.lastExplainScore = evaluation.score;
+  recordExplanationOutcome(cardState, evaluation.score, evaluation);
+  fsrsUpdate(cardState, evaluation.quality);
+  touchStreak();
+  // XP premia demonstração de entendimento e progresso real entre tentativas.
+  // Antes era Math.max(4, nota/100*25), o que dava mais pontos a uma explicação
+  // fluente e vazia (nota 72) do que a um erro conceitual honesto (nota 35) —
+  // incoerente num produto cujo propósito é justamente não recompensar a ilusão.
+  const improvement = previousScore != null ? Math.max(0, evaluation.score - previousScore) : 0;
+  const xpGain = (evaluation.score >= EXPLANATION_PASS_SCORE ? Math.round((evaluation.score/100) * 25) : 0)
+    + Math.round(improvement / 5)
+    + 2; // participação: escrever e receber o diagnóstico já vale algo
+  addXP(xpGain);
+
+  // Só marca como "evaluated" depois que TODOS os efeitos pedagógicos acima
+  // rodaram sem lançar — evita um attempt marcado como avaliado com efeitos
+  // só parcialmente aplicados. Se algo acima lançar, evaluateExplainAttempt
+  // captura e marca "evaluation_failed" (o attempt continua "pending_evaluation"
+  // até aqui), permitindo tentar de novo com segurança.
+  attempt.evaluation = evaluation;
+  attempt.evaluatedAt = new Date().toISOString();
+  attempt.status = "evaluated";
+
+  return attempt;
+}
+
+/**
+ * Avalia (ou REAVALIA) um attempt já persistido — usada tanto no fluxo de
+ * submissão inicial quanto numa avaliação posterior de uma tentativa
+ * pendente. Nunca cria outro attempt (recebe o id de um já existente) e é
+ * idempotente (ver applyExplanationEvaluation): chamar duas vezes sobre um
+ * attempt já avaliado não duplica FSRS/XP/histórico.
+ *
+ * Tratamento de falha, por design:
+ * - HTTP 429 (cota esgotada, ver requireUsageQuota): o attempt permanece
+ *   "pending_evaluation" — não é uma falha técnica, é "ainda não avaliado".
+ * - qualquer outra falha (timeout/rede/HTTP/parse/schema inválido): o
+ *   attempt vira "evaluation_failed" (ver markExplainAttemptFailed).
+ * Em nenhum dos dois casos o responseText é apagado, FSRS é chamado, ou
+ * explanationPassedAt/lastExplainScore são tocados.
+ */
+async function evaluateExplainAttempt(concept, cardState, attemptId){
+  const attempt = findExplainAttempt(cardState, attemptId);
+  if(!attempt) throw new Error("Tentativa de explicação não encontrada.");
+  if(attempt.status === "evaluated") return attempt;
+
+  try{
+    const res = await authedFetch("/api/avaliar-explicacao", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ title:concept.title, referenceText:concept.text, studentText:attempt.responseText })
+    });
+    if(res.status === 429){
+      return attempt; // cota esgotada: permanece pending_evaluation, ver docstring acima
+    }
+    if(!res.ok){
+      return markExplainAttemptFailed(cardState, attemptId);
+    }
+    const data = await res.json();
+    return applyExplanationEvaluation(cardState, attemptId, data);
+  }catch(e){
+    console.error("Falha ao avaliar explicação (tentativa preservada):", e);
+    return markExplainAttemptFailed(cardState, attemptId);
+  }
+}
+
+/**
+ * Persiste a resposta do aluno à pergunta de aprofundamento — só sobre um
+ * attempt já "evaluated" com followUpQuestion disponível. Não faz nenhuma
+ * chamada de IA (Prioridade 3 não exige avaliar essa resposta) e nunca
+ * toca em FSRS/evidência/calibração. Idempotente: se o attempt já tem
+ * followUp respondido, devolve o que já existe sem sobrescrever — reload
+ * ou reenvio acidental nunca duplica/substitui a resposta já dada.
+ */
+function recordExplainFollowUpResponse(cardState, attemptId, responseText){
+  const attempt = findExplainAttempt(cardState, attemptId);
+  if(!attempt) throw new Error("Tentativa de explicação não encontrada.");
+  if(attempt.status !== "evaluated" || !attempt.evaluation || !attempt.evaluation.followUpQuestion){
+    throw new Error("Esta tentativa ainda não tem uma pergunta de aprofundamento disponível.");
+  }
+  if(attempt.followUp) return attempt.followUp; // idempotente: não sobrescreve resposta já dada
+
+  const text = String(responseText || "").trim();
+  if(!text) throw new Error("Escreva uma resposta antes de enviar.");
+
+  attempt.followUp = {
+    question: attempt.evaluation.followUpQuestion,
+    responseText: text,
+    answeredAt: new Date().toISOString()
+  };
+  return attempt.followUp;
 }
 
 function markConceptPresented(cardState){
@@ -530,6 +1168,34 @@ function shuffle(arr){
   for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
+
+function interleaveConceptsByTag(items){
+  const remaining = (items || []).slice();
+  const result = [];
+  let lastTag = null;
+  while(remaining.length){
+    let index = remaining.findIndex(item => item.tag !== lastTag);
+    if(index < 0) index = 0;
+    const [next] = remaining.splice(index, 1);
+    result.push(next);
+    lastTag = next.tag;
+  }
+  return result;
+}
+
+function orderReviewQueue(items, cards){
+  const sorted = (items || []).slice().sort((a,b)=>String(cards[a.id].nextReview || "").localeCompare(String(cards[b.id].nextReview || "")));
+  const result = [];
+  let start = 0;
+  while(start < sorted.length){
+    const priority = String(cards[sorted[start].id].nextReview || "");
+    let end = start + 1;
+    while(end < sorted.length && String(cards[sorted[end].id].nextReview || "") === priority) end += 1;
+    result.push(...interleaveConceptsByTag(sorted.slice(start, end)));
+    start = end;
+  }
+  return result;
+}
 function conceptStatus(c){
   const s = STATE.cards[c.id];
   if(!s.seen) return {label:"Novo", cls:"chip-new"};
@@ -757,10 +1423,14 @@ async function handleLearnAnswer(isCorrect, btnEl, optsWrap){
 let reviewQueue = [];
 let reviewHiddenByLimit = 0;
 let reviewLimitOverride = false;
+let reviewMode = "constructed";
 function renderReview(){
   resetDailyProgressIfNeeded();
   reviewLimitOverride = false;
-  const allDue = shuffle(dueCards());
+  reviewMode = "constructed";
+  const allDue = orderReviewQueue(dueCards(), STATE.cards);
+  const pendingIndex = allDue.findIndex(c => STATE.cards[c.id].pendingConstructedResponse);
+  if(pendingIndex > 0) allDue.unshift(allDue.splice(pendingIndex, 1)[0]);
   const limit = STATE.settings.dailyReviewLimit;
   if(limit > 0){
     const remaining = Math.max(0, limit - STATE.dailyProgress.reviewCount);
@@ -772,6 +1442,134 @@ function renderReview(){
   }
   renderReviewCard();
 }
+
+function reviewModeButtonsHtml(){
+  return `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+    <button class="btn ${reviewMode === "constructed" ? "" : "secondary"} review-mode-btn" type="button" data-mode="constructed">✍️ Resposta construída</button>
+    <button class="btn ${reviewMode === "self_rated" ? "" : "secondary"} review-mode-btn" type="button" data-mode="self_rated">🔁 Autoavaliação rápida</button>
+  </div>`;
+}
+
+function bindReviewModeButtons(panel){
+  panel.querySelectorAll(".review-mode-btn").forEach(btn=>{
+    btn.onclick = ()=>{
+      reviewMode = btn.dataset.mode;
+      renderReviewCard();
+    };
+  });
+}
+
+function renderConstructedReference(panel, concept, session){
+  const reference = getConstructedReference(session, concept);
+  panel.innerHTML = `
+    <h2 class="section-title">✍️ Resposta construída</h2>
+    ${reviewModeButtonsHtml()}
+    <p class="lead">Compare honestamente antes de classificar. A resposta construída correta gera evidência forte; parcial não.</p>
+    <div class="concept-card">
+      <span class="concept-tag">${escapeHtml(concept.tag)}</span>
+      <div class="qtext" style="margin-top:8px;">${escapeHtml(concept.q || concept.title)}</div>
+      <div class="stat-card" style="margin-top:12px;"><div class="label">Sua resposta</div><p class="lead" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(reference.responseText)}</p></div>
+      <div class="stat-card" style="margin-top:10px;"><div class="label">Resposta de referência</div><p class="lead" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(reference.referenceText)}</p></div>
+      ${sourceLinkHtml(concept)}${linkedNotesHtml(concept)}${contentReportHtml()}
+      <div style="margin-top:14px;">
+        <p class="lead" style="margin-bottom:8px;">Quanto você conseguiu recuperar antes de consultar?</p>
+        <div class="rate-row">
+          <button class="rate-btn rate-again constructed-rating" type="button" data-rating="failed">Não consegui recuperar<small>FSRS 1</small></button>
+          <button class="rate-btn rate-hard constructed-rating" type="button" data-rating="partial">Recuperei parcialmente<small>FSRS 3</small></button>
+          <button class="rate-btn rate-good constructed-rating" type="button" data-rating="correct">Recuperei corretamente<small>FSRS 4</small></button>
+        </div>
+      </div>
+    </div>`;
+  bindReviewModeButtons(panel);
+  bindContentReport(panel, concept);
+  panel.querySelectorAll(".constructed-rating").forEach(btn=>{
+    btn.onclick = async ()=>{
+      panel.querySelectorAll(".constructed-rating").forEach(b=>b.disabled = true);
+      const cardState = STATE.cards[concept.id];
+      const attempt = recordConstructedResponseAttempt(cardState, session, btn.dataset.rating);
+      touchStreak();
+      STATE.dailyProgress.reviewCount += 1;
+      if(session.confidence === 3 && btn.dataset.rating !== "correct") STATE.calibration.overconfident += 1;
+      else if(session.confidence === 1 && btn.dataset.rating === "correct") STATE.calibration.underconfident += 1;
+      else STATE.calibration.aligned += 1;
+      reviewQueue.shift();
+      if(reviewQueue.length === 0) STATE.reviewSessions += 1;
+      await saveState();
+      checkBadges();
+      renderHeader();
+      renderReviewCard();
+      // Disparado DEPOIS que autoavaliação + FSRS + persistência já
+      // terminaram acima — nunca aguardado (fire-and-forget). Uma falha
+      // ou demora na IA não atrasa nem afeta o fluxo de revisão.
+      requestConstructedAiEvaluation(concept, session, attempt);
+    };
+  });
+}
+
+function renderConstructedReviewCard(panel, concept){
+  const cardState = STATE.cards[concept.id];
+  const pending = cardState.pendingConstructedResponse;
+  if(pending && pending.confidence != null && pending.responseText){
+    const restored = createConstructedAttemptSession(concept.id, pending.startedAt);
+    Object.assign(restored, pending, { submitted:true });
+    renderConstructedReference(panel, concept, restored);
+    return;
+  }
+  const session = createConstructedAttemptSession(concept.id);
+  const prompt = constructedPromptData(concept);
+  panel.innerHTML = `
+    <h2 class="section-title">✍️ Resposta construída</h2>
+    ${reviewModeButtonsHtml()}
+    <p class="lead" style="margin-top:-4px;">${reviewQueue.length} carta(s) restante(s). Responda sem consultar; conteúdo, notas e fontes permanecem ocultos até o envio.</p>
+    <div class="concept-card">
+      <span class="concept-tag">${escapeHtml(prompt.tag)}</span>
+      <div class="qtext" style="margin-top:8px;">${escapeHtml(prompt.prompt)}</div>
+      <div class="constructed-confidence" style="margin-top:14px;">
+        <p class="lead" style="margin-bottom:8px;">Antes de responder: quão confiante você está?</p>
+        <div class="rate-row">
+          <button class="rate-btn rate-again constructed-confidence-btn" type="button" data-confidence="1">Baixa</button>
+          <button class="rate-btn rate-hard constructed-confidence-btn" type="button" data-confidence="2">Média</button>
+          <button class="rate-btn rate-easy constructed-confidence-btn" type="button" data-confidence="3">Alta</button>
+        </div>
+      </div>
+      <textarea class="explain-textarea constructed-response-input" rows="4" disabled placeholder="Escolha sua confiança e escreva o que consegue recuperar sem consultar." style="margin-top:12px;"></textarea>
+      <div class="lead constructed-charcount" style="font-size:11.5px; margin:5px 0 0;">0 caracteres (mínimo ${MIN_CONSTRUCTED_RESPONSE_LENGTH})</div>
+      <button class="btn constructed-submit" type="button" disabled style="margin-top:10px;">Registrar minha resposta</button>
+      <div class="constructed-error"></div>
+    </div>`;
+  bindReviewModeButtons(panel);
+  const input = panel.querySelector(".constructed-response-input");
+  const submit = panel.querySelector(".constructed-submit");
+  const counter = panel.querySelector(".constructed-charcount");
+  panel.querySelectorAll(".constructed-confidence-btn").forEach(btn=>{
+    btn.onclick = ()=>{
+      setConstructedConfidence(session, parseInt(btn.dataset.confidence, 10));
+      panel.querySelectorAll(".constructed-confidence-btn").forEach(b=>b.classList.toggle("selected", b === btn));
+      input.disabled = false;
+      input.focus();
+      submit.disabled = input.value.trim().length < MIN_CONSTRUCTED_RESPONSE_LENGTH;
+    };
+  });
+  input.oninput = ()=>{
+    const length = input.value.trim().length;
+    counter.textContent = `${length} caracteres (mínimo ${MIN_CONSTRUCTED_RESPONSE_LENGTH})`;
+    submit.disabled = session.confidence == null || length < MIN_CONSTRUCTED_RESPONSE_LENGTH;
+  };
+  submit.onclick = async ()=>{
+    try{
+      submitConstructedResponse(session, input.value);
+      cardState.pendingConstructedResponse = {
+        conceptId:concept.id, startedAt:session.startedAt, confidence:session.confidence,
+        responseText:session.responseText, latencyMs:session.latencyMs, submittedAt:new Date().toISOString()
+      };
+      await saveState();
+      renderConstructedReference(panel, concept, session);
+    }catch(error){
+      panel.querySelector(".constructed-error").innerHTML = `<div class="feedback bad" style="margin-top:8px;">${escapeHtml(error.message)}</div>`;
+    }
+  };
+}
+
 function renderReviewCard(){
   const panel = document.getElementById("review-panel");
   if(reviewQueue.length === 0 && !reviewLimitOverride){
@@ -800,7 +1598,7 @@ function renderReviewCard(){
       const overrideBtn = document.getElementById("review-override-btn");
       if(overrideBtn) overrideBtn.onclick = ()=>{
         reviewLimitOverride = true;
-        reviewQueue = shuffle(dueCards()).slice(0, reviewHiddenByLimit);
+        reviewQueue = orderReviewQueue(dueCards(), STATE.cards).slice(0, reviewHiddenByLimit);
         renderReviewCard();
       };
       return;
@@ -830,10 +1628,15 @@ function renderReviewCard(){
   }
 
   const c = reviewQueue[0];
+  if(reviewMode === "constructed"){
+    renderConstructedReviewCard(panel, c);
+    return;
+  }
   let confidence = null; // 1=baixa, 2=média, 3=alta
 
   panel.innerHTML = `
     <h2 class="section-title">🔁 Revisão espaçada</h2>
+    ${reviewModeButtonsHtml()}
     <p class="lead" style="margin-top:-4px;">${reviewQueue.length} carta(s) restante(s) nesta sessão.</p>
     <div class="flash-outer">
       <div class="flashcard" id="flashcard">
@@ -869,11 +1672,13 @@ function renderReviewCard(){
   `;
 
   const flash = document.getElementById("flashcard");
+  bindReviewModeButtons(panel);
   bindContentReport(panel, c);
 
   document.querySelectorAll("#confidence-row .rate-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       confidence = parseInt(btn.dataset.conf, 10);
+      panel.querySelectorAll(".review-mode-btn").forEach(modeBtn=> modeBtn.disabled = true);
       document.getElementById("confidence-row").style.display = "none";
       flash.classList.add("flipped");
       document.getElementById("rate-row").style.display = "block";
@@ -989,7 +1794,7 @@ function renderExplainCard(){
       <textarea id="explain-input" class="explain-textarea" rows="6" placeholder="Comece explicando aqui, com suas próprias palavras..."></textarea>
       ${contentReportHtml()}
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:10px; flex-wrap:wrap;">
-        <span class="lead" id="explain-charcount" style="margin:0; font-size:11.5px;">0 caracteres (mínimo 30)</span>
+        <span class="lead" id="explain-charcount" style="margin:0; font-size:11.5px;">0 caracteres (mínimo ${EXPLANATION_MIN_LENGTH})</span>
         <button class="btn" id="explain-submit" disabled>🎓 Avaliar explicação</button>
       </div>
       <div id="explain-result"></div>
@@ -1001,54 +1806,105 @@ function renderExplainCard(){
   const counter = document.getElementById("explain-charcount");
   input.addEventListener("input", ()=>{
     const len = input.value.trim().length;
-    counter.textContent = `${len} caracteres (mínimo 30)`;
-    submitBtn.disabled = len < 30;
+    counter.textContent = `${len} caracteres (mínimo ${EXPLANATION_MIN_LENGTH})`;
+    submitBtn.disabled = len < EXPLANATION_MIN_LENGTH;
   });
   submitBtn.addEventListener("click", ()=> handleExplainSubmit(c, input.value.trim()));
   bindContentReport(panel, c);
 }
 
+/**
+ * Fluxo de submissão em duas fases — o invariante mais importante desta
+ * etapa: o attempt é criado e PERSISTIDO (saveState) antes de qualquer
+ * chamada de IA. Perda de rede, cota esgotada ou fechamento da aba depois
+ * deste ponto nunca apaga o texto que o aluno escreveu.
+ */
 async function handleExplainSubmit(c, studentText){
   const resultBox = document.getElementById("explain-result");
   const submitBtn = document.getElementById("explain-submit");
-  const previousScore = STATE.cards[c.id].lastExplainScore;
+  const cardState = STATE.cards[c.id];
+
+  let attempt;
+  try{
+    attempt = createExplainAttempt(cardState, studentText);
+  }catch(e){
+    resultBox.innerHTML = `<div class="feedback bad" style="margin-top:12px;">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  await saveState(); // INVARIANTE: persistido antes da IA (ver createExplainAttempt)
+
+  // Capturado ANTES de evaluateExplainAttempt: createExplainAttempt não toca
+  // em lastExplainScore, então este ainda é o valor da tentativa anterior.
+  const previousScore = cardState.lastExplainScore;
   submitBtn.disabled = true;
   submitBtn.textContent = "Avaliando...";
   resultBox.innerHTML = `<p class="lead" style="margin-top:12px;">🧠 Analisando sua explicação...</p>`;
 
-  try{
-    const res = await authedFetch("/api/avaliar-explicacao", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ title: c.title, referenceText: c.text, studentText })
-    });
-    if(!res.ok){
-      const err = await res.json().catch(()=>({}));
-      throw new Error(err.error || `Falha ao avaliar (HTTP ${res.status})`);
-    }
-    const data = await res.json();
-    renderExplainResult(c, data, previousScore);
-  }catch(e){
-    console.error(e);
-    resultBox.innerHTML = `
-      <div class="feedback bad" style="margin-top:12px;">
-        Não foi possível avaliar sua explicação agora (${escapeHtml(e.message || "erro inesperado")}). Tente novamente em instantes.
-      </div>`;
+  await runExplainAttemptEvaluation(c, cardState, attempt, previousScore);
+}
+
+/**
+ * Chama evaluateExplainAttempt (ou reavalia um attempt pendente/com falha
+ * já existente — mesma função, mesmo caminho, ver item "avaliação
+ * posterior"), persiste o resultado e renderiza de acordo com o status
+ * final. FSRS/XP/contadores só rodam dentro de applyExplanationEvaluation,
+ * chamada internamente por evaluateExplainAttempt SOMENTE quando a
+ * avaliação é bem-sucedida — nunca antes disso.
+ */
+async function runExplainAttemptEvaluation(c, cardState, attempt, previousScore){
+  const submitBtn = document.getElementById("explain-submit");
+  await evaluateExplainAttempt(c, cardState, attempt.id);
+  await saveState();
+
+  if(attempt.status === "evaluated"){
+    checkBadges();
+    renderHeader();
+  }
+
+  renderExplainAttemptResult(c, attempt, previousScore);
+
+  if(submitBtn){
     submitBtn.disabled = false;
     submitBtn.textContent = "🎓 Avaliar explicação";
   }
 }
 
-function renderExplainResult(c, data, previousScore){
+/**
+ * Renderiza o resultado de acordo com attempt.status — substitui a antiga
+ * renderExplainResult(). "pending_evaluation" (cota esgotada) e
+ * "evaluation_failed" (falha técnica) mostram mensagens distintas, nunca
+ * um erro genérico, e sempre com a opção de tentar avaliar de novo sem
+ * perder o texto já escrito.
+ */
+function renderExplainAttemptResult(c, attempt, previousScore){
   const resultBox = document.getElementById("explain-result");
-  const nota = Math.max(0, Math.min(100, Math.round(data.nota || 0)));
-  // Limiares alinhados ao servidor (api/avaliar-explicacao.js). Mais rigorosos
-  // que os anteriores (85/65/40) de propósito: uma nota generosa manda o conceito
-  // para semanas depois, que é justamente o que o modo Feynman existe para evitar.
-  const qualityByScore = nota>=90 ? 5 : nota>=70 ? 4 : nota>=45 ? 3 : 1;
-  const quality = [1,3,4,5].includes(data.qualidadeSM2)
-    ? Math.min(data.qualidadeSM2, qualityByScore)
-    : qualityByScore;
+  if(!resultBox) return;
+
+  if(attempt.status === "pending_evaluation"){
+    resultBox.innerHTML = `
+      <div class="feedback" style="margin-top:12px;">
+        📩 Sua explicação foi salva e está aguardando avaliação. Isso costuma acontecer quando o limite mensal de avaliações de IA foi atingido — tente avaliar novamente mais tarde, sem precisar reescrever nada.
+      </div>
+      <button class="btn secondary" id="explain-retry" style="margin-top:10px;">🔄 Tentar avaliar novamente</button>
+    `;
+    bindExplainRetryButton(c, attempt, previousScore);
+    return;
+  }
+
+  if(attempt.status === "evaluation_failed"){
+    resultBox.innerHTML = `
+      <div class="feedback bad" style="margin-top:12px;">
+        ⚠️ Não foi possível avaliar sua explicação agora por um problema técnico. Sua resposta foi salva — você pode tentar avaliar novamente.
+      </div>
+      <button class="btn secondary" id="explain-retry" style="margin-top:10px;">🔄 Tentar avaliar novamente</button>
+    `;
+    bindExplainRetryButton(c, attempt, previousScore);
+    return;
+  }
+
+  // status === "evaluated"
+  const data = attempt.evaluation;
+  const nota = data.score;
 
   const listHtml = (items, icon) => (items && items.length)
     ? `<ul style="margin:6px 0 0; padding-left:18px;">${items.map(i=>`<li style="margin-bottom:4px;">${icon} ${escapeHtml(i)}</li>`).join("")}</ul>`
@@ -1066,40 +1922,77 @@ function renderExplainResult(c, data, previousScore){
     }
   }
 
+  const decisionLabel = {
+    passed: "✅ Aprovado",
+    retry_recommended: "🔁 Vale tentar de novo",
+    return_to_comprehension: "📖 Vale voltar ao material"
+  }[data.pedagogicalDecision] || "";
+
   resultBox.innerHTML = `
     <div style="margin-top:16px; padding-top:14px; border-top:1px dashed var(--border);">
       <div class="score-big" style="font-size:32px;">${nota}/100</div>
       <div class="progressbar" style="margin-bottom:10px;"><div style="width:${nota}%"></div></div>
+      ${decisionLabel ? `<p class="lead" style="text-align:center; margin-top:-6px;">${decisionLabel}</p>` : ""}
       ${comparisonHtml}
       <p class="feedback ${nota>=70?'ok':'bad'}">${escapeHtml(data.feedback || "")}</p>
-      ${data.mecanismoCentral ? `
+      ${data.centralMechanism ? `
         <div class="stat-card" style="margin-top:10px;">
           <div class="label">🔑 O mecanismo central deste conceito</div>
-          <p class="lead" style="margin:6px 0 0;">${escapeHtml(data.mecanismoCentral)}</p>
-          ${data.mecanismoNoTexto
-            ? `<p class="lead" style="margin:6px 0 0;">✅ Você enunciou: “${escapeHtml(data.mecanismoNoTexto)}”</p>`
+          <p class="lead" style="margin:6px 0 0;">${escapeHtml(data.centralMechanism)}</p>
+          ${data.mechanismInText
+            ? `<p class="lead" style="margin:6px 0 0;">✅ Você enunciou: “${escapeHtml(data.mechanismInText)}”</p>`
             : `<p class="lead" style="margin:6px 0 0;">➡️ Não encontrei no seu texto uma frase que diga <b>como</b> isso funciona — só os elementos envolvidos. É esse o próximo passo.</p>`}
         </div>` : ""}
       <div class="grid2" style="margin-top:10px;">
         <div class="stat-card">
           <div class="label">✅ Você cobriu</div>
-          ${listHtml(data.pontosCobertos, "✅")}
+          ${listHtml(data.coveredPoints, "✅")}
         </div>
         <div class="stat-card">
           <div class="label">⚠️ Ficou faltando</div>
-          ${listHtml(data.pontosFaltando, "➡️")}
+          ${listHtml(data.missingPoints, "➡️")}
         </div>
       </div>
-      ${data.equivocos && data.equivocos.length ? `
+      ${data.imprecisions && data.imprecisions.length ? `
+        <div class="stat-card" style="margin-top:10px;">
+          <div class="label">🔎 Imprecisões (não invalidam o núcleo, mas vale ajustar)</div>
+          ${listHtml(data.imprecisions, "🔎")}
+        </div>` : ""}
+      ${data.conceptualErrors && data.conceptualErrors.length ? `
         <div class="stat-card" style="margin-top:10px; border-color:var(--danger);">
           <div class="label">❗ Possíveis equívocos</div>
-          ${listHtml(data.equivocos, "❗")}
+          ${listHtml(data.conceptualErrors, "❗")}
         </div>` : ""}
-      <button class="btn" id="explain-next" style="margin-top:14px;">Próximo conceito →</button>
+      <div id="explain-followup-section">${followUpSectionHtml(attempt)}</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+        <button class="btn secondary" id="explain-retry-attempt">🔁 Tentar explicar novamente</button>
+        <button class="btn" id="explain-next">Próximo conceito →</button>
+      </div>
     </div>
   `;
 
-  applyExplainResultToState(c, nota, quality, previousScore, data);
+  bindFollowUpSection(c, attempt);
+
+  // "Tentar explicar novamente" reaproveita o textarea/botão originais
+  // (acima do resultado) — cria um novo explainAttempt LIGADO a este via
+  // previousAttemptId/attemptNumber (ver createExplainAttempt), sem
+  // depender de pickExplainConcept() escolher este conceito de novo. O
+  // diagnóstico permanece visível até o momento em que uma nova submissão
+  // realmente começa (não some só por clicar em "tentar de novo").
+  const retryAttemptBtn = document.getElementById("explain-retry-attempt");
+  if(retryAttemptBtn){
+    retryAttemptBtn.onclick = ()=>{
+      const input = document.getElementById("explain-input");
+      const submitBtn = document.getElementById("explain-submit");
+      const counter = document.getElementById("explain-charcount");
+      if(!input) return;
+      input.value = "";
+      if(counter) counter.textContent = `0 caracteres (mínimo ${EXPLANATION_MIN_LENGTH})`;
+      if(submitBtn) submitBtn.disabled = true;
+      input.focus();
+      input.scrollIntoView({ behavior:"smooth", block:"center" });
+    };
+  }
 
   document.getElementById("explain-next").onclick = ()=>{
     renderExplain();
@@ -1107,25 +2000,65 @@ function renderExplainResult(c, data, previousScore){
   };
 }
 
-async function applyExplainResultToState(c, nota, quality, previousScore, resultData){
-  const cardState = STATE.cards[c.id];
-  cardState.explainCount = (cardState.explainCount || 0) + 1;
-  cardState.lastExplainScore = nota;
-  recordExplanationOutcome(cardState, nota, resultData);
-  fsrsUpdate(cardState, quality);
-  touchStreak();
-  // XP premia demonstração de entendimento e progresso real entre tentativas.
-  // Antes era Math.max(4, nota/100*25), o que dava mais pontos a uma explicação
-  // fluente e vazia (nota 72) do que a um erro conceitual honesto (nota 35) —
-  // incoerente num produto cujo propósito é justamente não recompensar a ilusão.
-  const improvement = previousScore != null ? Math.max(0, nota - previousScore) : 0;
-  const xpGain = (nota >= 70 ? Math.round((nota/100) * 25) : 0)
-    + Math.round(improvement / 5)
-    + 2; // participação: escrever e receber o diagnóstico já vale algo
-  addXP(xpGain);
-  await saveState();
-  checkBadges();
-  renderHeader();
+/**
+ * Pergunta de aprofundamento (evaluation.followUpQuestion) — sempre
+ * presente numa avaliação bem-sucedida (ver api/_lib/explanationEvaluation.js,
+ * garantida por fallback determinístico se a IA não mandar uma válida).
+ * Exige elaboração escrita, sem chamada de IA para avaliar a resposta
+ * nesta etapa (só gera, exibe, exige elaboração e persiste).
+ */
+function followUpSectionHtml(attempt){
+  const question = attempt.evaluation && attempt.evaluation.followUpQuestion;
+  if(!question) return "";
+  if(attempt.followUp){
+    return `
+      <div class="stat-card" style="margin-top:10px;">
+        <div class="label">🧩 Pergunta de aprofundamento</div>
+        <p class="lead" style="margin:6px 0 0;">${escapeHtml(question)}</p>
+        <p class="lead" style="margin:10px 0 0;"><b>Sua resposta:</b></p>
+        <p class="lead" style="margin:4px 0 0; white-space:pre-wrap;">${escapeHtml(attempt.followUp.responseText)}</p>
+      </div>`;
+  }
+  return `
+    <div class="stat-card" style="margin-top:10px;">
+      <div class="label">🧩 Pergunta de aprofundamento</div>
+      <p class="lead" style="margin:6px 0 0;">${escapeHtml(question)}</p>
+      <textarea id="explain-followup-input" class="explain-textarea" rows="3" placeholder="Escreva sua resposta aqui..." style="margin-top:8px;"></textarea>
+      <button class="btn" id="explain-followup-submit" style="margin-top:8px;" disabled>Enviar resposta</button>
+    </div>`;
+}
+
+function bindFollowUpSection(c, attempt){
+  const input = document.getElementById("explain-followup-input");
+  const submitBtn = document.getElementById("explain-followup-submit");
+  if(!input || !submitBtn) return; // já respondida ou sem pergunta — nada para vincular
+
+  input.addEventListener("input", ()=>{
+    submitBtn.disabled = input.value.trim().length === 0;
+  });
+  submitBtn.onclick = async ()=>{
+    const cardState = STATE.cards[c.id];
+    try{
+      recordExplainFollowUpResponse(cardState, attempt.id, input.value);
+    }catch(e){
+      console.error(e);
+      return;
+    }
+    await saveState();
+    const section = document.getElementById("explain-followup-section");
+    if(section) section.innerHTML = followUpSectionHtml(attempt);
+  };
+}
+
+function bindExplainRetryButton(c, attempt, previousScore){
+  const retryBtn = document.getElementById("explain-retry");
+  if(!retryBtn) return;
+  retryBtn.onclick = async ()=>{
+    retryBtn.disabled = true;
+    retryBtn.textContent = "Avaliando...";
+    const cardState = STATE.cards[c.id];
+    await runExplainAttemptEvaluation(c, cardState, attempt, previousScore);
+  };
 }
 
 /* ---- Quiz ---- */

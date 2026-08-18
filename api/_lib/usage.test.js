@@ -92,6 +92,41 @@ describe("usage.js — cotas de IA", () => {
       const generateResult = await checkAndConsumeUsage(user, "generate");
       expect(generateResult.current).toBe(1);
     });
+
+    it("bucket 'constructed_eval' (avaliação semântica da resposta construída) usa o mesmo teto de 'explain', mas cota isolada", async () => {
+      const free = await checkAndConsumeUsage(makeUser({ uid: "user-free" }), "constructed_eval");
+      expect(free.limit).toBe(300);
+
+      setPlan("user-premium", "premium");
+      const premium = await checkAndConsumeUsage(makeUser({ uid: "user-premium" }), "constructed_eval");
+      expect(premium.limit).toBe(3000);
+    });
+
+    it("consumir 'constructed_eval' não afeta a cota de 'explain' (e vice-versa), mesmo usuário", async () => {
+      const user = makeUser();
+      await checkAndConsumeUsage(user, "explain");
+      await checkAndConsumeUsage(user, "explain");
+      await checkAndConsumeUsage(user, "explain");
+      const constructedEvalResult = await checkAndConsumeUsage(user, "constructed_eval");
+      expect(constructedEvalResult.current).toBe(1);
+
+      const explainAgain = await checkAndConsumeUsage(user, "explain");
+      expect(explainAgain.current).toBe(4);
+    });
+
+    it("esgotar 'constructed_eval' não bloqueia 'explain' para o mesmo usuário", async () => {
+      const user = makeUser({ uid: "user-isolamento" });
+      for (let i = 0; i < 300; i++) {
+        const r = await checkAndConsumeUsage(user, "constructed_eval");
+        expect(r.allowed).toBe(true);
+      }
+      const blocked = await checkAndConsumeUsage(user, "constructed_eval");
+      expect(blocked.allowed).toBe(false);
+
+      const explainResult = await checkAndConsumeUsage(user, "explain");
+      expect(explainResult.allowed).toBe(true);
+      expect(explainResult.current).toBe(1);
+    });
   });
 
   describe("limite exato", () => {
@@ -237,6 +272,16 @@ describe("usage.js — cotas de IA", () => {
       await checkAndConsumeUsage(makeUser({ uid: "user-legacy2" }), "explain");
       expect(mockDb._get("ai_usage/user-legacy2_2026-08_explain")).toBeDefined();
       expect(mockDb._get("ai_usage/user-legacy2_2026-08")).toBeUndefined();
+    });
+
+    it("bucket 'constructed_eval' usa sufixo próprio uid_AAAA-MM_constructed_eval, sem colidir com 'explain'", async () => {
+      const user = makeUser({ uid: "user-legacy3" });
+      await checkAndConsumeUsage(user, "explain");
+      await checkAndConsumeUsage(user, "constructed_eval");
+      expect(mockDb._get("ai_usage/user-legacy3_2026-08_constructed_eval")).toBeDefined();
+      expect(mockDb._get("ai_usage/user-legacy3_2026-08_explain")).toBeDefined();
+      expect(mockDb._get("ai_usage/user-legacy3_2026-08_constructed_eval").count).toBe(1);
+      expect(mockDb._get("ai_usage/user-legacy3_2026-08_explain").count).toBe(1);
     });
   });
 
