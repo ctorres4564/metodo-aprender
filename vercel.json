@@ -2,6 +2,9 @@
   "crons": [
     { "path": "/api/enviar-lembretes", "schedule": "0 12 * * *" }
   ],
+  "rewrites": [
+    { "source": "/livro", "destination": "/livro/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
