@@ -157,6 +157,7 @@ export async function sendRedditConversion({
   pixelId,
   event,
   testId,
+  onResponseStatus,
   fetchImpl = globalThis.fetch,
   timeoutMs = 8000,
 }) {
@@ -183,6 +184,9 @@ export async function sendRedditConversion({
         signal: controller.signal,
       },
     );
+    if (typeof onResponseStatus === "function") {
+      onResponseStatus({ status: response.status, ok: response.ok });
+    }
 
     if (!response.ok) {
       const error = new Error(`Reddit CAPI respondeu HTTP ${response.status}.`);

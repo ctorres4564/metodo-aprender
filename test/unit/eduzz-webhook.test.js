@@ -46,13 +46,32 @@ function response() {
   };
 }
 
+function testLogger() {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    log: vi.fn(),
+  };
+}
+
+function logEntries(logger) {
+  return ["info", "warn", "error", "log"].flatMap((level) =>
+    logger[level].mock.calls.map(([message]) => JSON.parse(message)),
+  );
+}
+
 function dependencies(overrides = {}) {
   return {
     getDb: vi.fn(() => ({ name: "db" })),
     claim: vi.fn(async () => ({ status: "claimed", ref: { path: "event/1" } })),
     markSent: vi.fn(async () => {}),
     markFailed: vi.fn(async () => {}),
-    sendConversion: vi.fn(async () => ({ data: { message: "ok" } })),
+    sendConversion: vi.fn(async ({ onResponseStatus }) => {
+      onResponseStatus?.({ status: 200, ok: true });
+      return { data: { message: "ok" } };
+    }),
+    logger: testLogger(),
     ...overrides,
   };
 }
@@ -86,6 +105,10 @@ describe("POST /api/eduzz-webhook", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ received: true, ping: true });
     expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger).map((entry) => entry.stage)).toEqual([
+      "webhook_received",
+      "ping_received",
+    ]);
   });
 
   it("rejeita assinatura inválida antes de acessar banco ou Reddit", async () => {
@@ -97,6 +120,22 @@ describe("POST /api/eduzz-webhook", () => {
     expect(res.statusCode).toBe(401);
     expect(deps.getDb).not.toHaveBeenCalled();
     expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger).some((entry) => entry.stage === "signature_invalid")).toBe(true);
+  });
+
+  it("ignora evento diferente após validar a assinatura", async () => {
+    const deps = dependencies();
+    const payload = paidPayload();
+    payload.event = "myeduzz.invoice_refunded";
+    const res = response();
+    await createEduzzWebhookHandler(deps)(request(payload), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.reason).toBe("ignored_event");
+    expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "signature_validated" }),
+      expect.objectContaining({ stage: "event_ignored", reason: "unsupported_event" }),
+    ]));
   });
 
   it("permanece inerte por padrão no modo off", async () => {
@@ -107,6 +146,11 @@ describe("POST /api/eduzz-webhook", () => {
     expect(res.body.reason).toBe("purchase_disabled");
     expect(deps.getDb).not.toHaveBeenCalled();
     expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "product_allowed" }),
+      expect.objectContaining({ stage: "purchase_mode_identified", mode: "off" }),
+      expect.objectContaining({ stage: "event_ignored", reason: "purchase_disabled" }),
+    ]));
   });
 
   it("ignora produto fora da allowlist", async () => {
@@ -118,6 +162,9 @@ describe("POST /api/eduzz-webhook", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.reason).toBe("product_not_allowed");
     expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "product_rejected", reason: "not_allowlisted" }),
+    ]));
   });
 
   it("no modo test envia Purchase com Test ID e marca idempotência", async () => {
@@ -137,6 +184,12 @@ describe("POST /api/eduzz-webhook", () => {
     expect(deps.sendConversion.mock.calls[0][0].event.type.tracking_type).toBe("PURCHASE");
     expect(deps.claim).toHaveBeenCalledWith({ name: "db" }, "eduzz:invoice-123:purchase");
     expect(deps.markSent).toHaveBeenCalledWith({ path: "event/1" });
+    expect(logEntries(deps.logger)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "purchase_prepared" }),
+      expect.objectContaining({ stage: "reddit_send_attempt" }),
+      expect.objectContaining({ stage: "reddit_response", http_status: 200 }),
+      expect.objectContaining({ stage: "reddit_send_completed" }),
+    ]));
   });
 
   it("modo test sem Test ID falha fechado", async () => {
@@ -157,6 +210,7 @@ describe("POST /api/eduzz-webhook", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.duplicate).toBe(true);
     expect(deps.sendConversion).not.toHaveBeenCalled();
+    expect(logEntries(deps.logger).some((entry) => entry.stage === "event_duplicate")).toBe(true);
   });
 
   it("marca falha retryable e devolve erro para permitir reenvio da Eduzz", async () => {
@@ -167,5 +221,54 @@ describe("POST /api/eduzz-webhook", () => {
     await createEduzzWebhookHandler(deps)(request(paidPayload()), res);
     expect(res.statusCode).toBe(502);
     expect(deps.markFailed).toHaveBeenCalledWith({ path: "event/1" }, "reddit_timeout");
+    expect(logEntries(deps.logger)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "reddit_send_attempt" }),
+      expect.objectContaining({ stage: "reddit_send_failed", error_code: "reddit_timeout" }),
+    ]));
+  });
+
+  it("não registra PII, segredos, payload ou invoiceId original", async () => {
+    vi.stubEnv("REDDIT_PURCHASE_MODE", "test");
+    const deps = dependencies();
+    const payload = paidPayload();
+    payload.data.buyer = {
+      id: "buyer-sensitive-id",
+      email: "pessoa.secreta@example.com",
+      cellphone: "+5511999999999",
+      name: "Nome Muito Sensível",
+      document: "12345678900",
+      address: { street: "Rua Particular", country: "BR" },
+    };
+    const rawPayload = JSON.stringify(payload);
+    const res = response();
+    await createEduzzWebhookHandler(deps)(request(payload), res);
+
+    const serializedLogs = JSON.stringify(logEntries(deps.logger));
+    for (const sensitiveValue of [
+      WEBHOOK_SECRET,
+      "token-reddit-apenas-de-teste",
+      "test-id-apenas-de-teste",
+      "invoice-123",
+      "buyer-sensitive-id",
+      "pessoa.secreta@example.com",
+      "+5511999999999",
+      "Nome Muito Sensível",
+      "12345678900",
+      "Rua Particular",
+      rawPayload,
+    ]) {
+      expect(serializedLogs).not.toContain(sensitiveValue);
+    }
+    expect(logEntries(deps.logger).every((entry) =>
+      Object.keys(entry).every((key) => [
+        "scope",
+        "stage",
+        "correlation_id",
+        "error_code",
+        "http_status",
+        "mode",
+        "reason",
+      ].includes(key)),
+    )).toBe(true);
   });
 });

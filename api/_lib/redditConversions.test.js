@@ -81,8 +81,10 @@ describe("sendRedditConversion", () => {
   it("envia Bearer, Pixel ID, evento e test_id sem alterar o evento", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({ data: { message: "ok" } }),
     });
+    const onResponseStatus = vi.fn();
     const event = buildSyntheticPurchaseEvent(1000, "unique");
 
     await sendRedditConversion({
@@ -91,6 +93,7 @@ describe("sendRedditConversion", () => {
       testId: "test-id-secreto",
       event,
       fetchImpl,
+      onResponseStatus,
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -98,6 +101,7 @@ describe("sendRedditConversion", () => {
     expect(url).toContain("/pixels/a2_jilrf2g66w2e/conversion_events");
     expect(options.headers.authorization).toBe("Bearer token-secreto");
     expect(JSON.parse(options.body)).toEqual({ data: { test_id: "test-id-secreto", events: [event] } });
+    expect(onResponseStatus).toHaveBeenCalledWith({ status: 200, ok: true });
   });
 
   it("omite test_id no modo live", async () => {
@@ -113,11 +117,14 @@ describe("sendRedditConversion", () => {
 
   it("não inclui corpo remoto ou token na mensagem de erro HTTP", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    const onResponseStatus = vi.fn();
     await expect(sendRedditConversion({
       accessToken: "segredo-que-nao-pode-vazar",
       pixelId: "pixel",
       event: buildSyntheticPurchaseEvent(),
       fetchImpl,
+      onResponseStatus,
     })).rejects.toMatchObject({ code: "reddit_http_error", status: 401 });
+    expect(onResponseStatus).toHaveBeenCalledWith({ status: 401, ok: false });
   });
 });
