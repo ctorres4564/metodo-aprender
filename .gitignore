@@ -1,4 +1,5 @@
 .vercel
+.env*.local
 *.zip
 node_modules
 firestore-debug.log
