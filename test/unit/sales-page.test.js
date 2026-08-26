@@ -54,6 +54,11 @@ describe("página de vendas /livro", () => {
     expect(html).toContain('property="og:url" content="https://metodoaprender.com/livro"');
   });
 
+  it("carrega o propagador de Click ID sem alterar os links base do checkout", () => {
+    expect(html).toContain('<script type="module" src="/livro/reddit-click-id.js"></script>');
+    expect(html.match(/href="https:\/\/chk\.eduzz\.com\/39VKJQ3DWR"/g)).toHaveLength(2);
+  });
+
   it("faz rewrite somente da rota pública /livro", () => {
     expect(vercelConfig.rewrites).toEqual([
       { source: "/livro", destination: "/livro/index.html" },

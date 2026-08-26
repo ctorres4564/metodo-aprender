@@ -192,6 +192,35 @@ describe("POST /api/eduzz-webhook", () => {
     ]));
   });
 
+  it("envia click_id e registra somente sua presença quando data.utm.term existe", async () => {
+    vi.stubEnv("REDDIT_PURCHASE_MODE", "test");
+    const deps = dependencies();
+    const payload = paidPayload();
+    payload.data.utm = { term: "click-id-secreto" };
+    const res = response();
+    await createEduzzWebhookHandler(deps)(request(payload), res);
+
+    expect(deps.sendConversion.mock.calls[0][0].event.click_id).toBe("click-id-secreto");
+    expect(logEntries(deps.logger)).toContainEqual(expect.objectContaining({
+      stage: "purchase_prepared",
+      reddit_click_id_sent: true,
+    }));
+    expect(JSON.stringify(logEntries(deps.logger))).not.toContain("click-id-secreto");
+  });
+
+  it("omite click_id e registra ausência quando data.utm.term não existe", async () => {
+    vi.stubEnv("REDDIT_PURCHASE_MODE", "test");
+    const deps = dependencies();
+    const res = response();
+    await createEduzzWebhookHandler(deps)(request(paidPayload()), res);
+
+    expect(deps.sendConversion.mock.calls[0][0].event).not.toHaveProperty("click_id");
+    expect(logEntries(deps.logger)).toContainEqual(expect.objectContaining({
+      stage: "purchase_prepared",
+      reddit_click_id_sent: false,
+    }));
+  });
+
   it("modo test sem Test ID falha fechado", async () => {
     vi.stubEnv("REDDIT_PURCHASE_MODE", "test");
     vi.stubEnv("REDDIT_CAPI_TEST_ID", "");
@@ -268,6 +297,7 @@ describe("POST /api/eduzz-webhook", () => {
         "http_status",
         "mode",
         "reason",
+        "reddit_click_id_sent",
       ].includes(key)),
     )).toBe(true);
   });

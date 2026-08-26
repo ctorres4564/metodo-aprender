@@ -58,6 +58,15 @@ describe("buildRedditPurchaseEvent", () => {
     expect(event).not.toHaveProperty("click_id");
   });
 
+  it("usa data.utm.term como click_id quando presente", () => {
+    const event = buildRedditPurchaseEvent({
+      ...paidInvoice(),
+      utm: { term: "reddit-click-id" },
+    });
+
+    expect(event.click_id).toBe("reddit-click-id");
+  });
+
   it("rejeita fatura não paga ou sem dados financeiros válidos", () => {
     expect(() => buildRedditPurchaseEvent({ ...paidInvoice(), status: "open" })).toThrow();
     expect(() => buildRedditPurchaseEvent({ ...paidInvoice(), paid: null })).toThrow();

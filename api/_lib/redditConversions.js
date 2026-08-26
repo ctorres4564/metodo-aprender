@@ -84,6 +84,7 @@ export function buildRedditPurchaseEvent(invoice) {
     buyer.address?.country,
   );
   const externalId = cleanString(buyer.id, 200);
+  const clickId = cleanString(invoice.utm?.term, 256);
 
   const user = {};
   if (email) user.email = sha256Hex(email);
@@ -123,9 +124,7 @@ export function buildRedditPurchaseEvent(invoice) {
     metadata,
   };
   if (Object.keys(user).length) event.user = user;
-
-  // rdt_cid é omitido deliberadamente: o checkout atual não comprova que
-  // qualquer campo tracker da Eduzz represente o click ID do Reddit.
+  if (clickId) event.click_id = clickId;
   return event;
 }
 

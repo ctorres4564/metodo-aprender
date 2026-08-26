@@ -23,6 +23,7 @@ const SAFE_LOG_FIELDS = new Set([
   "http_status",
   "mode",
   "reason",
+  "reddit_click_id_sent",
 ]);
 const SAFE_REDDIT_ERROR_CODES = new Set(["reddit_http_error", "reddit_timeout"]);
 
@@ -164,7 +165,10 @@ export function createEduzzWebhookHandler(deps = {}) {
       res.status(400).json({ error: error.message });
       return;
     }
-    auditLog(logger, "info", "purchase_prepared", logContext);
+    auditLog(logger, "info", "purchase_prepared", {
+      ...logContext,
+      reddit_click_id_sent: Boolean(event.click_id),
+    });
 
     let claimResult;
     try {
