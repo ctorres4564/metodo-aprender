@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addRedditClickIdToEduzzLinks,
   captureRedditClickId,
+  initializeRedditClickId,
 } from "../../livro/reddit-click-id.js";
 
 describe("atribuição Reddit na página /livro", () => {
@@ -34,5 +35,18 @@ describe("atribuição Reddit na página /livro", () => {
     expect(links[1].searchParams.get("coupon")).toBe("promo");
     expect(links[1].searchParams.get("utm_term")).toBe("abc 123");
     expect(links[2].searchParams.has("utm_term")).toBe(false);
+  });
+
+  it("inicializa na URL real e atualiza o href do checkout no DOM", () => {
+    const dom = new JSDOM(
+      '<a href="https://chk.eduzz.com/39VKJQ3DWR">Comprar</a>',
+      { url: "https://metodoaprender.com/livro?rdt_cid=TESTE123" },
+    );
+
+    initializeRedditClickId(dom.window, dom.window.document);
+
+    expect(dom.window.document.querySelector("a").href).toBe(
+      "https://chk.eduzz.com/39VKJQ3DWR?utm_term=TESTE123",
+    );
   });
 });
