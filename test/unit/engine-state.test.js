@@ -1686,9 +1686,14 @@ describe("weightedSample", () => {
 
   it("itens com peso maior aparecem primeiro (probabilístico)", () => {
     const items = [{ id: "heavy" }, { id: "light" }];
-    // Peso 1000x maior → deve ser o primeiro SEMPRE
-    const result = engine.weightedSample(items, (it) => it.id === "heavy" ? 1000 : 1, 2);
-    expect(result[0].id).toBe("heavy");
+    // Mock Math.random para garantir resultado determinístico: r=0 → heavy selecionado primeiro
+    const spy = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const result = engine.weightedSample(items, (it) => it.id === "heavy" ? 1000 : 1, 2);
+      expect(result[0].id).toBe("heavy");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("não repete itens", () => {
